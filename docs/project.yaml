@@ -1,0 +1,85 @@
+schemaVersion: 1
+name: g2rain-agent-runtime
+family: backend-domain-service
+role: 谷雨 Agent 的任务执行、状态持久化与工具编排服务
+language: Java
+buildTool: Maven
+
+architectureBaseline:
+  repository: https://github.com/g2rain/g2rain
+  ref: architecture-v1.0.0
+  profile: docs/architecture/profiles/java-domain-service
+  version: 1.0.0
+  status: planned
+  deviations: docs/architecture/deviations.md
+
+ownership:
+  owns:
+    - Agent 任务实例、执行图、节点载荷、检查点与恢复记录
+    - 对话会话、消息、SSE 执行事件与工具调用记录
+    - 内置工具与 MCP 工具的运行时编排
+  excludes:
+    - Agent 配置、版本与技能内容的编辑管理
+    - MCP 服务和工具目录的注册管理
+    - 第三方模型供应商凭据与协议接入管理
+    - 网关认证、统一入口路由及部署编排
+
+modules:
+  - name: g2rain-agent-runtime-api
+    path: g2rain-agent-runtime-api
+    role: 对外运行时契约与数据模型
+    mayDependOn: []
+  - name: g2rain-agent-runtime-biz
+    path: g2rain-agent-runtime-biz
+    role: 任务执行、状态、工具与持久化实现
+    mayDependOn: [g2rain-agent-runtime-api]
+  - name: g2rain-agent-runtime-startup
+    path: g2rain-agent-runtime-startup
+    role: Spring Boot 运行时组装
+    mayDependOn: [g2rain-agent-runtime-biz]
+
+runtime:
+  mainClass: com.g2rain.agent.runtime.Application
+  defaultPort: 8080
+  defaultProfile: nacos
+  minimumVersions:
+    java: "25"
+  dependencies: [MySQL, Redis, Nacos, g2rain-agent-studio, g2rain-model-nexus]
+
+commands:
+  verify: mvn clean verify
+  run: mvn -pl g2rain-agent-runtime-startup -am spring-boot:run
+  codegen: mvn g2rain-crafter:bootstrap
+  image: ./build.sh <tag>
+
+architectureRules:
+  - 模块依赖方向固定为 startup -> biz -> api
+  - API 不依赖 Biz 或 Startup 实现
+  - Agent 配置和模型服务分别通过 Studio、Model Nexus 的公开契约访问
+  - 任务状态变化、恢复与工具调用必须可追溯
+  - 运行事件不得泄露提示词、凭据或工具敏感参数
+
+documentation:
+  entry: docs/index.md
+  architecture: docs/architecture/overview.md
+  decisions: docs/decisions
+  required:
+    - docs/requirements/README.md
+    - docs/community.md
+    - docs/architecture/overview.md
+    - docs/architecture/modules.md
+    - docs/architecture/dependencies.md
+    - docs/architecture/runtime-flows.md
+    - docs/architecture/deviations.md
+    - docs/development/local-development.md
+    - docs/development/code-conventions.md
+    - docs/development/api-conventions.md
+    - docs/development/database-conventions.md
+    - docs/development/testing.md
+    - docs/development/definition-of-done.md
+    - docs/development/code-generation.md
+    - docs/security/security-boundaries.md
+    - docs/operations/configuration.md
+    - docs/operations/deployment.md
+    - docs/operations/observability.md
+    - docs/operations/troubleshooting.md
