@@ -1,0 +1,268 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1290" viewBox="0 0 1600 1290" font-family="PingFang SC, Microsoft YaHei, Noto Sans CJK SC, Noto Sans SC, sans-serif" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYToxY2FlMzI5MS0wMDEwLTQwMTctYTQ3Yy03YjMwYTUyMjhiMjYAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaOPmBJzVLMnYZgrj8W/RDH4AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDozZjU1YjNmZC05ZTRmLTQ3YzYtYWM5Yy1kM2FhMzY4N2EzMjJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoQLKbpZBcInDWeNd4BZZeHAAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggg1bI7QYHOdB9z+Rc+4xP9z9hGUY4jBxG/WqjrPTHGwOkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaILtu41w5GcD3huapU6WIioAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA2hGPVX41fZVSDaDlspQrCJCWO5dxctHq5uhEfNd1vcWRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBjxZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjFjYWUzMjkxLTAwMTAtNDAxNy1hNDdjLTdiMzBhNTIyOGIyNi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjk2YTJiMTk4LTRhOTItNDQ2MC04ODNlLTlkZjkwNGRmM2M2OXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCDVsjtBgc50H3P5Fz7jE/3P2EZRjiMHEb9aqOs9McbA6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggc7mZVsD1wQKYVxdrU0T8/4/hhgCGrr352KbaGX7TwNuiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggVc2dRsyVMI43eMIF3sYDE65YqwsEaIgu8OESR8gJoFl0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQHlkOqKRGZsc+jbsFlLIwrmuFJHgHAOUbp0k/2/CqpXe2ZSx/lLdE0KSWZ517Q7BGbNR6aFuAXegPB8glkYJlAs=</c2pa:manifest></metadata>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker></defs>
+<rect x="0" y="0" width="1600" height="1290" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="1.2"/>
+<text x="30" y="42" font-size="24" fill="#1f2937" font-weight="bold" text-anchor="start">g2rain-agent-runtime State 模型</text>
+<text x="30" y="68" font-size="13" fill="#6b7280" font-weight="normal" text-anchor="start">Redis 为准、MySQL 兜底。会话 ⊃ 任务 ⊃ 节点；Redis key 均以 g2rain:rt:{organId:cid}: 开头（hash tag 保证同槽），每轮写入受 version 栅栏保护。</text>
+<rect x="20" y="88" width="1560" height="112" rx="10" fill="#fefce8" stroke="#ca8a04" stroke-width="1.2"/>
+<text x="36" y="112" font-size="15" fill="#1f2937" font-weight="bold" text-anchor="start">一轮请求（Turn）</text>
+<rect x="36" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="46" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">① 加锁</text>
+<text x="46" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">lock:conv:{cid}</text>
+<text x="46" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">拿不到即失败</text>
+<line x1="213" y1="156" x2="226" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="227" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="237" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">② begin</text>
+<text x="237" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">读状态 · 缺失从 MySQL 回灌</text>
+<text x="237" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">renew：version+1 · 中断规整</text>
+<line x1="404" y1="156" x2="417" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="418" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="428" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">S1 用户消息</text>
+<text x="428" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">Redis → chat_message</text>
+<text x="428" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">同步写</text>
+<line x1="595" y1="156" x2="608" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="609" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="619" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">③ PROGRESS</text>
+<text x="619" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">首帧带 conversationId</text>
+<line x1="786" y1="156" x2="799" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="800" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="810" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">④ 编排</text>
+<text x="810" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">闸门→决策→任务→装载</text>
+<text x="810" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">→规划→图执行→收口</text>
+<line x1="977" y1="156" x2="990" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="991" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="1001" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">⑤ flush</text>
+<text x="1001" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">flush.lua 原子写 Redis</text>
+<text x="1001" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">校验 version</text>
+<line x1="1168" y1="156" x2="1181" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1182" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="1192" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">⑥ persist</text>
+<text x="1192" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">单事务写 MySQL</text>
+<text x="1192" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">CAS state_version</text>
+<line x1="1359" y1="156" x2="1372" y2="156" stroke="#ca8a04" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1373" y="124" width="176" height="64" rx="6" fill="#ffffff" stroke="#ca8a04" stroke-width="1"/>
+<text x="1383" y="144" font-size="13" fill="#1f2937" font-weight="bold" text-anchor="start">⑦ RESULT → 解锁</text>
+<text x="1383" y="163" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start">成功后清 lastTraceId</text>
+<text x="1383" y="180" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">终态任务删除任务组</text>
+<rect x="20" y="220" width="1150" height="228" rx="10" fill="#eef6ff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="36" y="246" font-size="16" fill="#3b82f6" font-weight="bold" text-anchor="start">会话层</text>
+<text x="36" y="266" font-size="12" fill="#6b7280" font-weight="normal" text-anchor="start">跨多个任务 · state / shared TTL 7 天，每轮续期；dialogue / records / entities 不设 TTL</text>
+<rect x="34" y="278" width="214" height="160" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="46" y="300" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">ConversationFence</text>
+<rect x="44" y="308" width="194" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="50" y="322" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">state · Hash</text>
+<text x="46" y="346" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">userId · activeTaskId</text>
+<text x="46" y="364" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">version：本轮栅栏</text>
+<text x="46" y="382" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">lastTraceId：中断判定</text>
+<text x="46" y="400" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">updatedAt</text>
+<line x1="44" y1="412" x2="238" y2="412" stroke="#cbd5e1" stroke-width="1"/>
+<text x="46" y="429" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · chat_conversation</text>
+<rect x="260" y="278" width="214" height="160" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="272" y="300" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">DialogueMessage</text>
+<rect x="270" y="308" width="194" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="276" y="322" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">dialogue · List（60 条）</text>
+<text x="272" y="346" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">role USER / AGENT</text>
+<text x="272" y="364" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">nodeId · round：节点内消息</text>
+<text x="272" y="382" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">用户消息 S1 同步落库</text>
+<text x="272" y="400" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">其余轮末落库</text>
+<line x1="270" y1="412" x2="464" y2="412" stroke="#cbd5e1" stroke-width="1"/>
+<text x="272" y="429" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · chat_message</text>
+<rect x="486" y="278" width="214" height="160" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="498" y="300" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">TaskRecord</text>
+<rect x="496" y="308" width="194" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="502" y="322" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">records · List（20 条）</text>
+<text x="498" y="346" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">已结束任务</text>
+<text x="498" y="364" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">目标 · 状态 · 结论 · 实体</text>
+<text x="498" y="382" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">任务终态落库后追加</text>
+<text x="498" y="400" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start"></text>
+<line x1="496" y1="412" x2="690" y2="412" stroke="#cbd5e1" stroke-width="1"/>
+<text x="498" y="429" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_instance.record</text>
+<rect x="712" y="278" width="214" height="160" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="724" y="300" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">EntityEntry</text>
+<rect x="722" y="308" width="194" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="728" y="322" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">entities · Hash（≤200）</text>
+<text x="724" y="346" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">type:id → 名称 · 属性</text>
+<text x="724" y="364" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">来自证据 entities</text>
+<text x="724" y="382" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">与产出 entity</text>
+<text x="724" y="400" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start"></text>
+<line x1="722" y1="412" x2="916" y2="412" stroke="#cbd5e1" stroke-width="1"/>
+<text x="724" y="429" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · 无（仅 Redis）</text>
+<rect x="938" y="278" width="214" height="160" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+<text x="950" y="300" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">会话共享</text>
+<rect x="948" y="308" width="194" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="954" y="322" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">shared · Hash</text>
+<text x="950" y="346" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">outputs.share = SESSION</text>
+<text x="950" y="364" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">表达式 session.&lt;key&gt;</text>
+<text x="950" y="382" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">跨任务保留</text>
+<text x="950" y="400" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">列 session_shared</text>
+<line x1="948" y1="412" x2="1142" y2="412" stroke="#cbd5e1" stroke-width="1"/>
+<text x="950" y="429" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · chat_conversation</text>
+<rect x="20" y="462" width="1150" height="228" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.2"/>
+<text x="36" y="488" font-size="16" fill="#16a34a" font-weight="bold" text-anchor="start">任务层</text>
+<text x="36" y="508" font-size="12" fill="#6b7280" font-weight="normal" text-anchor="start">一个任务可跨多轮 · task:&lt;tid&gt;:* · 运行中 24h / 挂起 2h · 终态落库成功后整组删除</text>
+<rect x="34" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="46" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">TaskMetadata</text>
+<rect x="44" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="50" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">metadata · Hash（哨兵）</text>
+<text x="46" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">status · currentNodeId</text>
+<text x="46" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">agentId · goalSummary</text>
+<text x="46" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">finalMessage</text>
+<text x="46" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">suspendedAt</text>
+<line x1="44" y1="654" x2="202" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="46" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_instance</text>
+<rect x="221" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="233" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">TaskGraph</text>
+<rect x="231" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="237" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">graph · Hash</text>
+<text x="233" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">每节点一个字段 + _edges</text>
+<text x="233" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">边：NORMAL / DELEGATE</text>
+<text x="233" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">节点状态 NodeStatus</text>
+<text x="233" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start"></text>
+<line x1="231" y1="654" x2="389" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="233" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_graph_*</text>
+<rect x="408" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="420" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">TaskCheckpoint</text>
+<rect x="418" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="424" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">checkpoint · String</text>
+<text x="420" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">类型：追问 / 审批 / 核实</text>
+<text x="420" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">allowedActions</text>
+<text x="420" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">pendingAction · argsHash</text>
+<text x="420" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">消费后逻辑删除</text>
+<line x1="418" y1="654" x2="576" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="420" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_checkpoint</text>
+<rect x="595" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="607" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">任务共享</text>
+<rect x="605" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="611" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">shared · Hash</text>
+<text x="607" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">outputs.share = TASK</text>
+<text x="607" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">表达式 shared.&lt;key&gt;</text>
+<text x="607" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">带来源 Sourced</text>
+<text x="607" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">列 shared</text>
+<line x1="605" y1="654" x2="763" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="607" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_instance</text>
+<rect x="782" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="794" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">Prior</text>
+<rect x="792" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="798" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">prior · String</text>
+<text x="794" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">开新任务时生成</text>
+<text x="794" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">最近任务记录 + 实体</text>
+<text x="794" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">只读</text>
+<text x="794" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start"></text>
+<line x1="792" y1="654" x2="950" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="794" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_instance.prior</text>
+<rect x="969" y="520" width="178" height="160" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+<text x="981" y="542" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">写证据索引</text>
+<rect x="979" y="550" width="158" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="985" y="564" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">writes · Hash</text>
+<text x="981" y="588" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">toolName|幂等键</text>
+<text x="981" y="606" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ evidenceId · status</text>
+<text x="981" y="624" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">防止重复写</text>
+<text x="981" y="642" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start"></text>
+<line x1="979" y1="654" x2="1137" y2="654" stroke="#cbd5e1" stroke-width="1"/>
+<text x="981" y="671" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · tool_call_record</text>
+<rect x="20" y="704" width="1150" height="246" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.2"/>
+<text x="36" y="730" font-size="16" fill="#ea580c" font-weight="bold" text-anchor="start">节点层</text>
+<text x="36" y="750" font-size="12" fill="#6b7280" font-weight="normal" text-anchor="start">一个节点或委派前置节点 · task:&lt;tid&gt;:node:&lt;nid&gt;:* · 随任务 TTL</text>
+<rect x="34" y="762" width="360" height="178" rx="8" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
+<text x="46" y="784" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">NodeSpace</text>
+<rect x="44" y="792" width="340" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="50" y="806" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">node:&lt;nid&gt;:space · Hash</text>
+<text x="46" y="830" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">inputs：开始时按契约绑定，只补不覆盖</text>
+<text x="46" y="848" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">outputs：builtin_output_set 写入的正式产出</text>
+<text x="46" y="866" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">state：便签（awaiting · delegateResult …）</text>
+<text x="46" y="884" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">repair：补参义务 · rounds</text>
+<line x1="44" y1="914" x2="384" y2="914" stroke="#cbd5e1" stroke-width="1"/>
+<text x="46" y="931" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · task_graph_node（inputs · outputs · state）</text>
+<rect x="409" y="762" width="360" height="178" rx="8" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
+<text x="421" y="784" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">EvidenceHead</text>
+<rect x="419" y="792" width="340" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="425" y="806" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">node:&lt;nid&gt;:evidence · Hash</text>
+<text x="421" y="830" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">每次业务工具调用一条</text>
+<text x="421" y="848" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">status · businessOk · empty</text>
+<text x="421" y="866" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">extractCounts · entities · 摘要</text>
+<text x="421" y="884" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">写工具：S2 STARTED → S3 终态</text>
+<line x1="419" y1="914" x2="759" y2="914" stroke="#cbd5e1" stroke-width="1"/>
+<text x="421" y="931" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · tool_call_record</text>
+<rect x="784" y="762" width="360" height="178" rx="8" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
+<text x="796" y="784" font-size="14" fill="#1f2937" font-weight="bold" text-anchor="start">工具报文</text>
+<rect x="794" y="792" width="340" height="20" rx="4" fill="#f1f5f9" stroke="#f1f5f9" stroke-width="1.2"/>
+<text x="800" y="806" font-size="11.5" fill="#1f2937" font-weight="normal" text-anchor="start" font-family="Menlo, Consolas, monospace">payload:&lt;eid&gt; · String</text>
+<text x="796" y="830" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">工具原始返回</text>
+<text x="796" y="848" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">节点完成后 TTL 1h</text>
+<text x="796" y="866" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">超过 512KB 另存 MySQL</text>
+<text x="796" y="884" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">builtin_evidence_get 读取</text>
+<line x1="794" y1="914" x2="1134" y2="914" stroke="#cbd5e1" stroke-width="1"/>
+<text x="796" y="931" font-size="11.5" fill="#6b7280" font-weight="normal" text-anchor="start">MySQL · response · task_node_payload</text>
+<rect x="20" y="964" width="1150" height="104" rx="10" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+<text x="36" y="990" font-size="16" fill="#475569" font-weight="bold" text-anchor="start">MySQL 兜底</text>
+<text x="36" y="1010" font-size="12" fill="#6b7280" font-weight="normal" text-anchor="start">S1 / S2 / S3 同步写，其余轮末单事务写；Redis key 缺失时按 key 回灌</text>
+<text x="36" y="1034" font-size="12.5" fill="#1f2937" font-weight="normal" text-anchor="start">会话：chat_conversation · chat_message</text>
+<text x="350" y="1034" font-size="12.5" fill="#1f2937" font-weight="normal" text-anchor="start">任务：task_instance · task_graph_node · task_graph_edge · task_checkpoint · task_resume_record</text>
+<text x="36" y="1056" font-size="12.5" fill="#1f2937" font-weight="normal" text-anchor="start">证据：tool_call_record · task_node_payload</text>
+<text x="350" y="1056" font-size="12.5" fill="#1f2937" font-weight="normal" text-anchor="start">栅栏：chat_conversation.state_version · task_instance.state_version（CAS）</text>
+<rect x="1185" y="220" width="395" height="848" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="1201" y="246" font-size="16" fill="#7c3aed" font-weight="bold" text-anchor="start">执行（本轮内存）</text>
+<text x="1201" y="266" font-size="12" fill="#6b7280" font-weight="normal" text-anchor="start">轮结束即丢弃；模型只看投影</text>
+<rect x="1199" y="280" width="367" height="98" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1"/>
+<text x="1211" y="302" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">TurnScope（一轮）</text>
+<text x="1211" y="322" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">会话栅栏 · 对话 · 记录 · 实体 · 会话共享</text>
+<text x="1211" y="340" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">任务元数据 · 图 · 断点 · 任务共享 · 前情</text>
+<text x="1211" y="358" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">待 flush / 待 persist 游标</text>
+<line x1="1382.5" y1="380" x2="1382.5" y2="396" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1199" y="398" width="367" height="80" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1"/>
+<text x="1211" y="420" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">NodeScope（当前节点）</text>
+<text x="1211" y="440" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">打开时读 space + evidence</text>
+<text x="1211" y="458" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">绑定 inputs · 结算委派结果</text>
+<line x1="1382.5" y1="480" x2="1382.5" y2="496" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1199" y="498" width="367" height="98" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1"/>
+<text x="1211" y="520" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">ReAct 一轮</text>
+<text x="1211" y="540" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">投影 → 大模型 → tool_calls</text>
+<text x="1211" y="558" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">每轮调用模型前 flush</text>
+<text x="1211" y="576" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">builtin_node_finish：校验完成条件</text>
+<line x1="1382.5" y1="598" x2="1382.5" y2="614" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1199" y="616" width="367" height="196" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1"/>
+<text x="1211" y="638" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">业务工具处理链</text>
+<text x="1211" y="658" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">before：ArgPolicy → ArgBinding</text>
+<text x="1211" y="676" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">　　　→ ParamContract → Fingerprint</text>
+<text x="1211" y="694" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">　　　→ WriteGate（审批 · S2 预登记）</text>
+<text x="1211" y="712" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">调用 MCP 工具</text>
+<text x="1211" y="730" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">after：ResponseContract（业务判定）</text>
+<text x="1211" y="748" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">　　　→ Evidence（S3 结算）</text>
+<text x="1211" y="766" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">任一 before 拒绝：不登记证据</text>
+<text x="1211" y="784" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">写结果不确定：UNKNOWN → 回查 / VERIFY</text>
+<line x1="1382.5" y1="814" x2="1382.5" y2="830" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr)"/>
+<rect x="1199" y="832" width="367" height="222" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1"/>
+<text x="1211" y="854" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">挂起与恢复</text>
+<text x="1211" y="874" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">SaveSuspend → checkpoint，任务 SUSPENDED</text>
+<text x="1211" y="892" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">下一轮 action 恢复 → 消费断点</text>
+<text x="1211" y="910" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">persist 成功 → 写恢复记录、逻辑删除断点</text>
+<text x="1211" y="928" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">上一轮未收尾（lastTraceId 非空）</text>
+<text x="1211" y="946" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ RUNNING 节点回 READY</text>
+<text x="1211" y="964" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ STARTED 证据改 UNKNOWN</text>
+<rect x="20" y="1088" width="1560" height="182" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="36" y="1114" font-size="16" fill="#1f2937" font-weight="bold" text-anchor="start">状态与取值</text>
+<text x="36.0" y="1144" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">TaskStatus</text>
+<text x="36.0" y="1166" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">RUNNING ⇄ SUSPENDED</text>
+<text x="36.0" y="1185" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ SUCCEEDED</text>
+<text x="36.0" y="1204" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ FAILED</text>
+<text x="36.0" y="1223" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">→ CANCELED</text>
+<text x="341.6" y="1144" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">NodeStatus</text>
+<text x="341.6" y="1166" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">PENDING → READY → RUNNING</text>
+<text x="341.6" y="1185" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">RUNNING → DONE / FAILED / CANCELLED</text>
+<text x="341.6" y="1204" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">RUNNING → SUSPENDED → READY</text>
+<text x="341.6" y="1223" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">RUNNING → WAITING_DELEGATE → READY</text>
+<text x="341.6" y="1242" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">SKIPPED：所需共享值已存在</text>
+<text x="647.2" y="1144" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">CheckpointType → 动作</text>
+<text x="647.2" y="1166" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">FOLLOW_UP：REPLY · CANCEL</text>
+<text x="647.2" y="1185" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">APPROVAL：CONFIRM · REJECT · CANCEL</text>
+<text x="647.2" y="1204" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">VERIFY：CONFIRM · REJECT</text>
+<text x="952.8000000000001" y="1144" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">EvidenceStatus</text>
+<text x="952.8000000000001" y="1166" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">STARTED → SUCCESS（businessOk）</text>
+<text x="952.8000000000001" y="1185" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">STARTED → FAILED / TIMEOUT</text>
+<text x="952.8000000000001" y="1204" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">写工具不确定 → UNKNOWN</text>
+<text x="952.8000000000001" y="1223" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">UNKNOWN_PRE_CALL · CANCELLED</text>
+<text x="1258.4" y="1144" font-size="13.5" fill="#1f2937" font-weight="bold" text-anchor="start">TurnStatus（对外）</text>
+<text x="1258.4" y="1166" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">SUCCEEDED / 只回复 → DONE</text>
+<text x="1258.4" y="1185" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">SUSPENDED → WAITING</text>
+<text x="1258.4" y="1204" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">FAILED / 仍 RUNNING → FAILED</text>
+<text x="1258.4" y="1223" font-size="12" fill="#1f2937" font-weight="normal" text-anchor="start">CANCELED → CANCELLED</text>
+</svg>

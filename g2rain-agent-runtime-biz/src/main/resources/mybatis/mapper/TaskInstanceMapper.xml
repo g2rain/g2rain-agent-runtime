@@ -1,0 +1,538 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.g2rain.agent.runtime.dao.TaskInstanceDao">
+    <!-- 通用结果集映射（包含所有字段：主键+基础字段+业务字段） -->
+    <resultMap id="BaseResultMap" type="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        <!-- 主键字段 -->
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <!-- 基础字段（createTime、updateTime） -->
+        <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
+        <result column="update_time" property="updateTime" jdbcType="TIMESTAMP"/>
+        <!-- 业务字段（其他自定义字段） -->
+        <result column="organ_id" property="organId" jdbcType="BIGINT"/>
+        <result column="conversation_id" property="conversationId" jdbcType="VARCHAR"/>
+        <result column="task_id" property="taskId" jdbcType="VARCHAR"/>
+        <result column="agent_id" property="agentId" jdbcType="BIGINT"/>
+        <result column="goal_summary" property="goalSummary" jdbcType="VARCHAR"/>
+        <result column="source_message_id" property="sourceMessageId" jdbcType="VARCHAR"/>
+        <result column="status" property="status" jdbcType="VARCHAR"/>
+        <result column="current_node_id" property="currentNodeId" jdbcType="VARCHAR"/>
+        <result column="final_message" property="finalMessage" jdbcType="VARCHAR"/>
+        <result column="started_time" property="startedTime" jdbcType="TIMESTAMP"/>
+        <result column="suspended_time" property="suspendedTime" jdbcType="TIMESTAMP"/>
+        <result column="finished_time" property="finishedTime" jdbcType="TIMESTAMP"/>
+        <result column="trace_id" property="traceId" jdbcType="VARCHAR"/>
+        <result column="state_version" property="stateVersion" jdbcType="BIGINT"/>
+        <result column="skill_versions" property="skillVersions" jdbcType="LONGVARCHAR"/>
+        <result column="shared" property="shared" jdbcType="LONGVARCHAR"/>
+        <result column="prior" property="prior" jdbcType="LONGVARCHAR"/>
+        <result column="record" property="record" jdbcType="LONGVARCHAR"/>
+        <!-- deleteFlag字段（如果存在） -->
+        <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
+        <!-- version字段（如果存在） -->
+        <result column="version" property="version" jdbcType="INTEGER"/>
+    </resultMap>
+
+    <!-- 定义可复用排序方向片段 -->
+    <sql id="directionClause">
+        <choose>
+            <when test="item.direction == 'DESC'">DESC</when>
+            <otherwise>ASC</otherwise>
+        </choose>
+    </sql>
+
+    <!-- 可复用的动态排序 SQL 片段 -->
+    <sql id="dynamicOrderBy">
+        <trim prefix="ORDER BY" suffixOverrides=",">
+            <foreach collection="safeSorts" item="item" separator=",">
+                <choose>
+                    <when test="item.column == 'id'">
+                        id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'createTime'">
+                        create_time
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'updateTime'">
+                        update_time
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'organId'">
+                        organ_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'conversationId'">
+                        conversation_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'taskId'">
+                        task_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'agentId'">
+                        agent_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'goalSummary'">
+                        goal_summary
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'sourceMessageId'">
+                        source_message_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'status'">
+                        status
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'currentNodeId'">
+                        current_node_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'finalMessage'">
+                        final_message
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'startedTime'">
+                        started_time
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'suspendedTime'">
+                        suspended_time
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'finishedTime'">
+                        finished_time
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'traceId'">
+                        trace_id
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'stateVersion'">
+                        state_version
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'skillVersions'">
+                        skill_versions
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'shared'">
+                        shared
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'prior'">
+                        prior
+                        <include refid="directionClause"/>
+                    </when>
+                    <when test="item.column == 'record'">
+                        record
+                        <include refid="directionClause"/>
+                    </when>
+                </choose>
+            </foreach>
+        </trim>
+    </sql>
+
+    <!-- insert / insertWithoutIsolation 共用 -->
+    <sql id="insertBody">
+        INSERT INTO task_instance (
+        <!-- 主键字段（自增主键不包含在插入语句中） -->
+        id,
+        <!-- 基础字段 -->
+        create_time, update_time,
+        <!-- 业务字段 -->
+        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        <!-- deleteFlag字段（如果存在） -->
+        delete_flag,
+        <!-- version字段（如果存在） -->
+        version
+        ) VALUES (
+        <!-- 主键值（自增主键不包含） -->
+        #{id, jdbcType=BIGINT},
+        <!-- 基础字段值 -->
+        #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
+        <!-- 业务字段值 -->
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{skillVersions, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{record, jdbcType=LONGVARCHAR},
+        <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
+        0,
+        <!-- version字段值（如果存在，设置默认值为0） -->
+        0
+        )
+    </sql>
+
+    <!-- update / updateWithoutIsolation 共用 -->
+    <sql id="updateBody">
+        UPDATE task_instance
+        <set>
+            <!-- 基础字段更新（排除version，version单独处理） -->
+            <if test="updateTime != null">
+                update_time = #{updateTime, jdbcType=TIMESTAMP},
+            </if>
+            <!-- 业务字段更新 -->
+            <if test="organId != null">
+                organ_id = #{organId, jdbcType=BIGINT},
+            </if>
+            <if test="conversationId != null">
+                conversation_id = #{conversationId, jdbcType=VARCHAR},
+            </if>
+            <if test="taskId != null">
+                task_id = #{taskId, jdbcType=VARCHAR},
+            </if>
+            <if test="agentId != null">
+                agent_id = #{agentId, jdbcType=BIGINT},
+            </if>
+            <if test="goalSummary != null">
+                goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            </if>
+            <if test="sourceMessageId != null">
+                source_message_id = #{sourceMessageId, jdbcType=VARCHAR},
+            </if>
+            <if test="status != null">
+                status = #{status, jdbcType=VARCHAR},
+            </if>
+            <if test="currentNodeId != null">
+                current_node_id = #{currentNodeId, jdbcType=VARCHAR},
+            </if>
+            <if test="finalMessage != null">
+                final_message = #{finalMessage, jdbcType=VARCHAR},
+            </if>
+            <if test="startedTime != null">
+                started_time = #{startedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="suspendedTime != null">
+                suspended_time = #{suspendedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="finishedTime != null">
+                finished_time = #{finishedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="traceId != null">
+                trace_id = #{traceId, jdbcType=VARCHAR},
+            </if>
+            <if test="stateVersion != null">
+                state_version = #{stateVersion, jdbcType=BIGINT},
+            </if>
+            <if test="skillVersions != null">
+                skill_versions = #{skillVersions, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="shared != null">
+                shared = #{shared, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="prior != null">
+                prior = #{prior, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="record != null">
+                record = #{record, jdbcType=LONGVARCHAR},
+            </if>
+            <!-- version字段更新（如果存在，版本号自增） -->
+            version = version + 1
+        </set>
+        WHERE id = #{id, jdbcType=BIGINT}
+    </sql>
+
+    <!-- selectById / selectByIdWithoutIsolation 共用 -->
+    <sql id="selectByIdBody">
+        SELECT
+        <!-- 主键字段 -->
+        id,
+        <!-- 基础字段 -->
+        create_time, update_time,
+        <!-- 业务字段 -->
+        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        <!-- deleteFlag字段（如果存在） -->
+        delete_flag,
+        <!-- version字段（如果存在） -->
+        version
+        FROM task_instance
+        WHERE id = #{id, jdbcType=BIGINT}
+        <!-- 过滤已删除的记录 -->
+        AND (delete_flag = 0 OR delete_flag IS NULL)
+    </sql>
+
+    <!-- selectList / selectListWithoutIsolation 共用 -->
+    <sql id="selectListBody">
+        SELECT
+        <!-- 主键字段 -->
+        id,
+        <!-- 基础字段 -->
+        create_time, update_time,
+        <!-- 业务字段 -->
+        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        <!-- deleteFlag字段（如果存在） -->
+        delete_flag,
+        <!-- version字段（如果存在） -->
+        version
+        FROM task_instance
+        <where>
+            <!-- 主键筛选 -->
+            <if test="id != null">
+                AND id = #{id, jdbcType=BIGINT}
+            </if>
+            <if test="ids != null and ids.size() > 0">
+                AND id IN
+                <foreach collection="ids" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=BIGINT}
+                </foreach>
+            </if>
+            <!-- 基础字段筛选（createTime和updateTime时间筛选） -->
+            <if test="createTime != null">
+                <if test="createTime[0] != '' and (createTime.size() lt 2 or createTime[1] == '')">
+                    AND create_time >= #{createTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] == '' and createTime[1] != ''">
+                    AND create_time &lt;= #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] != '' and createTime[1] != ''">
+                    AND create_time BETWEEN #{createTime[0], jdbcType=TIMESTAMP}
+                    AND #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <if test="updateTime != null">
+                <if test="updateTime[0] != '' and (updateTime.size() lt 2 or updateTime[1] == '')">
+                    AND update_time >= #{updateTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] == '' and updateTime[1] != ''">
+                    AND update_time &lt;= #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] != '' and updateTime[1] != ''">
+                    AND update_time BETWEEN #{updateTime[0], jdbcType=TIMESTAMP}
+                    AND #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <!-- 业务字段筛选 -->
+            <if test="organId != null">
+                AND organ_id = #{organId, jdbcType=BIGINT}
+            </if>
+            <if test="conversationId != null">
+                AND conversation_id = #{conversationId, jdbcType=VARCHAR}
+            </if>
+            <if test="taskId != null">
+                AND task_id = #{taskId, jdbcType=VARCHAR}
+            </if>
+            <if test="agentId != null">
+                AND agent_id = #{agentId, jdbcType=BIGINT}
+            </if>
+            <if test="goalSummary != null">
+                AND goal_summary = #{goalSummary, jdbcType=VARCHAR}
+            </if>
+            <if test="sourceMessageId != null">
+                AND source_message_id = #{sourceMessageId, jdbcType=VARCHAR}
+            </if>
+            <if test="status != null">
+                AND status = #{status, jdbcType=VARCHAR}
+            </if>
+            <if test="currentNodeId != null">
+                AND current_node_id = #{currentNodeId, jdbcType=VARCHAR}
+            </if>
+            <if test="finalMessage != null">
+                AND final_message = #{finalMessage, jdbcType=VARCHAR}
+            </if>
+            <if test="startedTime != null">
+                AND started_time = #{startedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="suspendedTime != null">
+                AND suspended_time = #{suspendedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="finishedTime != null">
+                AND finished_time = #{finishedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="traceId != null">
+                AND trace_id = #{traceId, jdbcType=VARCHAR}
+            </if>
+            <if test="stateVersion != null">
+                AND state_version = #{stateVersion, jdbcType=BIGINT}
+            </if>
+            <if test="skillVersions != null">
+                AND skill_versions = #{skillVersions, jdbcType=LONGVARCHAR}
+            </if>
+            <if test="shared != null">
+                AND shared = #{shared, jdbcType=LONGVARCHAR}
+            </if>
+            <if test="prior != null">
+                AND prior = #{prior, jdbcType=LONGVARCHAR}
+            </if>
+            <if test="record != null">
+                AND record = #{record, jdbcType=LONGVARCHAR}
+            </if>
+            <!-- 过滤已删除的记录 -->
+            AND (delete_flag = 0 OR delete_flag IS NULL)
+        </where>
+        <include refid="dynamicOrderBy"/>
+    </sql>
+
+    <!-- 插入单条记录 -->
+    <insert id="insert" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        <include refid="insertBody"/>
+    </insert>
+
+    <!-- 批量插入记录 -->
+    <insert id="insertMultiple" parameterType="java.util.List">
+        INSERT INTO task_instance (
+        <!-- 主键字段（自增主键不包含） -->
+        id,
+        <!-- 基础字段 -->
+        create_time, update_time,
+        <!-- 业务字段 -->
+        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        <!-- deleteFlag字段（如果存在） -->
+        delete_flag,
+        <!-- version字段（如果存在） -->
+        version
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            <!-- 主键值（自增主键不包含） -->
+            #{item.id, jdbcType=BIGINT},
+            <!-- 基础字段值 -->
+            #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
+            <!-- 业务字段值 -->
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.skillVersions, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.record, jdbcType=LONGVARCHAR},
+            <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
+            0,
+            <!-- version字段值（如果存在，设置默认值为0） -->
+            0
+            )
+        </foreach>
+    </insert>
+
+    <!-- 根据 ID 更新记录（包含基础字段和业务字段） -->
+    <update id="update" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        <include refid="updateBody"/>
+    </update>
+
+    <!-- 根据 ID 和 Version 更新记录（乐观锁更新，包含基础字段和业务字段） -->
+    <update id="updateByVersion" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        UPDATE task_instance
+        <set>
+            <!-- 基础字段更新（排除version，version单独处理） -->
+            <if test="updateTime != null">
+                update_time = #{updateTime, jdbcType=TIMESTAMP},
+            </if>
+            <!-- 业务字段更新 -->
+            <if test="organId != null">
+                organ_id = #{organId, jdbcType=BIGINT},
+            </if>
+            <if test="conversationId != null">
+                conversation_id = #{conversationId, jdbcType=VARCHAR},
+            </if>
+            <if test="taskId != null">
+                task_id = #{taskId, jdbcType=VARCHAR},
+            </if>
+            <if test="agentId != null">
+                agent_id = #{agentId, jdbcType=BIGINT},
+            </if>
+            <if test="goalSummary != null">
+                goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            </if>
+            <if test="sourceMessageId != null">
+                source_message_id = #{sourceMessageId, jdbcType=VARCHAR},
+            </if>
+            <if test="status != null">
+                status = #{status, jdbcType=VARCHAR},
+            </if>
+            <if test="currentNodeId != null">
+                current_node_id = #{currentNodeId, jdbcType=VARCHAR},
+            </if>
+            <if test="finalMessage != null">
+                final_message = #{finalMessage, jdbcType=VARCHAR},
+            </if>
+            <if test="startedTime != null">
+                started_time = #{startedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="suspendedTime != null">
+                suspended_time = #{suspendedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="finishedTime != null">
+                finished_time = #{finishedTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="traceId != null">
+                trace_id = #{traceId, jdbcType=VARCHAR},
+            </if>
+            <if test="stateVersion != null">
+                state_version = #{stateVersion, jdbcType=BIGINT},
+            </if>
+            <if test="skillVersions != null">
+                skill_versions = #{skillVersions, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="shared != null">
+                shared = #{shared, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="prior != null">
+                prior = #{prior, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="record != null">
+                record = #{record, jdbcType=LONGVARCHAR},
+            </if>
+            <!-- version字段更新（乐观锁版本号自增） -->
+            version = version + 1
+        </set>
+        WHERE id = #{id, jdbcType=BIGINT}
+        AND version = #{version, jdbcType=INTEGER}
+    </update>
+
+    <!-- 轮末 CAS：state_version 单调推进，并写 shared / prior / record 等冷字段 -->
+    <update id="advanceStateVersion" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        UPDATE task_instance
+        SET state_version = #{stateVersion, jdbcType=BIGINT},
+            conversation_id = #{conversationId, jdbcType=VARCHAR},
+            agent_id = #{agentId, jdbcType=BIGINT},
+            goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            status = #{status, jdbcType=VARCHAR},
+            current_node_id = #{currentNodeId, jdbcType=VARCHAR},
+            final_message = #{finalMessage, jdbcType=VARCHAR},
+            suspended_time = #{suspendedTime, jdbcType=TIMESTAMP},
+            finished_time = #{finishedTime, jdbcType=TIMESTAMP},
+            shared = #{shared, jdbcType=LONGVARCHAR},
+            prior = #{prior, jdbcType=LONGVARCHAR},
+            record = #{record, jdbcType=LONGVARCHAR},
+            update_time = CURRENT_TIMESTAMP,
+            version = version + 1
+        WHERE task_id = #{taskId, jdbcType=VARCHAR}
+          AND state_version &lt; #{stateVersion, jdbcType=BIGINT}
+          AND (delete_flag = 0 OR delete_flag IS NULL)
+    </update>
+
+    <!-- 根据 ID 删除记录（逻辑删除：将delete_flag设置为true） -->
+    <update id="delete" parameterType="Long">
+        UPDATE task_instance
+        <set>
+            delete_flag = 1, version = version + 1
+        </set>
+        WHERE id = #{id, jdbcType=BIGINT}
+        <!-- 只删除未删除的记录 -->
+        AND (delete_flag = 0 OR delete_flag IS NULL)
+    </update>
+
+    <!-- 根据 ID 查询记录（查询所有字段） -->
+    <select id="selectById" parameterType="Long" resultMap="BaseResultMap">
+        <include refid="selectByIdBody"/>
+    </select>
+
+    <!-- 根据 SelectDto 条件查询列表 -->
+    <select id="selectList" parameterType="com.g2rain.agent.runtime.dto.TaskInstanceSelectDto" resultMap="BaseResultMap">
+        <include refid="selectListBody"/>
+    </select>
+
+    <!-- 插入单条记录（忽略数据隔离） -->
+    <insert id="insertWithoutIsolation" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        <include refid="insertBody"/>
+    </insert>
+
+    <!-- 根据 ID 更新记录（忽略数据隔离） -->
+    <update id="updateWithoutIsolation" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
+        <include refid="updateBody"/>
+    </update>
+
+    <!-- 根据 ID 查询记录（忽略数据隔离） -->
+    <select id="selectByIdWithoutIsolation" parameterType="Long" resultMap="BaseResultMap">
+        <include refid="selectByIdBody"/>
+    </select>
+
+    <!-- 根据 SelectDto 条件查询列表（忽略数据隔离） -->
+    <select id="selectListWithoutIsolation" parameterType="com.g2rain.agent.runtime.dto.TaskInstanceSelectDto" resultMap="BaseResultMap">
+        <include refid="selectListBody"/>
+    </select>
+</mapper>

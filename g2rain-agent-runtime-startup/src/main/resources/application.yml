@@ -1,0 +1,101 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  application:
+    name: g2rain-agent-runtime
+  # 环境切换（dev / nacos 互斥，勿同时激活或 spring.profiles.include）：
+  #   SPRING_PROFILES_ACTIVE=dev   → application.yml + application-dev.yml（本地数据源）
+  #   SPRING_PROFILES_ACTIVE=nacos → application.yml + application-nacos.yml（注册/配置中心，数据源来自 Nacos）
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:nacos}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+mybatis:
+  mapper-locations: classpath:/mybatis/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: true
+    jdbc-type-for-null: NULL
+
+g2rain:
+  springdoc:
+    description: 智能体运行时接口文档
+  agent:
+    runtime:
+      model:
+        endpoint: ${G2RAIN_MODEL_NEXUS_ENDPOINT:lb://g2rain-model-nexus}
+        connect-timeout-ms: 3000
+        # 0 = 读不超时，等模型返回
+        read-timeout-ms: 0
+        # 仅兜连接失败（如发布残留实例）；不含首次
+        max-retries: 2
+      mcp:
+        endpoint: ${G2RAIN_MCP_REGISTRY_ENDPOINT:lb://g2rain-mcp-registry}
+        path: /mcp
+        connect-timeout-ms: 3000
+        # 0 = 读不超时，等工具返回
+        read-timeout-ms: 0
+        # 仅 listTools 建连失败；不含首次；callTool 不重试
+        max-retries: 2
+      plan:
+        max-candidates: 32
+        max-skills-per-agent: 8
+        max-skills-total: 48
+      react:
+        max-rounds: 32
+        max-no-progress-rounds: 3
+        workspace-slice-max-chars: 8000
+        value-summary-max-chars: 256
+        repair-max-rounds: 8
+        observation-error-max-chars: 2048
+        brief-max-chars: 200
+        fingerprint-trip-limit: 3
+      goal-gate:
+        enabled: true
+        llm-enabled: true
+        min-deterministic-chars: 24
+        prompt-max-chars: 500
+        node-summaries-max: 12
+        dialogue-tail: 6
+      state:
+        conversation-ttl: 7d
+        task-ttl-running: 24h
+        task-ttl-suspended: 2h
+        sentinel-gap: 10m
+        payload-inline-max-bytes: 524288
+        payload-done-ttl: 1h
+        evidence-entities-max-chars: 2048
+        state-size-log-enabled: true
+        space-field-max-bytes: 65536
+        message-max-bytes: 4096
+        dialogue-max: 60
+        records-max: 20
+        entities-max: 200
+        prior-tasks-max: 5
+        prior-entities-max: 10
+        flush-max-bytes: 1048576
+        reconfirm-after: 24h
+        delegate-max-depth: 2
+        write-confirm-bypass-tools: []
+      stream:
+        timeout: 0
+        ping-interval: 15s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+  endpoint:
+    health:
+      show-details: when_authorized

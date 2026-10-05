@@ -1,0 +1,62 @@
+# profile=dev 时加载；与 nacos 互斥，勿同时激活
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 123456
+      database: 0
+      timeout: 5s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+  datasource:
+    host: localhost
+    port: 3306
+    database: g2rain_agent_runtime
+    username: root
+    password: 1qaZXsw2
+    url: jdbc:mysql://${spring.datasource.host}:${spring.datasource.port}/${spring.datasource.database}?useUnicode=true&characterEncoding=utf-8&useSSL=true&zeroDateTimeBehavior=convertToNull&serverTimezone=GMT%2B8
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 30000
+      validation-timeout: 3000
+      idle-timeout: 30000
+      max-lifetime: 300000
+      minimum-idle: 1
+      maximum-pool-size: 10
+      connection-test-query: select 1
+
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://localhost:6379"
+      password: "123456"
+      database: 0
+      connectionMinimumIdleSize: 1
+      connectionPoolSize: 10
+      timeout: 3000
+      connectTimeout: 2000
+
+logging:
+  level:
+    com.g2rain.agent.runtime.dao: debug
+
+g2rain:
+  agent:
+    runtime:
+      model:
+        # dev 关闭 Nacos 发现时改用直连；按本机 nexus 端口调整
+        endpoint: ${G2RAIN_MODEL_NEXUS_ENDPOINT:http://localhost:8080}
