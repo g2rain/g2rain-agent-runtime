@@ -23,6 +23,7 @@
 
 - [需求模板](requirements/README.md)
 - [平台与 pi-py 客户接受度评估](requirements/research/platform-pi-py-customer-acceptance.md)
+- [MCP 编排与 Skill 兼容性提升需求](requirements/mcp-orchestration-compatibility_chatgpt.md)
 - [本地开发](development/local-development.md)
 - [代码规范](development/code-conventions.md)
 - [API 约定](development/api-conventions.md)
