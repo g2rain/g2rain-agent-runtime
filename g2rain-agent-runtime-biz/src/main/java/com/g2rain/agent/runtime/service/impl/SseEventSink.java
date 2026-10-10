@@ -29,9 +29,10 @@ import java.util.function.Function;
 /**
  * 基于 Spring {@link SseEmitter} 的运行事件接收端。
  *
- * <p>以 traceId 维护本进程内的流连接，把 {@link TurnEventType} 写入 {@code event:}；
- * 发出 {@link TurnEventType#RESULT} 后不再推帧。每条连接自带一个心跳虚拟线程：
- * 空闲满一个间隔就写一行 SSE 注释 {@code : ping}；连接收口后，心跳线程在下次醒来时退出。心跳不是事件。
+ * <p>以 traceId 维护本进程内的流连接，写出前递增序号写入 SSE {@code id:}，
+ * 并把 {@link TurnEventType} 写入 {@code event:}。发出 {@link TurnEventType#RESULT} 后不再推帧。
+ * 每条连接自带一个心跳虚拟线程：空闲满一个间隔就写一行 SSE 注释 {@code : ping}；
+ * 连接收口后，心跳线程在下次醒来时退出。心跳不是事件，不占序号。
  * 本类不编排本轮业务，只投递事件。</p>
  *
  * @author alpha
@@ -114,9 +115,12 @@ public class SseEventSink implements EventSink {
         }
 
         try {
+            // 序号在发送前递增，只给数据帧写 id；心跳注释不占号。
+            long sequence = session.sequence.incrementAndGet();
             session.lastEmit.set(System.currentTimeMillis());
             var data = SseEmitter
                 .event()
+                .id(String.valueOf(sequence))
                 .name(event.type().name())
                 .data(event);
 
@@ -172,8 +176,13 @@ public class SseEventSink implements EventSink {
                     Thread.sleep(wait);
                     continue;
                 }
+
                 session.lastEmit.set(start);
-                session.emitter.send(SseEmitter.event().comment("ping"));
+                var data = SseEmitter
+                    .event()
+                    .comment("ping");
+
+                session.emitter.send(data);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -256,6 +265,11 @@ public class SseEventSink implements EventSink {
          * Spring SSE 发射器。
          */
         private final SseEmitter emitter;
+
+        /**
+         * 本连接已发送数据帧序号，从 1 起；写入 SSE {@code id:}。
+         */
+        private final AtomicLong sequence = new AtomicLong(0);
 
         /**
          * 最近一次写出的毫秒时间，心跳据此判断是否空闲。

@@ -1,0 +1,240 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="2640" viewBox="0 0 2560 2640">
+<rect width="100%" height="100%" fill="#F5F7FB"/>
+<text x="82.0" y="106" font-family="Microsoft YaHei, sans-serif" font-size="58" font-weight="700" fill="#24354B">g2rain-agent-runtime</text>
+<text x="84.0" y="166" font-family="Microsoft YaHei, sans-serif" font-size="38" font-weight="700" fill="#527CC2">Java 类架构与执行逻辑</text>
+<text x="2265.0" y="99" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="400" fill="#6B7A90">基于当前项目代码</text>
+<text x="2192.0" y="137" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#6B7A90">2026-10-05  ·  架构展开图</text>
+<text x="84.0" y="225" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#6B7A90">类卡片：接口 / 默认实现；实线：调用或执行顺序；虚线：循环反馈或上下文关联。</text>
+<rect x="60" y="260" width="2440" height="520" rx="24" fill="#FFFFFF" stroke="#E0E7F1" stroke-width="2"/>
+<rect x="88" y="284" width="52" height="45" rx="12" fill="#527CC2" stroke="#527CC2" stroke-width="2"/>
+<text x="99.0" y="314" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#FFFFFF">01</text>
+<text x="160.0" y="317" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#24354B">入口与本轮流水线</text>
+<text x="160.0" y="351" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#6B7A90">会话服务承接状态生命周期；流水线组织各阶段，阶段之间共享 TurnContext。</text>
+<rect x="110" y="365" width="640" height="125" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="366" width="7" height="123" rx="3" fill="#527CC2" stroke="#527CC2" stroke-width="1"/>
+<text x="132.0" y="405" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#527CC2">ConversationController / SseEventSink</text>
+<text x="132.0" y="439" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">HTTP / SSE 入口，注册会话回调</text>
+<rect x="855" y="365" width="730" height="125" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="856" y="366" width="7" height="123" rx="3" fill="#527CC2" stroke="#527CC2" stroke-width="1"/>
+<text x="877.0" y="406" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#527CC2">ConversationService</text>
+<text x="877.0" y="440" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">ConversationServiceImpl</text>
+<text x="877.0" y="475" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">会话锁内调用 begin → pipeline → flush / persist</text>
+<rect x="1685" y="365" width="750" height="125" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1686" y="366" width="7" height="123" rx="3" fill="#527CC2" stroke="#527CC2" stroke-width="1"/>
+<text x="1707.0" y="406" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#527CC2">RuntimeStateFacade</text>
+<text x="1707.0" y="440" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultRuntimeStateFacade</text>
+<text x="1707.0" y="475" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">读取、提交与持久化运行状态</text>
+<polyline points="750,427 855,427" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="855.0,427.0 842.4,433.1 842.4,420.9" fill="#6C819A"/>
+<rect x="767.0" y="392" width="70.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="778.0" y="415" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">send</text>
+<polyline points="1585,427 1685,427" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1685.0,427.0 1672.4,433.1 1672.4,420.9" fill="#6C819A"/>
+<rect x="110" y="535" width="2325" height="188" rx="18" fill="#F0F5FF" stroke="#BED0EA" stroke-width="2"/>
+<text x="132.0" y="574" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700" fill="#355E95">TurnPipeline  →  DefaultTurnPipeline.run(TurnContext)</text>
+<rect x="130" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="144.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">1  入口校验</text>
+<text x="144.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">TurnEntryGuard</text>
+<text x="144.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultTurnEntryGuard</text>
+<polyline points="435,648 459,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="459.0,648.0 446.4,654.1 446.4,641.9" fill="#6C819A"/>
+<rect x="459" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="473.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">2  意图与选人</text>
+<text x="473.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">TurnDispatcher</text>
+<text x="473.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultTurnDispatcher</text>
+<polyline points="764,648 788,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="788.0,648.0 775.4,654.1 775.4,641.9" fill="#6C819A"/>
+<rect x="788" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="802.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">3  任务生命周期</text>
+<text x="802.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">TaskLifecycle</text>
+<text x="802.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultTaskLifecycle</text>
+<polyline points="1093,648 1117,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1117.0,648.0 1104.4,654.1 1104.4,641.9" fill="#6C819A"/>
+<rect x="1117" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="1131.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">4  技能装载</text>
+<text x="1131.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">Hydrator</text>
+<text x="1131.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultHydrator</text>
+<polyline points="1422,648 1446,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1446.0,648.0 1433.4,654.1 1433.4,641.9" fill="#6C819A"/>
+<rect x="1446" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="1460.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">5  业务规划</text>
+<text x="1460.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">Planner</text>
+<text x="1460.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultPlanner</text>
+<polyline points="1751,648 1775,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1775.0,648.0 1762.4,654.1 1762.4,641.9" fill="#6C819A"/>
+<rect x="1775" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="1789.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">6  任务图执行</text>
+<text x="1789.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">TaskGraphExecutor</text>
+<text x="1789.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultTaskGraphExecutor</text>
+<polyline points="2080,648 2104,648" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="2104.0,648.0 2091.4,654.1 2091.4,641.9" fill="#6C819A"/>
+<rect x="2104" y="592" width="305" height="112" rx="12" fill="#FFFFFF" stroke="#CEDCEF" stroke-width="2"/>
+<text x="2118.0" y="624" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#355E95">7  结果收口</text>
+<text x="2118.0" y="657" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#24354B">Finalizer</text>
+<text x="2118.0" y="689" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#687A92">DefaultFinalizer</text>
+<polyline points="1220,490 1220,535" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1220.0,535.0 1213.9,522.4 1226.1,522.4" fill="#6C819A"/>
+<rect x="1227.0" y="498" width="56.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1238.0" y="521" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">run</text>
+<text x="130.0" y="760" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#667992">入口拒答、仅回复、取消等路径可短路；正常任务按装载 → 规划 → 执行 → 收口推进。</text>
+<rect x="60" y="815" width="2440" height="660" rx="24" fill="#FFFFFF" stroke="#E0E7F1" stroke-width="2"/>
+<rect x="88" y="839" width="52" height="45" rx="12" fill="#278676" stroke="#278676" stroke-width="2"/>
+<text x="99.0" y="869" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#FFFFFF">02</text>
+<text x="160.0" y="872" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#24354B">任务图与节点执行</text>
+<text x="160.0" y="906" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#6B7A90">DefaultTaskGraphExecutor.execute() 在 GraphFrame 上重复 next → reduce → apply，直到 Halt。</text>
+<rect x="110" y="927" width="700" height="124" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="928" width="7" height="122" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="132.0" y="967" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">GraphKernel</text>
+<text x="132.0" y="1001" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultGraphKernel</text>
+<text x="132.0" y="1036" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">next(frame) → GraphStep：唤醒 / 执行 / 空闲收口</text>
+<rect x="930" y="927" width="700" height="124" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="928" width="7" height="122" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="952.0" y="967" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">GraphTransitionReducer</text>
+<text x="952.0" y="1001" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultGraphTransitionReducer</text>
+<text x="952.0" y="1036" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">reduce(frame, step) → List&lt;GraphEffect&gt;</text>
+<rect x="1750" y="927" width="685" height="124" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="928" width="7" height="122" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="1772.0" y="967" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">EffectHandler</text>
+<text x="1772.0" y="1001" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultEffectHandler</text>
+<text x="1772.0" y="1036" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">apply(frame, effects)：应用副作用</text>
+<polyline points="810,989 930,989" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="930.0,989.0 917.4,995.1 917.4,982.9" fill="#6C819A"/>
+<rect x="805.5078125" y="951" width="128.984375" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="816.5" y="974" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">GraphStep</text>
+<polyline points="1630,989 1750,989" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1750.0,989.0 1737.4,995.1 1737.4,982.9" fill="#6C819A"/>
+<rect x="1619.5" y="951" width="141.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1630.5" y="974" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">GraphEffect</text>
+<polyline points="2092,1051 2092,1081 460,1081 460,1051" fill="none" stroke="#278676" stroke-width="3" stroke-dasharray="9 7"/><polygon points="460.0,1051.0 466.1,1063.6 453.9,1063.6" fill="#278676"/>
+<rect x="999.0" y="1062" width="532.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1010.0" y="1085" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#278676">未 Halt：进入下一拍；当前每拍只执行一个可运行节点</text>
+<rect x="110" y="1130" width="700" height="128" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="1131" width="7" height="126" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="132.0" y="1170" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">NodeStateMachine</text>
+<text x="132.0" y="1204" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultNodeStateMachine</text>
+<text x="132.0" y="1239" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">节点事件 → 节点状态转换</text>
+<rect x="930" y="1130" width="700" height="128" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="1131" width="7" height="126" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="952.0" y="1170" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">NodeRunner</text>
+<text x="952.0" y="1204" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultNodeRunner</text>
+<text x="952.0" y="1239" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">准备 Skill / NodeScope / 历史 / 工具，运行节点</text>
+<rect x="1750" y="1130" width="685" height="128" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="1131" width="7" height="126" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="1772.0" y="1170" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">GraphEffect</text>
+<text x="1772.0" y="1204" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">Publish：过程事件；SaveSuspend：挂起</text>
+<text x="1772.0" y="1236" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">ClearSuspend：恢复；Halt：停止图执行</text>
+<polyline points="1280,1051 1280,1130" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1280.0,1130.0 1273.9,1117.4 1286.1,1117.4" fill="#6C819A"/>
+<rect x="1298.0078125" y="1098" width="223.984375" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1309.0" y="1121" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">ExecuteWave → run</text>
+<polyline points="930,1194 810,1194" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="810.0,1194.0 822.6,1187.9 822.6,1200.1" fill="#6C819A"/>
+<rect x="826.5" y="1158" width="87.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="837.5" y="1181" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">transit</text>
+<polyline points="2092,1130 2092,1051" fill="none" stroke="#278676" stroke-width="3" stroke-dasharray="9 7"/><polygon points="2092.0,1051.0 2098.1,1063.6 2085.9,1063.6" fill="#278676"/>
+<rect x="110" y="1330" width="700" height="112" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="1331" width="7" height="110" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="132.0" y="1370" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">GraphFrame / TurnContext</text>
+<text x="132.0" y="1404" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">当前图、任务、Skill 集合与恢复动作的工作台</text>
+<rect x="930" y="1330" width="700" height="112" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="1331" width="7" height="110" rx="3" fill="#278676" stroke="#278676" stroke-width="1"/>
+<text x="952.0" y="1370" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#278676">ReActLoop</text>
+<text x="952.0" y="1404" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultReActLoop</text>
+<text x="952.0" y="1439" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">上下文投影 → 模型 → 工具 → 观测 → 下一轮</text>
+<rect x="1750" y="1330" width="685" height="112" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="1331" width="7" height="110" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="1772.0" y="1370" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">ModelGateway</text>
+<text x="1772.0" y="1404" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultModelGateway</text>
+<text x="1772.0" y="1439" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">模型请求 → g2rain-model-nexus</text>
+<polyline points="1280,1258 1280,1330" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1280.0,1330.0 1273.9,1317.4 1286.1,1317.4" fill="#6C819A"/>
+<rect x="1317.0" y="1286" width="146.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1328.0" y="1309" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">run(context)</text>
+<polyline points="1630,1386 1750,1386" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1750.0,1386.0 1737.4,1392.1 1737.4,1379.9" fill="#6C819A"/>
+<rect x="1657.0" y="1348" width="66.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1668.0" y="1371" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">chat</text>
+<polyline points="460,1330 460,1288 920,1288" fill="none" stroke="#278676" stroke-width="3" stroke-dasharray="9 7"/><polygon points="920.0,1288.0 907.4,1294.1 907.4,1281.9" fill="#278676"/>
+<rect x="60" y="1510" width="2440" height="535" rx="24" fill="#FFFFFF" stroke="#E0E7F1" stroke-width="2"/>
+<rect x="88" y="1534" width="52" height="45" rx="12" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="2"/>
+<text x="99.0" y="1564" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#FFFFFF">03</text>
+<text x="160.0" y="1567" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#24354B">统一工具执行与控制动作</text>
+<text x="160.0" y="1601" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#6B7A90">ReAct 调用 ToolInvoker；工具结果成为 Observation，供模型继续判断；控制工具改变节点执行结论。</text>
+<rect x="110" y="1623" width="700" height="150" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="1624" width="7" height="148" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="132.0" y="1663" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">ToolInvoker</text>
+<text x="132.0" y="1697" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultToolInvoker</text>
+<text x="132.0" y="1732" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">before 正序 → callback.call → after 逆序</text>
+<text x="132.0" y="1764" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">返回统一 Observation（成功 / 失败 / 数据）</text>
+<rect x="930" y="1623" width="700" height="150" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="1624" width="7" height="148" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="952.0" y="1663" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">ToolInterceptor</text>
+<text x="952.0" y="1697" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">ArgPolicy → ArgBinding → ParamContract</text>
+<text x="952.0" y="1729" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">Fingerprint → WriteGate</text>
+<text x="952.0" y="1761" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">ResponseContract / Evidence 处理返回结果</text>
+<rect x="1750" y="1623" width="685" height="150" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="1624" width="7" height="148" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="1772.0" y="1663" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">ToolCallback</text>
+<text x="1772.0" y="1697" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">McpToolCallback：远端业务工具</text>
+<text x="1772.0" y="1729" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">BuiltinToolCallback：内置状态与控制工具</text>
+<text x="1772.0" y="1761" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">Provider 负责装配可调用工具集合</text>
+<polyline points="810,1698 930,1698" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="930.0,1698.0 917.4,1704.1 917.4,1691.9" fill="#6C819A"/>
+<rect x="827.5" y="1662" width="85.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="838.5" y="1685" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">拦截链</text>
+<polyline points="1630,1698 1750,1698" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1750.0,1698.0 1737.4,1704.1 1737.4,1691.9" fill="#6C819A"/>
+<rect x="1637.0" y="1662" width="106.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1648.0" y="1685" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">调用回调</text>
+<polyline points="930,1386 875,1386 875,1492 85,1492 85,1698 110,1698" fill="none" stroke="#8D6BB0" stroke-width="3"/><polygon points="110.0,1698.0 97.4,1704.1 97.4,1691.9" fill="#8D6BB0"/>
+<rect x="353.0234375" y="1478" width="293.953125" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="364.0" y="1501" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#8D6BB0">invoke(ToolInvokeRequest)</text>
+<rect x="110" y="1853" width="700" height="145" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="1854" width="7" height="143" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="132.0" y="1892" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#8D6BB0">ControlBuiltinTools / NodeBuiltinTools</text>
+<text x="132.0" y="1926" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">followUp / approval / finish / fail / delegate</text>
+<text x="132.0" y="1958" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">outputSet / stateSet / evidenceGet</text>
+<text x="132.0" y="1990" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">delegate 插入同一任务图中的 Skill 前置节点</text>
+<rect x="930" y="1853" width="700" height="130" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="1854" width="7" height="128" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="952.0" y="1893" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">EvidenceInterceptor → EvidenceFlow</text>
+<text x="952.0" y="1927" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">记录或结算工具调用证据</text>
+<text x="952.0" y="1959" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">经 RuntimeStateFacade 进入状态与持久化层</text>
+<rect x="1750" y="1853" width="685" height="130" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="1854" width="7" height="128" rx="3" fill="#8D6BB0" stroke="#8D6BB0" stroke-width="1"/>
+<text x="1772.0" y="1893" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8D6BB0">McpSyncClient</text>
+<text x="1772.0" y="1927" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">listTools / callTool</text>
+<text x="1772.0" y="1959" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">远端入口：g2rain-mcp-registry</text>
+<polyline points="2092,1773 2092,1853" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="2092.0,1853.0 2085.9,1840.4 2098.1,1840.4" fill="#6C819A"/>
+<rect x="2102.0078125" y="1783" width="235.984375" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="2113.0" y="1806" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">McpToolCallback.call</text>
+<polyline points="1750,1742 1690,1742 1690,1818 460,1818 460,1853" fill="none" stroke="#8D6BB0" stroke-width="3" stroke-dasharray="9 7"/><polygon points="460.0,1853.0 453.9,1840.4 466.1,1840.4" fill="#8D6BB0"/>
+<rect x="557.0" y="1785" width="106.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="568.0" y="1808" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#8D6BB0">内置回调</text>
+<polyline points="1280,1773 1280,1853" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1280.0,1853.0 1273.9,1840.4 1286.1,1840.4" fill="#6C819A"/>
+<rect x="1343.0" y="1785" width="174.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1354.0" y="1808" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">after：证据记录</text>
+<text x="130.0" y="2030" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#667992">控制动作 → 节点结果 / 图变化；业务调用 → 观测 / 证据。两者由同一工具入口接入，但承担不同职责。</text>
+<rect x="60" y="2080" width="2440" height="385" rx="24" fill="#FFFFFF" stroke="#E0E7F1" stroke-width="2"/>
+<rect x="88" y="2104" width="52" height="45" rx="12" fill="#B58B42" stroke="#B58B42" stroke-width="2"/>
+<text x="99.0" y="2134" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#FFFFFF">04</text>
+<text x="160.0" y="2137" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#24354B">共享工作台与运行状态</text>
+<text x="160.0" y="2171" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#6B7A90">状态按会话、任务、节点分层；模型接收状态投影，业务事实通过输入、输出和证据流动。</text>
+<rect x="110" y="2193" width="700" height="208" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="111" y="2194" width="7" height="206" rx="3" fill="#B58B42" stroke="#B58B42" stroke-width="1"/>
+<text x="132.0" y="2233" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#B58B42">TurnScope / NodeScope</text>
+<text x="132.0" y="2267" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">TurnScope：会话、任务图、断点、共享值、前情</text>
+<text x="132.0" y="2299" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">NodeScope：inputs / outputs / state / evidence</text>
+<text x="132.0" y="2331" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">Sourced：值 + 来源；SkillContract 约束正式产出</text>
+<text x="132.0" y="2363" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">TurnContext / GraphFrame 引用本轮工作台</text>
+<rect x="930" y="2193" width="700" height="208" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="931" y="2194" width="7" height="206" rx="3" fill="#B58B42" stroke="#B58B42" stroke-width="1"/>
+<text x="952.0" y="2233" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#B58B42">RuntimeStateFacade</text>
+<text x="952.0" y="2267" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#24354B">DefaultRuntimeStateFacade</text>
+<text x="952.0" y="2302" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">TurnSessionHydrate：状态回灌</text>
+<text x="952.0" y="2334" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">TurnFlushPlan：提交本轮状态</text>
+<text x="952.0" y="2366" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">RuntimeStatePersistence：持久化任务与执行记录</text>
+<rect x="1750" y="2193" width="685" height="208" rx="16" fill="#FFFFFF" stroke="#CCD8E7" stroke-width="2"/>
+<rect x="1751" y="2194" width="7" height="206" rx="3" fill="#B58B42" stroke="#B58B42" stroke-width="1"/>
+<text x="1772.0" y="2233" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#B58B42">存储适配</text>
+<text x="1772.0" y="2267" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">StateStore → RedisStateStore → Redis</text>
+<text x="1772.0" y="2299" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">RuntimeStatePersistence → Service / Mapper</text>
+<text x="1772.0" y="2331" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">MySQL：任务、图、断点、消息与调用记录</text>
+<text x="1772.0" y="2363" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#596C84">ReactProjectionFactory：状态 → 模型上下文</text>
+<polyline points="810,2297 930,2297" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="930.0,2297.0 917.4,2303.1 917.4,2290.9" fill="#6C819A"/>
+<rect x="817.0" y="2262" width="106.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="828.0" y="2285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">统一读写</text>
+<polyline points="1630,2297 1750,2297" fill="none" stroke="#6C819A" stroke-width="3"/><polygon points="1750.0,2297.0 1737.4,2303.1 1737.4,2290.9" fill="#6C819A"/>
+<rect x="1637.0" y="2262" width="106.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1648.0" y="2285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#6C819A">适配存储</text>
+<polyline points="1280,1983 1280,2193" fill="none" stroke="#B58B42" stroke-width="3" stroke-dasharray="9 7"/><polygon points="1280.0,2193.0 1273.9,2180.4 1286.1,2180.4" fill="#B58B42"/>
+<rect x="1335.5" y="2047" width="169.0" height="31" rx="6" fill="#F5F7FB" stroke="#F5F7FB" stroke-width="1"/>
+<text x="1346.5" y="2070" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#B58B42">记录 / 结算证据</text>
+<text x="84.0" y="2527" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#24354B">架构特征</text>
+<text x="265.0" y="2527" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="400" fill="#526780">Agent 限定能力范围；Skill 承载业务动作；任务图组织动作依赖；ReAct 完成动作内部执行。</text>
+<text x="84.0" y="2578" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#24354B">读图边界</text>
+<text x="265.0" y="2576" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#526780">归约器会实际运行节点，并非纯函数；技能委派不是独立 Agent 协作；PLAN / REACT 均通过节点 ReAct 执行。</text>
+</svg>
