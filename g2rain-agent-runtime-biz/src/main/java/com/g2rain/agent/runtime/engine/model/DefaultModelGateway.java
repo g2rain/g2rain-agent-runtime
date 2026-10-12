@@ -3,16 +3,27 @@ package com.g2rain.agent.runtime.engine.model;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceEvent;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
+import com.g2rain.common.json.JsonCodec;
+import com.g2rain.common.json.JsonCodecFactory;
+import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContext;
 import com.g2rain.common.web.PrincipalContextHolder;
 import com.g2rain.model.nexus.dto.ChatCompletionRequest;
 import com.g2rain.model.nexus.dto.EmbeddingsRequest;
+import com.g2rain.model.nexus.schema.ChatCompletionChoice;
+import com.g2rain.model.nexus.schema.ChatCompletionUsage;
+import com.g2rain.model.nexus.schema.ChatMessage;
+import com.g2rain.model.nexus.schema.ChatToolCall;
 import com.g2rain.model.nexus.vo.ChatCompletionResponse;
 import com.g2rain.model.nexus.vo.EmbeddingsResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -20,6 +31,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -41,6 +53,11 @@ import java.util.Optional;
 public class DefaultModelGateway implements ModelGateway {
 
     /**
+     * 完整内容输出时序列化请求与响应。
+     */
+    private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
      * 指向模型服务的 RestClient（已配 baseUrl 等）。
      */
     private final RestClient modelRestClient;
@@ -51,15 +68,32 @@ public class DefaultModelGateway implements ModelGateway {
     private final RuntimeProperties runtimeProperties;
 
     /**
-     * 调用聊天补全接口。
+     * 调用聊天补全接口，并输出 {@code [Trace][MODEL]} 调用轨迹。
      *
+     * <p>每次调用输出一行摘要；命中异常判定（空响应、输出被截断、调用异常）时以 WARN 输出，
+     * 并按 {@link Trace#modelPayload()} 决定是否追加完整请求与响应。</p>
+     *
+     * @param use     调用用途
+     * @param model   本轮选用的模型名；为空时由模型服务按默认路由
      * @param request 聊天补全请求
      * @return 聊天补全响应
      */
     @Override
-    public ChatCompletionResponse chat(ChatCompletionRequest request) {
-        // POST /v1/chat/completions
-        return exchange("/v1/chat/completions", request, ChatCompletionResponse.class);
+    public ChatCompletionResponse chat(ModelUse use, @Nullable String model, ChatCompletionRequest request) {
+        long start = System.nanoTime();
+        // 本轮指定了模型才写入，未指定保持请求原值
+        if (Strings.isNotBlank(model)) {
+            request.setModel(model.trim());
+        }
+        try {
+            // POST /v1/chat/completions
+            var rsp = exchange("/v1/chat/completions", request, ChatCompletionResponse.class);
+            traceCall(use, request, rsp, elapsedMs(start));
+            return rsp;
+        } catch (RuntimeException ex) {
+            traceFailure(use, request, ex, elapsedMs(start));
+            throw ex;
+        }
     }
 
     /**
@@ -157,5 +191,182 @@ public class DefaultModelGateway implements ModelGateway {
             RuntimeErrorCode.DEPENDENCY_UNAVAILABLE,
             lastAccessError, "Model Gateway"
         );
+    }
+
+    /**
+     * 输出一次成功调用的摘要；异常时追加完整内容。
+     *
+     * @param use        调用用途
+     * @param request    请求
+     * @param response   响应
+     * @param durationMs 耗时
+     */
+    private static void traceCall(ModelUse use, ChatCompletionRequest request, ChatCompletionResponse response,
+                                  long durationMs) {
+        if (!Trace.enabled(TraceStage.MODEL)) {
+            return;
+        }
+
+        ChatCompletionChoice choice = Collections.isEmpty(response.getChoices()) ? null : response.getChoices().getFirst();
+        ChatMessage message = Objects.isNull(choice) ? null : choice.getMessage();
+        String content = Objects.isNull(message) ? null : message.getContent();
+        List<ChatToolCall> calls = Objects.isNull(message) || Objects.isNull(message.getToolCalls())
+            ? List.of() : message.getToolCalls();
+        ChatCompletionUsage usage = response.getUsage();
+        Abnormal abnormal = abnormalOf(response);
+
+        TraceEvent event = Trace.at(TraceStage.MODEL, "call")
+            .kv("use", use)
+            .kv("model", response.getModel())
+            .kv("durationMs", durationMs)
+            .kv("promptTokens", Objects.isNull(usage) ? null : usage.getPromptTokens())
+            .kv("completionTokens", Objects.isNull(usage) ? null : usage.getCompletionTokens())
+            .kv("finishReason", Objects.isNull(choice) ? null : choice.getFinishReason())
+            .kv("contentChars", Objects.isNull(content) ? 0 : content.length())
+            .kv("toolCallCount", calls.size())
+            .kv("toolNames", calls.stream().map(DefaultModelGateway::toolName).toList());
+        if (Objects.isNull(abnormal)) {
+            event.info();
+        } else {
+            event.kv("abnormal", abnormal).warn();
+        }
+
+        if (dumps(abnormal)) {
+            dump(use, Part.REQUEST, request);
+            dump(use, Part.RESPONSE, response);
+        }
+    }
+
+    /**
+     * 输出一次失败调用的摘要；按策略追加完整请求。
+     *
+     * @param use        调用用途
+     * @param request    请求
+     * @param ex         调用异常
+     * @param durationMs 耗时
+     */
+    private static void traceFailure(ModelUse use, ChatCompletionRequest request, RuntimeException ex, long durationMs) {
+        Trace.at(TraceStage.MODEL, "call_failed")
+            .kv("use", use)
+            .kv("durationMs", durationMs)
+            .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
+            .kv("abnormal", Abnormal.ERROR)
+            .warn();
+        if (Trace.enabled(TraceStage.MODEL) && dumps(Abnormal.ERROR)) {
+            dump(use, Part.REQUEST, request);
+        }
+    }
+
+    /**
+     * 判定响应是否异常。
+     * <pre>{@code
+     * abnormalOf(无 choices 的响应);           // EMPTY
+     * abnormalOf(finish_reason=length 的响应); // LENGTH
+     * abnormalOf(有正文的正常响应);            // null
+     * }</pre>
+     *
+     * @param response 模型响应
+     * @return 异常类型；正常为 {@code null}
+     */
+    static @Nullable Abnormal abnormalOf(ChatCompletionResponse response) {
+        if (Collections.isEmpty(response.getChoices())) {
+            return Abnormal.EMPTY;
+        }
+
+        ChatCompletionChoice choice = response.getChoices().getFirst();
+        if ("length".equalsIgnoreCase(choice.getFinishReason())) {
+            return Abnormal.LENGTH;
+        }
+
+        ChatMessage message = choice.getMessage();
+        boolean hasContent = Objects.nonNull(message) && Strings.isNotBlank(message.getContent());
+        boolean hasToolCalls = Objects.nonNull(message) && Collections.isNotEmpty(message.getToolCalls());
+        return hasContent || hasToolCalls ? null : Abnormal.EMPTY;
+    }
+
+    /**
+     * 按当前输出策略判断是否追加完整内容。
+     *
+     * @param abnormal 异常类型；正常为 {@code null}
+     * @return 需要输出完整内容时返回 {@code true}
+     */
+    private static boolean dumps(@Nullable Abnormal abnormal) {
+        return switch (Trace.modelPayload()) {
+            case NONE -> false;
+            case ABNORMAL -> Objects.nonNull(abnormal);
+            case ALL -> true;
+        };
+    }
+
+    /**
+     * 输出一段完整内容：单行 JSON，按上限截断。
+     *
+     * @param use  调用用途
+     * @param part 请求或响应
+     * @param body 请求或响应对象
+     */
+    private static void dump(ModelUse use, Part part, Object body) {
+        Trace.at(TraceStage.MODEL, "payload")
+            .kv("use", use)
+            .kv("part", part)
+            .body(JSON.obj2str(body), Trace.modelMaxChars())
+            .info();
+    }
+
+    /**
+     * 工具调用的函数名。
+     *
+     * @param call 工具调用
+     * @return 函数名；缺失为 {@code null}
+     */
+    private static @Nullable String toolName(ChatToolCall call) {
+        return Objects.isNull(call.getFunction()) ? null : call.getFunction().getName();
+    }
+
+    /**
+     * 自起点经过的毫秒数。
+     *
+     * @param startNanos 起点（{@link System#nanoTime()}）
+     * @return 毫秒数
+     */
+    private static long elapsedMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
+    }
+
+    /**
+     * 完整内容的组成部分。
+     */
+    private enum Part {
+
+        /**
+         * 请求
+         */
+        REQUEST,
+
+        /**
+         * 响应
+         */
+        RESPONSE
+    }
+
+    /**
+     * 模型调用的异常类型。
+     */
+    enum Abnormal {
+
+        /**
+         * 没有 choices，或正文为空且没有工具调用
+         */
+        EMPTY,
+
+        /**
+         * 输出达到长度上限被截断
+         */
+        LENGTH,
+
+        /**
+         * 调用抛出异常
+         */
+        ERROR
     }
 }

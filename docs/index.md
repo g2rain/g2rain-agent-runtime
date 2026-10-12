@@ -18,6 +18,9 @@
 - [SSE 事件](SSE_EVENTS.md)
 - [运行时契约](CONTRACT_SPEC.md)
 - [技能指南](SKILL_GUIDE.md)
+- [意图路由与选人](INTENT_ROUTING.md)
+- [链路轨迹日志](TRACE_LOGGING.md)
+- [工具结果与进展判定](TOOL_OBSERVATION.md)
 
 ## 开发与交付
 

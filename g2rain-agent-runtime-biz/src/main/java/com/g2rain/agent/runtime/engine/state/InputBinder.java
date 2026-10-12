@@ -36,6 +36,16 @@ final class InputBinder {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
+     * 前情实体的 id 属性名（id 取自索引键 {@code type:id}）。
+     */
+    private static final String ID = "id";
+
+    /**
+     * 前情实体的展示名属性名。
+     */
+    private static final String DISPLAY_NAME = "displayName";
+
+    /**
      * 静态绑定工具，禁止实例化。
      */
     private InputBinder() {
@@ -126,7 +136,9 @@ final class InputBinder {
     }
 
     /**
-     * 从任务前情实体索引取值；路径为 {@code type} 或 {@code type.attr}。
+     * 从任务前情实体索引取值；路径为 {@code type} 或 {@code type.attr}，取该类型最新的实体。
+     *
+     * <p>来源记为 {@code prior.<type>.<attr>}，与参数绑定一致，来源校验在工作树 prior 袋上按同一路径复核。</p>
      *
      * @param turn 本轮视图
      * @param path 去掉 {@code prior.} 后的路径
@@ -135,28 +147,28 @@ final class InputBinder {
     private static @Nullable Sourced<?> priorValue(TurnScope turn, String path) {
         int dot = path.indexOf('.');
         String type = dot < 0 ? path : path.substring(0, dot);
-        String attr = dot < 0 ? null : path.substring(dot + 1);
+        String attr = dot < 0 ? DISPLAY_NAME : path.substring(dot + 1);
         return turn.prior().flatMap(prior -> prior.entities().entrySet().stream()
                 .filter(entry -> entry.getKey().startsWith(type + ":"))
-                .map(entry -> toSourced(entry.getKey(), entry.getValue(), attr))
-                .filter(Objects::nonNull)
-                .findFirst())
+                .reduce((_, last) -> last)
+                .map(entry -> toSourced(type, entry.getKey(), entry.getValue(), attr)))
             .orElse(null);
     }
 
     /**
-     * 把任务前情实体转成带源值；无 attr 时取展示名。
+     * 把任务前情实体转成带源值。
      *
-     * @param ref   实体索引键，如 {@code type:id}
+     * @param type  实体类型
+     * @param key   实体索引键，如 {@code type:id}
      * @param entry 任务前情实体
-     * @param attr  属性名；可空则用展示名
+     * @param attr  属性名：{@code id}、{@code displayName} 或实体属性
      * @return 带源值；属性不存在时为 {@code null}
      */
-    private static @Nullable Sourced<?> toSourced(String ref, EntityEntry entry, @Nullable String attr) {
+    private static @Nullable Sourced<?> toSourced(String type, String key, EntityEntry entry, String attr) {
         Object value;
-        if (Strings.isBlank(attr)) {
-            value = entry.displayName();
-        } else if ("displayName".equals(attr)) {
+        if (ID.equals(attr)) {
+            value = key.substring(key.indexOf(':') + 1);
+        } else if (DISPLAY_NAME.equals(attr)) {
             value = entry.displayName();
         } else {
             JsonNode at = entry.attrs().get(attr);
@@ -174,6 +186,6 @@ final class InputBinder {
         if (Objects.isNull(value)) {
             return null;
         }
-        return new Sourced<>(value, new Source(SourceType.PRIOR_TASK, ref, Strings.defaultIfBlank(attr, "")));
+        return new Sourced<>(value, new Source(SourceType.PRIOR_TASK, type, type + "." + attr));
     }
 }

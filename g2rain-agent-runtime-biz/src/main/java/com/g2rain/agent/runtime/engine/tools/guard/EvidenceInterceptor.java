@@ -5,12 +5,15 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
 import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.Observation;
+import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolErrors;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -26,7 +29,7 @@ import java.util.Objects;
  * 真实调用后把观测结算或登记为证据。
  *
  * <p>请求上已有 evidenceId 时走写工具 settle；否则按非写 record。内置工具不落证据。
- * 业务成败由上游 ResponseContract 写进 Observation，本类不再二次嗅探。</p>
+ * 业务成败以上游 ResponseContractInterceptor 写进 Observation 的结论为准。</p>
  *
  * @author alpha
  * @since 2026/8/21
@@ -35,8 +38,14 @@ import java.util.Objects;
 @Component
 public class EvidenceInterceptor implements ToolInterceptor {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
+    /**
+     * 运行时状态门面：落证据、结算预写证据。
+     */
     private final RuntimeStateFacade stateFacade;
 
     /**
@@ -52,7 +61,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
      * 调用后把观测登记或结算为证据。
      *
      * <p>请求上已有 evidenceId 时走写工具 settle；否则按非写 record。内置工具不落证据。
-     * 观测本身原样返回，业务成败由上游 ResponseContract 写入。</p>
+     * 观测本身原样返回，业务成败由上游 ResponseContractInterceptor 写入。</p>
      *
      * @param request 本次工具调用请求
      * @param result  工具观测
@@ -69,7 +78,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
         if (Strings.isNotBlank(evidenceId)) {
             stateFacade.settle(request.context().scope(), evidenceId, toolResult);
         } else {
-            JsonNode args = argsNode(request.arguments());
+            JsonNode args = RuntimeUtils.argsNode(request.arguments());
             ToolCall call = new ToolCall(request.toolName(), args, null, SideEffect.NONE, request.contract());
             stateFacade.record(request.context().scope(), call, toolResult);
         }
@@ -78,7 +87,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
     }
 
     /**
-     * 只根据 Observation 推导证据，不再做业务判定。
+     * 按 Observation 推导证据：调用层状态与业务成败都取自观测。
      *
      * @param request     当前工具请求
      * @param observation 调用观测
@@ -89,7 +98,8 @@ public class EvidenceInterceptor implements ToolInterceptor {
         EvidenceStatus status = ToolErrors.statusOf(observation, sideEffect);
         FailureKind kind;
         Boolean businessOk;
-        if (observation.ok()) {
+        // 成功：配了 success 条件才记业务成功；调用层失败：业务成败未知；其余为业务失败
+        if (observation.outcome() == Outcome.SUCCESS) {
             kind = FailureKind.NONE;
             businessOk = SuccessRule.configured(request.contract()) ? Boolean.TRUE : null;
         } else if (ToolErrors.isCallFailure(observation)) {
@@ -103,16 +113,20 @@ public class EvidenceInterceptor implements ToolInterceptor {
         Map<String, Integer> counts = Map.of();
         Boolean empty = null;
         String entities = null;
+        // 业务未失败时才统计抽取条数、判空并提取实体
         if (!Objects.equals(Boolean.FALSE, businessOk)) {
             boolean callLayerOk = status == EvidenceStatus.SUCCESS;
             counts = EvidenceSemantics.extractCounts(request.contract(), observation.data());
             empty = EvidenceSemantics.empty(request.contract(), observation.data(), callLayerOk);
-            entities = EvidenceSemantics.entitiesJson(request.contract(), observation.data(), callLayerOk);
+            entities = EvidenceSemantics.entitiesJson(
+                request.contract(), observation.data(), RuntimeUtils.argsNode(request.arguments()), callLayerOk
+            );
         }
 
+        RuntimeErrorCode errorCode = observation.errorCode();
         return new ToolResult(
             status, observation.data(), businessOk, empty, counts, kind,
-            observation.errorCode(), observation.message(), entities
+            Objects.isNull(errorCode) ? null : errorCode.code(), observation.message(), entities, request.durationMs()
         );
     }
 
@@ -132,16 +146,5 @@ public class EvidenceInterceptor implements ToolInterceptor {
         }
 
         return SideEffect.NONE;
-    }
-
-    /**
-     * 入参文本转 JSON 对象。
-     *
-     * @param arguments 原始入参；空白按 {@code {}}
-     * @return 非空 JSON 节点
-     */
-    private static JsonNode argsNode(String arguments) {
-        JsonNode node = JSON.str2node(Strings.defaultIfBlank(arguments, "{}"));
-        return Objects.isNull(node) ? JSON.str2node("{}") : node;
     }
 }

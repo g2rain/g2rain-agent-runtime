@@ -4,12 +4,14 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 import com.g2rain.agent.runtime.domain.hydrate.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
+import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
@@ -146,16 +148,21 @@ public final class EvidenceSemantics {
     /**
      * SUCCESS 且 extracts 声明了 entity 时，序列化候选列表写入证据实体字段。
      *
+     * <p>写工具以入参为底、返回为准合并后再抽；返回标量时按 entity.scalar 命名成字段。</p>
+     *
      * @param contract 工具契约；可空
      * @param payload  工具报文体；可空
+     * @param args     本次调用入参；可空
      * @param success  是否调用成功
      * @return 实体候选 JSON；无可抽实体为 {@code null}
      */
-    public static @Nullable String entitiesJson(@Nullable ToolSpec contract, @Nullable JsonNode payload, boolean success) {
+    public static @Nullable String entitiesJson(@Nullable ToolSpec contract, @Nullable JsonNode payload, @Nullable JsonNode args, boolean success) {
         if (!success || Objects.isNull(contract) || Collections.isEmpty(contract.getExtracts()) || Objects.isNull(payload)) {
             return null;
         }
 
+        ObjectNode base = contract.sideEffectOrDefault() == SideEffect.WRITE && args instanceof ObjectNode obj
+            ? obj : JsonNodeFactory.instance.objectNode();
         List<EntitySeed> seeds = new ArrayList<>();
         for (ExtractSpec extract : contract.getExtracts()) {
             if (Objects.isNull(extract.getEntity()) || Strings.isBlank(extract.getEntity().getType())
@@ -169,9 +176,9 @@ public final class EvidenceSemantics {
             }
 
             if (at.isArray()) {
-                at.forEach(item -> addSeed(seeds, extract, item));
+                at.forEach(item -> addSeed(seeds, extract.getEntity().seed(base, item)));
             } else {
-                addSeed(seeds, extract, at);
+                addSeed(seeds, extract.getEntity().seed(base, at));
             }
         }
 
@@ -183,39 +190,14 @@ public final class EvidenceSemantics {
     }
 
     /**
-     * 从对象节点抽出一条实体种子。
+     * 收集非空种子。
      *
-     * @param seeds   输出列表
-     * @param extract 抽取声明
-     * @param item    候选对象
+     * @param seeds 输出列表
+     * @param seed  种子；可空
      */
-    private static void addSeed(List<EntitySeed> seeds, ExtractSpec extract, JsonNode item) {
-        var entity = extract.getEntity();
-        if (Objects.isNull(entity) || !item.isObject()) {
-            return;
+    private static void addSeed(List<EntitySeed> seeds, @Nullable EntitySeed seed) {
+        if (Objects.nonNull(seed)) {
+            seeds.add(seed);
         }
-
-        String idField = Strings.defaultIfBlank(entity.getId(), "id");
-        String nameField = Strings.defaultIfBlank(entity.getName(), "name");
-        JsonNode idNode = item.get(idField);
-        if (!JSON.hasValue(idNode)) {
-            return;
-        }
-
-        String id = idNode.asString();
-        if (Strings.isBlank(id)) {
-            return;
-        }
-
-        String display = JSON.hasValue(item.get(nameField)) ? item.get(nameField).asString() : id;
-        ObjectNode attrs = (ObjectNode) JSON.str2node("{}");
-        item.properties().forEach(field -> {
-            if (!JSON.hasValue(field.getValue()) || field.getValue().isObject() || field.getValue().isArray()) {
-                return;
-            }
-
-            attrs.set(field.getKey(), field.getValue());
-        });
-        seeds.add(new EntitySeed(entity.getType(), id, display, attrs));
     }
 }

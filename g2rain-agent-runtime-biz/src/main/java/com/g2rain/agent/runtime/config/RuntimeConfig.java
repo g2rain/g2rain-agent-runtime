@@ -3,13 +3,14 @@ package com.g2rain.agent.runtime.config;
 
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallbackProvider;
 import com.g2rain.agent.runtime.support.tool.BuiltinTools;
+import com.g2rain.agent.runtime.support.trace.Trace;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
 /**
- * RuntimeConfig：Runtime 通用 Bean（如内置工具回调提供者）。
+ * RuntimeConfig：Runtime 通用 Bean（如内置工具回调提供者），并在启动时绑定链路轨迹配置。
  * <p>
  * Turn（本轮）= 一次用户请求从进入到产出结果的完整处理。
  * </p>
@@ -19,6 +20,15 @@ import java.util.List;
  */
 @Configuration
 public class RuntimeConfig {
+
+    /**
+     * 启动时把轨迹配置以对象引用绑定到 {@link Trace}，配置中心刷新后实时生效。
+     *
+     * @param properties Runtime 配置
+     */
+    public RuntimeConfig(RuntimeProperties properties) {
+        Trace.bind(properties.getTrace());
+    }
 
     /**
      * 把全部 BuiltinTools 收成 Spring AI ToolCallback 提供者。

@@ -2,8 +2,6 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.engine.flow.react.projection.ReactProjection;
-import com.g2rain.agent.runtime.engine.flow.react.projection.ReactProjectionFactory;
 import com.g2rain.agent.runtime.support.prompt.ReactPrompt;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -75,7 +73,7 @@ public class DefaultPromptAssembler implements PromptAssembler {
         }
 
         List<ChatTool> chatTools = toChatTools(request.toolCallbacks());
-        log.info("[PromptAssembler] assemble nodeId={} historySize={} toolCount={} userChars={}",
+        log.debug("[PromptAssembler] assemble nodeId={} historySize={} toolCount={} userChars={}",
             request.nodeId(),
             request.historyMessages().size(),
             chatTools.size(),

@@ -6,9 +6,7 @@ import com.g2rain.agent.runtime.domain.hydrate.MissingActionType;
 import com.g2rain.agent.runtime.domain.hydrate.MissingSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
-import com.g2rain.agent.runtime.domain.state.Source;
 import com.g2rain.agent.runtime.domain.state.SourceType;
-import com.g2rain.agent.runtime.domain.state.task.RepairDirective;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
@@ -35,13 +33,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 
 /**
- * 参数契约门：按契约注入来源、校验溯源，缺失时挂补参义务。
+ * 参数契约门：按契约注入来源、校验溯源；缺失或来源不可信时拒调，并在观测中给出下一步。
  *
  * <p>可从 PLATFORM / NODE_OUTPUT / CONTRACT 注入；forbidSynthetic 时拒绝模型编造。
  * 缺失按 missing 配置 ASK_USER / CALL_TOOL / FAIL。</p>
@@ -56,21 +52,14 @@ import java.util.stream.IntStream;
 public class ParamContractInterceptor implements ToolInterceptor {
 
     /**
-     * 来源精确校验。
+     * 入参可信来源判定。
      */
-    private final SourceVerifier sourceVerifier;
+    private final SourceResolver sourceResolver;
 
     /**
      * JSON 编解码
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
-
-    /**
-     * 从路径抽出末级叶子键（含数组下标时剥掉）
-     */
-    private static final Pattern LEAF_KEY_PATH = Pattern.compile(
-        "(?:.*\\.)?([^.\\[\\]]+)(?:" + Pattern.quote(RuntimeUtils.WILDCARD_ARRAY_INDEX) + "|\\[\\d+])*$"
-    );
 
     /**
      * GateAccumulator（门禁累计器）：遍历契约时收集追问字段 / 失败原因 / 须调工具 / 是否改写过入参。
@@ -93,13 +82,18 @@ public class ParamContractInterceptor implements ToolInterceptor {
         @Nullable String callTool;
 
         /**
+         * 须先调工具补齐的参数路径
+         */
+        @Nullable String callToolPath;
+
+        /**
          * 入参是否被注入改写
          */
         boolean changed;
     }
 
     /**
-     * 套用参数契约：注入、校验、挂补参义务或拒调。
+     * 套用参数契约：注入、校验或拒调。
      *
      * @param request 本次工具调用请求
      * @return 空=放行；有值=拒调观察
@@ -126,8 +120,7 @@ public class ParamContractInterceptor implements ToolInterceptor {
 
         JsonNode working = WorkingTree.of(ctx);
         GateAccumulator acc = new GateAccumulator();
-        log.info("[ParamContract] begin tool={} contractKeys={}",
-            request.toolName(), contracts.keySet());
+        log.debug("[ParamContract] begin tool={} contractKeys={}", request.toolName(), contracts.keySet());
 
         // 任一契约产生即时拒调则短路（如数组元素缺参 CALL_TOOL、forbidSynthetic 拒调）
         Optional<Observation> reject = contracts.entrySet().stream()
@@ -135,7 +128,7 @@ public class ParamContractInterceptor implements ToolInterceptor {
             .flatMap(Optional::stream).findFirst();
         if (reject.isPresent()) {
             Observation blocked = reject.get();
-            log.info("[ParamContract] reject tool={} errorCode={} message={}",
+            log.debug("[ParamContract] reject tool={} errorCode={} message={}",
                 request.toolName(), blocked.errorCode(), blocked.message()
             );
             return reject;
@@ -143,41 +136,43 @@ public class ParamContractInterceptor implements ToolInterceptor {
 
         if (acc.changed) {
             request.replaceArguments(JSON.obj2str(args));
-            log.info("[ParamContract] rewritten arguments tool={}", request.toolName());
+            log.debug("[ParamContract] rewritten arguments tool={}", request.toolName());
         }
 
         if (Objects.nonNull(acc.failReason)) {
-            RepairDirective directive = RepairDirective.platformMissing(acc.failReason, 0);
-            persistObligation(ctx, directive);
-            log.info("[ParamContract] PARAM_PROVENANCE_FAIL tool={} reason={}",
+            log.debug("[ParamContract] PARAM_PROVENANCE_FAIL tool={} reason={}",
                 request.toolName(), acc.failReason
             );
-            return Optional.of(Observation.failure(acc.failReason, RuntimeErrorCode.PARAM_PROVENANCE_FAIL.code()));
+            return Optional.of(Observation.rejected(
+                RuntimeErrorCode.PARAM_PROVENANCE_FAIL, acc.failReason, ModelHint.NEXT_FAIL.text()
+            ));
         }
 
         if (Objects.nonNull(acc.callTool)) {
-            RepairDirective directive = RepairDirective.callTool(
-                acc.callTool, ModelHint.PARAM_CALL_TOOL.text("tool", acc.callTool), 0
+            Observation rejected = Observation.rejected(
+                RuntimeErrorCode.PARAM_PROVENANCE_CALL_TOOL,
+                ModelHint.PARAM_CALL_TOOL.text("path", Objects.toString(acc.callToolPath, ""), "tool", acc.callTool),
+                ModelHint.NEXT_CALL_TOOL.text("tool", acc.callTool)
             );
-            persistObligation(ctx, directive);
-            log.info("[ParamContract] PARAM_PROVENANCE_CALL_TOOL tool={} callTool={} message={}",
-                request.toolName(), acc.callTool, directive.toPromptMessage()
+            log.debug("[ParamContract] PARAM_PROVENANCE_CALL_TOOL tool={} callTool={} message={}",
+                request.toolName(), acc.callTool, rejected.message()
             );
-            return Optional.of(Observation.failure(directive.toPromptMessage(), RuntimeErrorCode.PARAM_PROVENANCE_CALL_TOOL.code()));
+            return Optional.of(rejected);
         }
 
         if (!acc.askUser.isEmpty()) {
-            RepairDirective directive = RepairDirective.askUser(
-                acc.askUser, ModelHint.PARAM_ASK_USER.text("fields", String.join(",", acc.askUser)), 0
+            Observation rejected = Observation.rejected(
+                RuntimeErrorCode.PARAM_PROVENANCE_ASK_USER,
+                ModelHint.PARAM_ASK_USER.text("fields", String.join(",", acc.askUser)),
+                ModelHint.NEXT_ASK_USER.text()
             );
-            persistObligation(ctx, directive);
-            log.info("[ParamContract] PARAM_PROVENANCE_ASK_USER tool={} askUser={} message={}",
-                request.toolName(), acc.askUser, directive.toPromptMessage()
+            log.debug("[ParamContract] PARAM_PROVENANCE_ASK_USER tool={} askUser={} message={}",
+                request.toolName(), acc.askUser, rejected.message()
             );
-            return Optional.of(Observation.failure(directive.toPromptMessage(), RuntimeErrorCode.PARAM_PROVENANCE_ASK_USER.code()));
+            return Optional.of(rejected);
         }
 
-        log.info("[ParamContract] pass tool={}", request.toolName());
+        log.debug("[ParamContract] pass tool={}", request.toolName());
         return Optional.empty();
     }
 
@@ -215,13 +210,13 @@ public class ParamContractInterceptor implements ToolInterceptor {
         if (paths.isEmpty()) {
             // 数组双方皆空：仅必填走缺参动作
             if (contract.isRequired()) {
-                return handleMissing(paramPath, contract, leafKey(paramPath), ctx, acc);
+                return handleMissing(paramPath, contract, RuntimeUtils.leafKey(paramPath), ctx, acc);
             }
             return Optional.empty();
         }
 
         boolean arrayContract = Strings.contains(paramPath, RuntimeUtils.WILDCARD_ARRAY_INDEX);
-        String rowField = arrayContract ? leafKey(paramPath) : null;
+        String rowField = arrayContract ? RuntimeUtils.leafKey(paramPath) : null;
         JsonNode workingRows = arrayContract ? readWorkingCollection(contract, working, paramPath) : null;
         Optional<Observation> pathReject = IntStream.range(0, paths.size())
             .mapToObj(i -> validatePath(paths.get(i), contract, args, working, workingRows, rowField, i, request, ctx, acc))
@@ -284,11 +279,12 @@ public class ParamContractInterceptor implements ToolInterceptor {
         int workingSize = readWorkingCollection(contract, working, wildcardPath) instanceof ArrayNode w ? w.size() : 0;
         // 两侧都有行时长度必须一致，否则拒调
         if (workingSize > 0 && argSize > 0 && workingSize != argSize) {
-            return Optional.of(Observation.failure(
+            return Optional.of(Observation.rejected(
+                RuntimeErrorCode.PARAM_PROVENANCE_REJECTED,
                 ModelHint.PARAM_ARRAY_LEN_MISMATCH.text(
                     "target", String.valueOf(argSize), "working", String.valueOf(workingSize)
                 ),
-                RuntimeErrorCode.PARAM_PROVENANCE_REJECTED.code()
+                ModelHint.NEXT_ALIGN_ROWS.text()
             ));
         }
 
@@ -328,7 +324,7 @@ public class ParamContractInterceptor implements ToolInterceptor {
         }
 
         final JsonNode resolved = argVal;
-        String askLeaf = Objects.nonNull(rowField) ? rowField : leafKey(path);
+        String askLeaf = Objects.nonNull(rowField) ? rowField : RuntimeUtils.leafKey(path);
         if (!JSON.hasValue(resolved)) {
             // 选填缺失：直接跳过，missing 只对必填参数生效
             if (!contract.isRequired()) {
@@ -337,9 +333,9 @@ public class ParamContractInterceptor implements ToolInterceptor {
             return handleMissing(path, contract, askLeaf, ctx, acc);
         }
 
-        SourceType trusted = resolveTrusted(contract, path, resolved, working, request, ctx);
+        SourceType trusted = sourceResolver.resolve(contract, path, resolved, working, request, ctx);
         if (contract.isForbidSynthetic() && trusted == SourceType.MODEL) {
-            log.info("[ParamContract] synthetic path={} sources={}",
+            log.debug("[ParamContract] synthetic path={} sources={}",
                 path, contract.getSources()
             );
             // 允许 USER 时转追问，否则即时拒调
@@ -348,9 +344,7 @@ public class ParamContractInterceptor implements ToolInterceptor {
                 return Optional.empty();
             }
 
-            String msg = syntheticRejectMessage(path, contract);
-            persistObligation(ctx, syntheticObligation(contract, msg));
-            return Optional.of(Observation.failure(msg, RuntimeErrorCode.PARAM_PROVENANCE_REJECTED.code()));
+            return Optional.of(syntheticRejection(path, contract));
         }
 
         if (!contract.getEnumValues().isEmpty() && contract.getEnumValues().stream().noneMatch(v -> v.equals(JSON.normalizeNode(resolved)))) {
@@ -358,92 +352,6 @@ public class ParamContractInterceptor implements ToolInterceptor {
         }
 
         return Optional.empty();
-    }
-
-    /**
-     * 判定入参当前值最可信来源；无一匹配则视为 MODEL。
-     *
-     * @param contract 参数契约
-     * @param path     参数路径
-     * @param argVal   入参值
-     * @param working  当前节点取值树
-     * @param request  调用请求
-     * @param ctx      执行上下文
-     * @return 可信来源类型
-     */
-    private SourceType resolveTrusted(ArgSpec contract, String path, JsonNode argVal, JsonNode working,
-                                      ToolInvokeRequest request, ToolExecutionContext ctx) {
-        Source bound = request.argSources().get(path);
-        boolean declared = Objects.nonNull(contract.getValueRef()) || Objects.nonNull(contract.getConstant());
-        if (declared) {
-            if (Objects.nonNull(bound) && sourceVerifier.verify(bound, argVal, ctx)) {
-                return bound.type();
-            }
-            return SourceType.MODEL;
-        }
-        if (Objects.nonNull(bound) && contract.getSources().contains(bound.type())
-            && sourceVerifier.verify(bound, argVal, ctx)) {
-            return bound.type();
-        }
-        return contract.getSources().stream()
-            .filter(source -> matchesSource(source, contract, path, argVal, working, ctx))
-            .findFirst().orElse(SourceType.MODEL);
-    }
-
-    /**
-     * 入参值是否与指定来源一致（精确比对）。
-     *
-     * @param source   待比对来源类型
-     * @param contract 参数契约
-     * @param path     参数路径
-     * @param argVal   入参值
-     * @param working  当前节点取值树
-     * @param ctx      执行上下文
-     * @return 与该来源一致
-     */
-    private boolean matchesSource(SourceType source, ArgSpec contract, String path, JsonNode argVal, JsonNode working,
-                                  ToolExecutionContext ctx) {
-        return switch (source) {
-            case PLATFORM -> matchesPlatform(contract, argVal, ctx);
-            case CONTRACT -> Objects.nonNull(contract.getConstant()) && JSON.nodesEqual(contract.getConstant(), argVal);
-            case NODE_OUTPUT, SHARED, SESSION, PRIOR_TASK -> {
-                JsonNode workingVal = readWorkingValue(contract, working, path, source);
-                yield JSON.hasValue(workingVal) && JSON.nodesEqual(workingVal, argVal);
-            }
-            case USER -> sourceVerifier.followUpAccepted(ctx, path) || sourceVerifier.findUserMessageId(ctx, argVal).isPresent();
-            case EVIDENCE -> sourceVerifier.matchesEvidenceValue(ctx, argVal);
-            case MODEL -> false;
-        };
-    }
-
-    /**
-     * 有 from 只认 from；无 from 按来源类型读对应袋（不跨袋猜叶子）。
-     *
-     * @param contract  参数契约
-     * @param working   当前节点取值树
-     * @param paramPath 参数路径
-     * @param source    来源类型
-     * @return 工作树中的值；没有为 {@code null}
-     */
-    private static @Nullable JsonNode readWorkingValue(ArgSpec contract, JsonNode working, String paramPath, SourceType source) {
-        ValueRef valueRef = contract.getValueRef();
-        if (Objects.nonNull(valueRef) && valueRef.bag() != ValueRef.Bag.EVIDENCE) {
-            return WorkingTree.lookup(working, valueRef);
-        }
-
-        ValueRef.Bag bag = switch (source) {
-            case NODE_OUTPUT -> ValueRef.Bag.OUTPUTS;
-            case SHARED -> ValueRef.Bag.SHARED;
-            case SESSION -> ValueRef.Bag.SESSION;
-            case PRIOR_TASK -> ValueRef.Bag.PRIOR;
-            default -> null;
-        };
-
-        if (Objects.isNull(bag) || Strings.isBlank(paramPath)) {
-            return null;
-        }
-
-        return WorkingTree.lookup(working, new ValueRef(bag, paramPath));
     }
 
     /**
@@ -471,22 +379,6 @@ public class ParamContractInterceptor implements ToolInterceptor {
     }
 
     /**
-     * 入参是否等于本轮 Platform 快照（须契约显式 from: platform.*）。
-     *
-     * @param contract 参数契约
-     * @param argVal   入参值
-     * @param ctx      执行上下文
-     * @return 平台字段匹配
-     */
-    private static boolean matchesPlatform(ArgSpec contract, JsonNode argVal, ToolExecutionContext ctx) {
-        ValueRef ref = contract.getValueRef();
-        if (Objects.isNull(ref) || ref.bag() != ValueRef.Bag.PLATFORM || Strings.isBlank(ref.path())) {
-            return false;
-        }
-        return ctx.getFrame().turn().platform().matches(ref.path(), argVal);
-    }
-
-    /**
      * 缺参时按 missingAction 累计 FAIL / CALL_TOOL / ASK_USER；数组 CALL_TOOL 可即时拒调。
      *
      * @param path     参数路径
@@ -505,7 +397,7 @@ public class ParamContractInterceptor implements ToolInterceptor {
                 acc.failReason = Optional.ofNullable(missingMessage(contract))
                     .map(String::trim)
                     .filter(Strings::isNotBlank)
-                    .orElse(ModelHint.PARAM_MISSING_TRUSTED.text("key", leafKey(path)));
+                    .orElse(ModelHint.PARAM_MISSING_TRUSTED.text("key", RuntimeUtils.leafKey(path)));
                 yield Optional.empty();
             }
 
@@ -516,12 +408,16 @@ public class ParamContractInterceptor implements ToolInterceptor {
                 }
 
                 if (path.contains("[")) {
-                    String msg = ModelHint.PARAM_COLLECTION_CALL_TOOL.text("path", path, "tool", code);
-                    persistObligation(ctx, RepairDirective.callTool(code, msg, 0));
-                    yield Optional.of(Observation.failure(msg, RuntimeErrorCode.PARAM_PROVENANCE_CALL_TOOL.code()));
+                    Observation rejected = Observation.rejected(
+                        RuntimeErrorCode.PARAM_PROVENANCE_CALL_TOOL,
+                        ModelHint.PARAM_COLLECTION_CALL_TOOL.text("path", path, "tool", code),
+                        ModelHint.NEXT_CALL_TOOL.text("tool", code)
+                    );
+                    yield Optional.of(rejected);
                 }
 
                 acc.callTool = code;
+                acc.callToolPath = path;
                 yield Optional.empty();
             }
 
@@ -533,39 +429,29 @@ public class ParamContractInterceptor implements ToolInterceptor {
     }
 
     /**
-     * forbidSynthetic 拒调时的提示文案
+     * forbidSynthetic 拒调观测：契约指明查询工具时下一步为先调该工具，否则追问用户或失败收口。
      *
      * @param paramPath 参数路径
      * @param contract  参数契约
-     * @return 用户可读拒调文案
+     * @return 拒绝观测
      */
-    private static String syntheticRejectMessage(String paramPath, ArgSpec contract) {
+    private static Observation syntheticRejection(String paramPath, ArgSpec contract) {
+        RuntimeErrorCode code = RuntimeErrorCode.PARAM_PROVENANCE_REJECTED;
         if (contract.allows(SourceType.EVIDENCE) && missingAction(contract) == MissingActionType.CALL_TOOL) {
-            String code = missingTool(contract);
-            if (Strings.isNotBlank(code)) {
-                return ModelHint.PARAM_NEED_EVIDENCE.text("path", paramPath, "tool", code);
+            String tool = missingTool(contract);
+            if (Strings.isNotBlank(tool)) {
+                return Observation.rejected(code,
+                    ModelHint.PARAM_NEED_EVIDENCE.text("path", paramPath, "tool", tool),
+                    ModelHint.NEXT_CALL_TOOL.text("tool", tool)
+                );
             }
-            return ModelHint.PARAM_NEED_EVIDENCE_NO_TOOL.text("path", paramPath);
+
+            return Observation.rejected(code,
+                ModelHint.PARAM_NEED_EVIDENCE_NO_TOOL.text("path", paramPath), ModelHint.NEXT_ASK_OR_FAIL.text()
+            );
         }
 
-        return ModelHint.PARAM_NO_SYNTHETIC.text("path", paramPath);
-    }
-
-    /**
-     * 拒调时的补参义务：契约要求先查证据则挂"须调工具"，否则只许追问或失败。
-     *
-     * <p>不能一律挂 PROVENANCE_REJECT：它会把提示里要求先调的查询工具一并拒掉。</p>
-     *
-     * @param contract 参数契约
-     * @param message  拒调文案
-     * @return 补参义务
-     */
-    private static RepairDirective syntheticObligation(ArgSpec contract, String message) {
-        String tool = contract.allows(SourceType.EVIDENCE) && missingAction(contract) == MissingActionType.CALL_TOOL
-            ? missingTool(contract) : null;
-        return Strings.isNotBlank(tool)
-            ? RepairDirective.callTool(tool, message, 0)
-            : RepairDirective.reject(message, 0);
+        return Observation.rejected(code, ModelHint.PARAM_NO_SYNTHETIC.text("path", paramPath), ModelHint.NEXT_ASK_OR_FAIL.text());
     }
 
     /**
@@ -613,28 +499,5 @@ public class ParamContractInterceptor implements ToolInterceptor {
         }
 
         return path.substring(0, path.indexOf(RuntimeUtils.WILDCARD_ARRAY_INDEX));
-    }
-
-    /**
-     * 路径末级叶子键
-     *
-     * @param path 参数路径；可空
-     * @return 叶子键；解析失败为空串
-     */
-    private static String leafKey(@Nullable String path) {
-        return Optional.ofNullable(path).map(String::trim).filter(Strings::isNotBlank)
-            .map(LEAF_KEY_PATH::matcher).filter(Matcher::matches).map(m -> m.group(1)).orElse("");
-    }
-
-    /**
-     * 把补参指令写入节点便签
-     *
-     * @param ctx       执行上下文
-     * @param directive 补参指令
-     */
-    private void persistObligation(ToolExecutionContext ctx, RepairDirective directive) {
-        RepairDirective stamped = new RepairDirective(directive.type(), directive.expectedFields(),
-            directive.toolName(), directive.message(), ctx.scope().rounds(), directive.errorCode());
-        ArgRepairObligation.save(ctx.scope(), stamped);
     }
 }

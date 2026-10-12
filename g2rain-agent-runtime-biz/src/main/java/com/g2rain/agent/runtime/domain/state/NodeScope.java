@@ -2,7 +2,6 @@ package com.g2rain.agent.runtime.domain.state;
 
 
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
-import com.g2rain.agent.runtime.domain.state.task.RepairDirective;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -36,11 +35,6 @@ public interface NodeScope {
      * @return 私有便签（键见 {@link NodeNoteKey}）
      */
     Map<String, Object> state();
-
-    /**
-     * @return 补参义务；无则 {@code null}
-     */
-    @Nullable RepairDirective repair();
 
     /**
      * @return 本节点证据摘要（不含报文）
@@ -89,18 +83,6 @@ public interface NodeScope {
     default @Nullable Object note(NodeNoteKey key) {
         return state().get(key.wire());
     }
-
-    /**
-     * 写入补参义务（覆盖本节点当前唯一义务）。
-     *
-     * @param directive 义务
-     */
-    void repair(RepairDirective directive);
-
-    /**
-     * 清除补参义务。
-     */
-    void clearRepair();
 
     /**
      * 累加本节点 ReAct 轮次与 token。

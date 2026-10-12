@@ -60,10 +60,10 @@ public class TaskGraphNodeSelectDto extends BaseSelectListDto {
     private String skillKey;
 
     /**
-     * 所属 stage
+     * 完成目标：节点要完成的写工具注册名
      */
-    @Schema(description = "所属 stage")
-    private String stage;
+    @Schema(description = "完成目标：节点要完成的写工具注册名")
+    private String target;
 
     /**
      * 委派深度
@@ -76,18 +76,6 @@ public class TaskGraphNodeSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "步骤状态[PENDING, READY, RUNNING, WAITING_DELEGATE, SUSPENDED, DONE, FAILED, SKIPPED, CANCELLED, TIMEOUT]")
     private String status;
-
-    /**
-     * 输入摘要
-     */
-    @Schema(description = "输入摘要")
-    private String inputSummary;
-
-    /**
-     * 输出摘要
-     */
-    @Schema(description = "输出摘要")
-    private String outputSummary;
 
     /**
      * 错误码
@@ -126,8 +114,8 @@ public class TaskGraphNodeSelectDto extends BaseSelectListDto {
     private String outputs;
 
     /**
-     * 私有便签、补参义务、轮次
+     * 节点空间（便签、轮次、动作）
      */
-    @Schema(description = "私有便签、补参义务、轮次")
+    @Schema(description = "节点空间（便签、轮次、动作）")
     private String state;
 }

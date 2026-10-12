@@ -78,13 +78,6 @@ public class TaskCheckpointDto extends BaseDto {
     private String expectedFields;
 
     /**
-     * 候选项（来自证据）
-     */
-    @Size(max = 1073741824)
-    @Schema(description = "候选项（来自证据）", maxLength = 1073741824)
-    private String choices;
-
-    /**
      * 恢复动作
      */
     @NotBlank(groups = CreateGroup.class)

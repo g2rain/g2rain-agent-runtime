@@ -12,6 +12,9 @@ import tools.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
@@ -23,7 +26,7 @@ import java.util.stream.IntStream;
 /**
  * Runtime 共用的无状态小工具。
  *
- * <p>覆盖无连字符 UUID、traceId、从自由文本抠 JSON、SHA-256、工具入参摘要，
+ * <p>覆盖无连字符 UUID、traceId、路径叶子键、文本截断、时间戳转换、从自由文本抠 JSON、SHA-256、工具入参摘要，
  * 以及参数路径上的数组通配符 {@link #WILDCARD_ARRAY_INDEX}。本类不访问 Redis 或会话状态。</p>
  *
  * <pre>{@code
@@ -43,6 +46,18 @@ public final class RuntimeUtils {
      * 例：任务记忆路径 {@code items[].name} 表示 items 数组每一项的 name 字段。
      */
     public static final String WILDCARD_ARRAY_INDEX = "[]";
+
+    /**
+     * 末级叶子键：最后一个点分段，剥掉尾部的 {@code []} 或 {@code [n]}。
+     */
+    private static final Pattern LEAF_KEY = Pattern.compile(
+        "(?:.*\\.)?([^.\\[\\]]+)(?:" + Pattern.quote(WILDCARD_ARRAY_INDEX) + "|\\[\\d+])*$"
+    );
+
+    /**
+     * 截断后缀。
+     */
+    private static final String ELLIPSIS = "…";
 
     /**
      * JSON 编解码；入参摘要排序走 {@link JsonCodec#sort(byte[])}。
@@ -101,25 +116,114 @@ public final class RuntimeUtils {
     }
 
     /**
-     * 取路径最后一个点分段作为叶子键。
+     * 取路径末级叶子键，剥掉数组下标。
      *
      * <pre>{@code
-     * RuntimeUtils.leafKey("buyer.name"); // "name"
-     * RuntimeUtils.leafKey(null);         // ""
+     * RuntimeUtils.leafKey("buyer.name");    // "name"
+     * RuntimeUtils.leafKey("items[].sku");   // "sku"
+     * RuntimeUtils.leafKey("a.tags[0]");     // "tags"
+     * RuntimeUtils.leafKey(null);            // ""
      * }</pre>
      *
-     * @param path 事实键路径；可空
-     * @return 叶子键；空路径返回空串
+     * @param path 参数或事实路径；可空
+     * @return 叶子键；空路径或无法解析为空串
      */
     public static String leafKey(@Nullable String path) {
-        // 空路径没有叶子，返回空串而不是抛错
         if (Strings.isBlank(path)) {
             return "";
         }
 
-        String t = path.trim();
-        int dot = t.lastIndexOf('.');
-        return dot >= 0 ? t.substring(dot + 1) : t;
+        Matcher matcher = LEAF_KEY.matcher(path.trim());
+        return matcher.matches() ? matcher.group(1) : "";
+    }
+
+    /**
+     * 按字符数截断。
+     *
+     * <pre>{@code
+     * RuntimeUtils.clip("abcdef", 3); // "abc"
+     * RuntimeUtils.clip("abc", 0);    // "abc"
+     * }</pre>
+     *
+     * @param text 原文；可空
+     * @param max  最大字符数；小于等于 0 不截断
+     * @return 截断结果；{@code null} 入参仍为 {@code null}
+     */
+    public static @Nullable String clip(@Nullable String text, int max) {
+        if (Objects.isNull(text) || max <= 0 || text.length() <= max) {
+            return text;
+        }
+
+        return text.substring(0, max);
+    }
+
+    /**
+     * 按字符数截断，被截断时以 {@code …} 结尾。
+     *
+     * <pre>{@code
+     * RuntimeUtils.abbreviate("abcdef", 3); // "abc…"
+     * }</pre>
+     *
+     * @param text 原文；可空
+     * @param max  保留字符数；小于等于 0 不截断
+     * @return 截断结果；{@code null} 入参仍为 {@code null}
+     */
+    public static @Nullable String abbreviate(@Nullable String text, int max) {
+        if (Objects.isNull(text) || max <= 0 || text.length() <= max) {
+            return text;
+        }
+
+        return text.substring(0, max) + ELLIPSIS;
+    }
+
+    /**
+     * JSON 节点转普通 Java 值：字符串、数字、布尔、Map 或 List。
+     *
+     * <pre>{@code
+     * RuntimeUtils.plain(StringNode.valueOf("21668")); // "21668"
+     * RuntimeUtils.plain(NullNode.getInstance());       // null
+     * }</pre>
+     *
+     * @param node JSON 节点；可空
+     * @return 普通值；空或 JSON null 为 {@code null}
+     */
+    public static @Nullable Object plain(@Nullable JsonNode node) {
+        if (Objects.isNull(node) || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+
+        return JSON.str2obj(JSON.obj2str(node), Object.class);
+    }
+
+    /**
+     * 工具入参文本转 JSON 节点。
+     *
+     * @param arguments 原始入参；空白或非法按 {@code {}}
+     * @return 非空 JSON 节点
+     */
+    public static JsonNode argsNode(@Nullable String arguments) {
+        JsonNode node = JSON.str2node(Strings.defaultIfBlank(arguments, "{}"));
+        return Objects.isNull(node) ? JSON.str2node("{}") : node;
+    }
+
+    /**
+     * 本地时间转毫秒时间戳（系统时区）。
+     *
+     * @param time 本地时间
+     * @return 毫秒时间戳
+     */
+    public static long epochOf(LocalDateTime time) {
+        return time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    /**
+     * 毫秒时间戳转本地时间（系统时区）。
+     *
+     * @param epochMs 毫秒时间戳
+     * @return 本地时间
+     */
+    public static LocalDateTime timeOf(long epochMs) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault());
     }
 
     /**
@@ -176,7 +280,9 @@ public final class RuntimeUtils {
      */
     public static String sha256Hex(byte[] bytes) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            var md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(bytes);
+            return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException ex) {
             // SHA-256 必须可用；缺失算法视为运行时损坏而不是业务失败
             throw new IllegalStateException(ex);
@@ -220,9 +326,11 @@ public final class RuntimeUtils {
             if (current instanceof BusinessException business) {
                 return business.getErrorCode();
             }
+
             // 包装异常只认 cause 链上的业务码，不把中间层类名当错误码
             current = current.getCause();
         }
+
         return null;
     }
 }

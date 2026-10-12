@@ -62,6 +62,13 @@ public enum BuiltinToolAction {
     WRITE,
 
     /**
+     * 写产出
+     * <p>
+     * 写入节点正式产出，供完成校验、共享与实体沉淀使用。
+     */
+    OUTPUT,
+
+    /**
      * 查询
      * <p>
      * 无状态环境查询：时间、UUID、日期差、随机数、哈希等。

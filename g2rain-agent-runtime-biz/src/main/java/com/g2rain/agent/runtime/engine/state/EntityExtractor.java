@@ -16,7 +16,7 @@ import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.support.platform.PlatformCatalog;
+import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -46,6 +46,9 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class EntityExtractor {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
@@ -58,10 +61,16 @@ public class EntityExtractor {
      */
     private final RuntimeProperties runtimeProperties;
 
+    /**
+     * 实体候选列表的反序列化类型。
+     */
     private static final TypeReference<List<EntitySeed>> SEEDS = new TypeReference<>() {
 
     };
 
+    /**
+     * 仅记产出的实体使用的空属性对象。
+     */
     private static final JsonNode EMPTY_ATTRS = JsonNodeFactory.instance.objectNode();
 
     /**
@@ -106,6 +115,7 @@ public class EntityExtractor {
             return;
         }
 
+        // 并入成功证据带出的实体，以及已完成节点产出声明的实体
         scope.nodes().values().forEach(node -> {
             node.evidence().stream()
                 .filter(head -> head.status() == EvidenceStatus.SUCCESS)
@@ -116,6 +126,7 @@ public class EntityExtractor {
             }
         });
 
+        // 无归属任务的实体补记为本任务
         for (var entry : new LinkedHashMap<>(scope.entityIndex()).entrySet()) {
             EntityEntry current = entry.getValue();
             if (Objects.isNull(current.taskId())) {
@@ -126,6 +137,7 @@ public class EntityExtractor {
             }
         }
 
+        // 超过上限时从最早写入的开始淘汰
         int max = Math.max(0, runtimeProperties.getState().getEntitiesMax());
         while (scope.entityIndex().size() > max) {
             String first = scope.entityIndex().keySet().iterator().next();
@@ -177,31 +189,11 @@ public class EntityExtractor {
      * @return 种子；声明或值不足时为 {@code null}
      */
     private static @Nullable EntitySeed outputSeed(@Nullable EntitySpec entity, @Nullable Object value) {
-        if (Objects.isNull(entity) || Strings.isBlank(entity.getType()) || Objects.isNull(value)) {
+        if (Objects.isNull(entity) || Objects.isNull(value)) {
             return null;
         }
         JsonNode node = value instanceof JsonNode json ? json : JSON.obj2node(value);
-        if (Objects.isNull(node) || node.isNull()) {
-            return null;
-        }
-        String idField = Strings.defaultIfBlank(entity.getId(), "id");
-        String nameField = Strings.defaultIfBlank(entity.getName(), "name");
-        String id;
-        String display;
-        if (node.isObject()) {
-            if (!JSON.hasValue(node.get(idField))) {
-                return null;
-            }
-            id = node.get(idField).asString();
-            display = JSON.hasValue(node.get(nameField)) ? node.get(nameField).asString() : id;
-        } else {
-            id = node.asString();
-            display = id;
-        }
-        if (Strings.isBlank(id)) {
-            return null;
-        }
-        return new EntitySeed(entity.getType(), id, display, EMPTY_ATTRS);
+        return entity.seed(JsonNodeFactory.instance.objectNode(), node);
     }
 
     /**

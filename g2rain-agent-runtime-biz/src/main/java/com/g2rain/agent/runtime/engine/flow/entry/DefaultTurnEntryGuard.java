@@ -1,6 +1,6 @@
 package com.g2rain.agent.runtime.engine.flow.entry;
 
-import com.g2rain.agent.runtime.adapter.AgentProfiles;
+import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.entry.RejectedReply;
@@ -12,13 +12,13 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnRequest;
-import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.agent.studio.enums.ResourceStatus;
 import com.g2rain.agent.studio.vo.AgentCatalogItemVo;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -28,13 +28,12 @@ import java.util.Objects;
 /**
  * 默认本轮入口闸门：按活动任务与断点决定受理、拒回、换 Agent 或强制续跑。
  *
- * <p>任务身份取自会话 {@code activeTaskId}。只有请求显式携带确认/拒绝/取消时才强制走断点协议；
- * 审批断点超过 {@code reconfirm-after} 时改走普通受理，让后续意图分类重新判断。</p>
+ * <p>任务身份取自会话 {@code activeTaskId}。请求显式携带恢复动作，或断点有安全默认动作（补参回复）时走断点协议；
+ * 审批与回查断点只认显式动作，仅有文字时交给意图分类；审批超过 {@code reconfirm-after} 时改走普通受理重新判断。</p>
  *
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public final class DefaultTurnEntryGuard implements TurnEntryGuard {
@@ -53,7 +52,8 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
      * 校验本轮入口并返回分流结论。
      *
      * <p>显式 Agent 不合法立即拒回。无活动任务或任务未挂起则普通受理。
-     * 挂起且 Agent 与任务绑定不一致则换人；审批过期则退回受理；其余按断点白名单解析恢复动作。</p>
+     * 挂起且 Agent 与任务绑定不一致则换人；审批过期则退回受理；未带动作时补参断点按 REPLY 续跑，
+     * 审批与回查断点有文字则退回受理；其余按断点白名单解析恢复动作。</p>
      *
      * @param context 本轮上下文（至少已带请求与会话视图）
      * @return 入口结论（accept / reject / switchAgent / continueSuspended）
@@ -105,13 +105,15 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         if (Objects.isNull(request.getAction())) {
-            if (Strings.isNotBlank(request.getUserInput())) {
-                return EntryResult.accept(agentId);
-            }
-
+            // 断点有安全默认动作（FOLLOW_UP → REPLY）时直接续跑，用户输入即回复内容
             ResumeAction implied = resolveAction(null, checkpoint);
             if (Objects.nonNull(implied)) {
                 return EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, implied);
+            }
+
+            // 审批与回查没有安全默认动作：有文字交给意图判断，无文字要求显式选择
+            if (Strings.isNotBlank(request.getUserInput())) {
+                return EntryResult.accept(agentId);
             }
 
             return EntryResult.reject(new RejectedReply(conversationId, taskId, RuntimeMessage.ACTION_MISSING.text()));
@@ -190,8 +192,7 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             return false;
         }
 
-        log.info("[EntryGuard] approval expired taskId={} errorCode={}", metadata.getTaskId(),
-            RuntimeErrorCode.APPROVAL_EXPIRED);
+        Trace.at(TraceStage.ENTRY, "approval_expired").kv("taskId", metadata.getTaskId()).warn();
         return true;
     }
 

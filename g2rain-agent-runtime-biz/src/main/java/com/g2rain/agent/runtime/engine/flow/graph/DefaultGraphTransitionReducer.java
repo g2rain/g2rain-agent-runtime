@@ -8,16 +8,19 @@ import com.g2rain.agent.runtime.domain.graph.NodeEvent;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
+import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
 import com.g2rain.common.utils.Collections;
+import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * DefaultGraphTransitionReducer：默认图步骤归约器。
@@ -32,6 +35,11 @@ import java.util.Objects;
 @Component
 @RequiredArgsConstructor
 public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
+
+    /**
+     * 审批摘要末尾的标点，拼进拒绝回执前去掉。
+     */
+    private static final Pattern TRAILING_PUNCTUATION = Pattern.compile("[。.！!；;，,]+$");
 
     /**
      * 节点执行器：执行波时跑波内首个节点。
@@ -63,12 +71,14 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
             case GraphStep.ExecuteWave ew -> executeWave(ew.wave(), frame);
         };
 
-        log.info("[GraphReducer] reduce taskId={}, step={}, effects={}", frame.taskId(), step, effects);
+        log.debug("[GraphReducer] reduce taskId={}, step={}, effects={}", frame.taskId(), step, effects);
         return effects;
     }
 
     /**
-     * 按用户动作关闭挂起焦点：取消 → CANCELLED，拒绝 → FAILED。
+     * 按用户动作关闭挂起焦点：取消与拒绝都把节点置为 CANCELLED、任务置为 CANCELED。
+     *
+     * <p>拒绝时回执带上未执行的操作（审批摘要），并提示用户可以换个做法再说。</p>
      *
      * @param frame 当前图执行帧
      * @return 停图副作用；找不到挂起点时退回空闲收口
@@ -81,30 +91,52 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
             return resolveIdle(frame);
         }
 
-        // CANCEL → 取消；其余关挂起动作（典型拒绝）→ 失败
-        boolean isCancel = GraphResumeActions.isCancel(frame.action());
-        NodeEvent event = isCancel ? NodeEvent.USER_CANCELLED : NodeEvent.USER_REJECTED;
+        // CANCEL → 取消；其余关挂起动作（典型拒绝审批）→ 拒绝；两者都按取消收口
+        boolean rejected = !GraphResumeActions.isCancel(frame.action());
+        NodeEvent event = rejected ? NodeEvent.USER_REJECTED : NodeEvent.USER_CANCELLED;
         NodeTransition transition = nodeStateMachine.transit(event, node.getStatus());
-        node.setStatus(transition.to());
+        frame.turn().mark(node.getNodeId(), transition.to(), null, null);
 
-        // 任务级回执与节点事件保持一致
-        boolean cancelled = event == NodeEvent.USER_CANCELLED;
-        TaskStatus status = cancelled ? TaskStatus.CANCELED : TaskStatus.FAILED;
+        String message = rejected ? rejectedMessage(frame) : null;
         return List.of(
             new GraphEffect.ClearSuspend(node.getNodeId()),
-            new GraphEffect.Halt(new ExecutorResult(status, node.getNodeId()))
+            new GraphEffect.Halt(new ExecutorResult(TaskStatus.CANCELED, node.getNodeId(), message, null, List.of()))
         );
     }
 
     /**
-     * 唤醒焦点挂起节点为 READY。本拍不清 checkpoint，否则 CONFIRM 派发待批工具时 pending 已丢。
+     * 拒绝审批的回执：说明未执行的操作（审批摘要），并提示用户可以换个做法。
      *
      * @param frame 当前图执行帧
-     * @return 空列表
+     * @return 回执文案；不是审批断点或没有摘要时用通用取消文案
+     */
+    private static String rejectedMessage(GraphFrame frame) {
+        String action = frame.turn().checkpoint().or(() -> frame.turn().resumed())
+            .filter(checkpoint -> checkpoint.getType() == CheckpointType.APPROVAL)
+            .map(TaskCheckpoint::getQuestion)
+            .filter(Strings::isNotBlank)
+            .map(question -> TRAILING_PUNCTUATION.matcher(question.trim()).replaceAll(""))
+            .filter(Strings::isNotBlank)
+            .orElse(null);
+        return Objects.isNull(action) ? RuntimeMessage.REPLY_CANCELLED.text() : RuntimeMessage.REPLY_REJECTED.text("action", action);
+    }
+
+    /**
+     * 唤醒焦点挂起节点为 READY，并消费断点：用户已在本轮回应，断点不再是"等待中"。
+     *
+     * <p>消费后的断点仍可经 {@code turn.resumed()} 读取，确认续跑时据此派发待批写操作。</p>
+     *
+     * @param frame 当前图执行帧
+     * @return 清挂起副作用；没有挂起焦点时为空
      */
     private List<GraphEffect> wakeFocus(GraphFrame frame) {
+        TaskNode focus = frame.graph().peekSuspendedFocus(frame.currentNodeId());
         frame.graph().readySuspendedFocus(frame.currentNodeId());
-        return List.of();
+        if (Objects.isNull(focus)) {
+            return List.of();
+        }
+
+        return List.of(new GraphEffect.ClearSuspend(focus.getNodeId()));
     }
 
     /**
@@ -182,7 +214,7 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
         }
 
         // 全部 DONE/SKIPPED 等可收口态
-        return new ExecutorResult(TaskStatus.SUCCEEDED, null, frame.completionMessage(), null, List.of());
+        return new ExecutorResult(TaskStatus.SUCCEEDED);
     }
 
     /**

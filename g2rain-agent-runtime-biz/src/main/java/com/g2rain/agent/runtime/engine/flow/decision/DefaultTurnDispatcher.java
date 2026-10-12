@@ -1,60 +1,62 @@
 package com.g2rain.agent.runtime.engine.flow.decision;
 
-import com.g2rain.agent.runtime.adapter.AgentProfiles;
+import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
 import com.g2rain.agent.runtime.domain.decision.IntentResult;
 import com.g2rain.agent.runtime.domain.decision.TurnMode;
+import com.g2rain.agent.runtime.domain.decision.TurnScene;
 import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
+import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.agent.studio.vo.AgentCatalogItemVo;
 import com.g2rain.agent.studio.vo.SkillDigestVo;
-import com.g2rain.common.json.JsonCodec;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 默认本轮调度器：先定推进模式，再经 {@link AgentResolver} 绑定执行 Agent。
  *
- * <p>入口强制续跑或换人时跳过模型分类；否则意图分类加后置校验。选人失败时上下文标 failed。</p>
+ * <p>入口强制续跑或换人时跳过模型分类；否则按 {@link TurnScene} 调用意图分类，再由 {@link #settle} 校正为
+ * 本轮生效的模式。选人失败时上下文标 failed。</p>
  *
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public final class DefaultTurnDispatcher implements TurnDispatcher {
 
     /**
-     * JSON 编解码器：审计日志与候选列表序列化。
+     * 意图分类读取的对话窗口条数。
      */
-    private static final JsonCodec JSON = JsonCodecFactory.instance();
+    private static final int DIALOGUE_LIMIT = 12;
 
     /**
-     * 意图分类器：非硬协议路径上判断推进模式与人选倾向。
+     * 意图分类器：非硬协议路径上判断推进模式与人选。
      */
     private final IntentClassifier intentClassifier;
 
     /**
-     * Agent 画像：启用目录与技能摘要。
+     * Agent 画像：启用目录、单条画像与技能摘要。
      */
     private final AgentProfiles agentProfiles;
 
@@ -64,7 +66,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
     private final AgentResolver agentResolver;
 
     /**
-     * 规划候选技能条数上限：每 Agent 上限与跨 Agent 总上限。
+     * 意图候选技能条数上限：每 Agent 上限与跨 Agent 总上限。
      */
     private final RuntimeProperties runtimeProperties;
 
@@ -72,7 +74,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
      * 完成本轮决策：模式 + 选人。
      *
      * <ol>
-     *   <li>定推进模式：硬协议（挂起续跑 / 换人）或意图分类加后置校验 → {@link TurnMode}
+     *   <li>定推进模式：硬协议（挂起续跑 / 换人）或场景内意图分类加校正 → {@link TurnMode}
      *   <li>决策写入 {@code ctx.decision}
      *   <li>绑定 Agent：{@link AgentResolver#route}（显式 agentId 优先）
      *   <li>以 resolver 写回的决策为准返回（选人失败时上下文已标 failed）
@@ -84,23 +86,17 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
      */
     @Override
     public TurnDecision decide(TurnContext ctx, EntryResult entry) {
-        log.info("[Dispatcher] begin conversationId:{}, entry:{}",
-            ctx.getRequest().getConversationId(), JSON.obj2str(entry)
-        );
-
         // 先写模式，resolver 可能再用 withAgent 覆盖同一份决策
         TurnDecision mode = decideMode(ctx, entry);
         ctx.setDecision(mode);
         agentResolver.route(ctx, entry, mode);
         // 选人失败时 decision 已被写成 empty，不得退回未绑定的 mode
         TurnDecision bound = ctx.getDecision();
-        TurnDecision result = Objects.nonNull(bound) ? bound : mode;
-        log.info("[Dispatcher] done result:{}", JSON.obj2str(result));
-        return result;
+        return Objects.nonNull(bound) ? bound : mode;
     }
 
     /**
-     * 只定 {@link TurnMode}：硬协议优先，否则模型分类；存在待写动作时 UNCERTAIN 走风险门。
+     * 只定 {@link TurnMode}：硬协议优先，否则按场景分类并校正。
      *
      * @param ctx   本轮上下文
      * @param entry 入口闸门结论
@@ -108,46 +104,122 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
      */
     private TurnDecision decideMode(TurnContext ctx, EntryResult entry) {
         if (entry.forceContinue()) {
-            audit(ctx, "hard_protocol", writePending(ctx.getTurn()), TurnMode.CONTINUE_TASK);
+            traceProtocol(TurnMode.CONTINUE_TASK);
             return TurnDecision.continueTask();
         }
 
         // 入口已判定 Agent 与挂起任务不一致：跳过模型，直接换人
         if (entry.agentMismatch()) {
-            audit(ctx, "hard_protocol", writePending(ctx.getTurn()), TurnMode.SWITCH_AGENT);
+            traceProtocol(TurnMode.SWITCH_AGENT);
             return TurnDecision.switchAgent();
         }
 
         TurnScope turn = ctx.getTurn();
         boolean write = writePending(turn);
+        TurnScene scene = TurnScene.of(hasActiveTask(turn), !turn.records().isEmpty());
+        Long lockedAgentId = entry.explicitAgentId();
 
-        IntentResult intent = intentClassifier.classify(buildIntentRequest(ctx, write));
+        IntentResult intent = intentClassifier.classify(buildIntentRequest(ctx, scene, lockedAgentId, write));
         ctx.setIntentResult(intent);
-        if (Objects.isNull(intent) || Objects.isNull(intent.getMode())) {
-            remember(ctx, TurnMode.UNCERTAIN, RuntimeMessage.ROUTE_UNCERTAIN.text());
-            audit(ctx, write ? "write_gate" : "model", write, TurnMode.UNCERTAIN);
-            return TurnDecision.uncertain();
+        TurnMode mode = settle(intent, scene, Objects.nonNull(lockedAgentId), write);
+        Trace.at(TraceStage.DECISION, "settled")
+            .kv("source", DecisionSource.MODEL)
+            .kv("scene", scene)
+            .kv("proposed", Objects.isNull(intent) ? null : intent.getMode())
+            .kv("settled", mode)
+            .kv("locked", Objects.nonNull(lockedAgentId))
+            .kv("writePending", write)
+            .info();
+        if (mode == TurnMode.UNCERTAIN) {
+            // 确认追问只用固定文案，替换模型结论，避免输出模型的 userReply
+            ctx.setIntentResult(confirmation(turn));
         }
 
-        // 待写动作未决时不允许模型用 UNCERTAIN 绕过确认/拒绝
-        if (write && intent.getMode() == TurnMode.UNCERTAIN) {
-            remember(ctx, TurnMode.UNCERTAIN, RuntimeMessage.ROUTE_UNCERTAIN.text());
-            audit(ctx, "write_gate", true, TurnMode.UNCERTAIN);
-            return TurnDecision.uncertain();
+        return decisionOf(mode);
+    }
+
+    /**
+     * 将模型结论校正为本轮生效的模式。
+     *
+     * <ol>
+     *   <li>结论缺失或不在场景可选范围内 → 场景兜底模式
+     *   <li>存在待确认写操作且判为续跑 → {@code UNCERTAIN}（写操作只由显式确认推进）
+     *   <li>需要选人但无人可选、且已给出说明 → {@code REPLY_ONLY}（只回复说明，不建任务）
+     * </ol>
+     *
+     * <pre>{@code
+     * settle(null, TurnScene.FRESH, false, false);         // START_FRESH
+     * settle(null, TurnScene.ACTIVE_TASK, false, true);    // UNCERTAIN
+     * }</pre>
+     *
+     * @param intent       模型结论；可空
+     * @param scene        本轮场景
+     * @param agentLocked  是否已指定数字员工
+     * @param writePending 是否存在待确认的写操作
+     * @return 本轮生效的模式
+     */
+    static TurnMode settle(@Nullable IntentResult intent, TurnScene scene, boolean agentLocked, boolean writePending) {
+        TurnMode mode = Optional.ofNullable(intent)
+            .map(IntentResult::getMode)
+            .filter(scene.modes(agentLocked)::contains)
+            .orElse(scene.fallback());
+
+        if (writePending && mode == TurnMode.CONTINUE_TASK) {
+            return TurnMode.UNCERTAIN;
         }
 
-        TurnDecision turnDecision = switch (intent.getMode()) {
-            case CONTINUE_TASK -> TurnDecision.continueTask();
-            case START_WITH_CONTEXT -> TurnDecision.startFollowup();
+        if (mode.selectsAgent() && Objects.nonNull(intent) && Objects.isNull(intent.getAgentId())
+            && Strings.isNotBlank(intent.getUserReply())) {
+            return TurnMode.REPLY_ONLY;
+        }
+
+        return mode;
+    }
+
+    /**
+     * 待确认写操作的追问结论：回查断点询问写操作是否已完成，其余询问是否继续执行。
+     *
+     * @param turn 当前会话视图
+     * @return 携带确认文案的 {@code UNCERTAIN} 结论
+     */
+    static IntentResult confirmation(TurnScope turn) {
+        boolean verify = turn.checkpoint()
+            .map(TaskCheckpoint::getType)
+            .filter(type -> type == CheckpointType.VERIFY)
+            .isPresent();
+        IntentResult result = new IntentResult();
+        result.setMode(TurnMode.UNCERTAIN);
+        result.setUserReply((verify ? RuntimeMessage.VERIFY_ASK : RuntimeMessage.ROUTE_UNCERTAIN).text());
+        return result.complete(null);
+    }
+
+    /**
+     * 将生效模式映射为本轮决策。
+     *
+     * @param mode 生效模式
+     * @return 尚未绑定 Agent 的决策
+     */
+    private static TurnDecision decisionOf(TurnMode mode) {
+        return switch (mode) {
             case START_FRESH -> TurnDecision.startFresh();
+            case START_WITH_CONTEXT -> TurnDecision.startFollowup();
+            case CONTINUE_TASK -> TurnDecision.continueTask();
             case REPLACE_TASK -> TurnDecision.replace();
             case SWITCH_AGENT -> TurnDecision.switchAgent();
             case CANCEL_TASK -> TurnDecision.cancelTask();
             case REPLY_ONLY -> TurnDecision.empty();
             case UNCERTAIN -> TurnDecision.uncertain();
         };
-        audit(ctx, "model", write, turnDecision.mode());
-        return postValidate(turnDecision, ctx, entry);
+    }
+
+    /**
+     * 判断是否存在运行或挂起中的任务。
+     *
+     * @param turn 当前会话视图
+     * @return 任务处于瞬时态时返回 {@code true}
+     */
+    private static boolean hasActiveTask(TurnScope turn) {
+        return turn.task().map(TaskMetadata::getStatus).filter(TaskStatus::isTransient).isPresent();
     }
 
     /**
@@ -171,73 +243,72 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
     }
 
     /**
-     * 将规则裁剪出的模式写回上下文，供后续流水线使用。
+     * 输出入口硬协议直接给出的模式。
      *
-     * @param ctx       本轮上下文
-     * @param mode      已确定的运行模式
-     * @param userReply 可直接返回用户的文案
+     * @param settled 本轮生效的模式
      */
-    @SuppressWarnings("SameParameterValue")
-    private static void remember(TurnContext ctx, TurnMode mode, @Nullable String userReply) {
-        IntentResult result = new IntentResult();
-        result.setMode(mode);
-        result.setUserReply(userReply);
-        result.complete(null);
-        ctx.setIntentResult(result);
+    private static void traceProtocol(TurnMode settled) {
+        Trace.at(TraceStage.DECISION, "settled").kv("source", DecisionSource.PROTOCOL).kv("settled", settled).info();
     }
 
     /**
-     * 记录意图决策的可观测摘要，不记录用户原文或敏感参数。
-     *
-     * @param ctx          本轮上下文
-     * @param stage        决策来源标识
-     * @param writePending 是否存在待处理写动作
-     * @param mode         最终运行模式
-     */
-    private static void audit(TurnContext ctx, String stage, boolean writePending, TurnMode mode) {
-        log.info("[IntentAudit] traceId={} stage={} writePending={} mode={}", ctx.getTurn().traceId(), stage, writePending, mode);
-    }
-
-    /**
-     * 拼意图分类 user JSON。
+     * 组装意图分类输入。
      *
      * <p>字段含义见 {@link IntentRequest}。任务记忆要等 Hydrator 之后才齐，此处不读证据。</p>
      *
-     * @param ctx          本轮上下文
-     * @param writePending 当前断点是否含待处理写动作
+     * @param ctx           本轮上下文
+     * @param scene         本轮场景
+     * @param lockedAgentId 指定的数字员工；可空
+     * @param writePending  当前断点是否含待处理写动作
      * @return 分类输入
      */
-    private IntentRequest buildIntentRequest(TurnContext ctx, boolean writePending) {
+    private IntentRequest buildIntentRequest(TurnContext ctx, TurnScene scene, @Nullable Long lockedAgentId,
+                                             boolean writePending) {
         TurnScope turn = ctx.getTurn();
-        boolean hasActiveTask = turn.task()
-            .map(TaskMetadata::getStatus)
-            .filter(TaskStatus::isTransient)
-            .isPresent();
-        boolean hasContinuity = !turn.records().isEmpty();
-
-        List<AgentCatalogItemVo> catalog = agentProfiles.listActiveCatalog();
-        Long continuityAgentId = continuityAgentId(turn);
-        List<AgentSelection> agentCandidates = AgentSelection.of(catalog);
+        boolean locked = Objects.nonNull(lockedAgentId);
+        List<AgentCatalogItemVo> catalog = candidatesOf(lockedAgentId);
+        TaskRecord latest = turn.records().isEmpty() ? null : turn.records().getFirst();
 
         return new IntentRequest(
-            hasActiveTask,
-            hasContinuity,
-            continuityAgentId,
-            IntentRequest.ContinuitySnippet.from(hasContinuity ? turn.records().getFirst() : null),
+            scene,
+            locked,
             ctx.getRequest().getUserInput(),
-            agentCandidates,
-            IntentRequest.DialogueWindow.from(turn.dialogue(12)),
+            continuityAgentId(turn),
+            IntentRequest.ContinuitySnippet.from(latest),
+            AgentSelection.of(catalog),
+            IntentRequest.DialogueWindow.from(turn.dialogue(DIALOGUE_LIMIT)),
             null,
-            resolveSkillCatalog(catalog),
-            activeTaskOf(turn, hasActiveTask, writePending)
+            resolveSkillCatalog(catalog, locked),
+            activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK, writePending),
+            ctx.getRequest().getModel()
         );
     }
 
     /**
-     * 组装活动任务摘要；无瞬时态任务时返回 {@code null}。
+     * 本轮候选：未指定时为全部启用员工；指定时只保留该员工，目录未命中再单条解析。
+     *
+     * @param lockedAgentId 指定的数字员工；可空
+     * @return 候选目录
+     */
+    private List<AgentCatalogItemVo> candidatesOf(@Nullable Long lockedAgentId) {
+        List<AgentCatalogItemVo> active = agentProfiles.listActiveCatalog();
+        if (Objects.isNull(lockedAgentId)) {
+            return active;
+        }
+
+        return active.stream()
+            .filter(item -> Objects.equals(lockedAgentId, item.getAgentId()))
+            .findFirst()
+            .or(() -> Optional.ofNullable(agentProfiles.resolveProfile(lockedAgentId)))
+            .map(List::of)
+            .orElse(List.of());
+    }
+
+    /**
+     * 组装活动任务摘要；无活动任务时返回 {@code null}。
      *
      * @param turn          当前会话视图
-     * @param hasActiveTask 是否存在可续跑的活动任务
+     * @param hasActiveTask 是否存在活动任务
      * @param writePending  是否存在待处理写动作
      * @return 活动任务摘要；无活动任务为 {@code null}
      */
@@ -245,6 +316,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
         if (!hasActiveTask) {
             return null;
         }
+
         TaskCheckpoint checkpoint = turn.checkpoint().orElse(null);
         String type = Objects.nonNull(checkpoint) ? checkpoint.getType().name() : null;
         List<String> expected = Objects.nonNull(checkpoint) && Collections.isNotEmpty(checkpoint.getExpectedFields())
@@ -277,19 +349,23 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
     }
 
     /**
-     * 跨启用 Agent 收集技能短目录，受每 Agent 上限与总上限裁剪。
+     * 收集候选 Agent 的技能短目录，受每 Agent 上限与总上限裁剪。
      *
-     * @param catalog 启用中的 Agent 目录
-     * @return 技能短目录；无启用项时为空列表
+     * <p>指定数字员工时每 Agent 上限取总上限，保证能否处理的判断看得到该员工的全部技能。</p>
+     *
+     * @param catalog     候选 Agent 目录
+     * @param fullCatalog 是否不按每 Agent 上限截断
+     * @return 技能短目录；无候选时为空列表
      */
-    private List<IntentRequest.SkillCatalogItem> resolveSkillCatalog(List<AgentCatalogItemVo> catalog) {
+    private List<IntentRequest.SkillCatalogItem> resolveSkillCatalog(List<AgentCatalogItemVo> catalog, boolean fullCatalog) {
         if (Collections.isEmpty(catalog)) {
             return List.of();
         }
 
         List<IntentRequest.SkillCatalogItem> out = new ArrayList<>();
-        int perAgent = runtimeProperties.getPlan().getMaxSkillsPerAgent();
         int total = runtimeProperties.getPlan().getMaxSkillsTotal();
+        int perAgent = fullCatalog ? total : runtimeProperties.getPlan().getMaxSkillsPerAgent();
+        // 按 Agent 顺序取技能摘要，先受总上限约束，再受每 Agent 上限约束
         for (AgentCatalogItemVo agent : catalog) {
             if (out.size() >= total) {
                 break;
@@ -314,6 +390,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
                     continue;
                 }
 
+                // 短描述优先用语义描述，缺失时退回技能名
                 String shortDesc = Strings.isNotBlank(digest.getSemanticDesc())
                     ? digest.getSemanticDesc().trim()
                     : digest.getSkillName();
@@ -332,40 +409,18 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
     }
 
     /**
-     * 对模型输出执行确定性后置校验，修正与当前 State 不相容的模式。
-     *
-     * @param decision 模型或规则产生的初始决策
-     * @param ctx      本轮上下文
-     * @param entry    入口步骤结果
-     * @return 可安全交给后续流水线的决策
+     * 本轮模式的决定来源。
      */
-    private static TurnDecision postValidate(TurnDecision decision, TurnContext ctx, EntryResult entry) {
-        boolean continuable = ctx.getTurn().task()
-            .map(TaskMetadata::getStatus)
-            .filter(TaskStatus::isTransient)
-            .isPresent();
+    private enum DecisionSource {
 
-        if (decision.mode() == TurnMode.CONTINUE_TASK && !continuable) {
-            if (!ctx.getTurn().records().isEmpty()) {
-                return TurnDecision.startFollowup();
-            }
+        /**
+         * 入口硬协议直接给出
+         */
+        PROTOCOL,
 
-            return TurnDecision.startFresh();
-        }
-
-        // 没有可取消的活动任务：取消降级为仅回复
-        if (decision.mode() == TurnMode.CANCEL_TASK && !continuable) {
-            return TurnDecision.empty();
-        }
-
-        if (decision.mode() == TurnMode.START_WITH_CONTEXT && !decision.useContinuity()) {
-            return TurnDecision.startFollowup();
-        }
-
-        if (Objects.nonNull(entry.explicitAgentId()) && decision.mode() == TurnMode.SWITCH_AGENT) {
-            return TurnDecision.startFresh();
-        }
-
-        return decision;
+        /**
+         * 意图模型给出并经校正
+         */
+        MODEL
     }
 }

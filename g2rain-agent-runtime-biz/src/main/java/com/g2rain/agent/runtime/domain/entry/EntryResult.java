@@ -4,6 +4,8 @@ import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Objects;
+
 /**
  * 入口阶段对当前请求的处理结论。
  *
@@ -68,5 +70,26 @@ public record EntryResult(@Nullable RejectedReply failedReply, boolean forceCont
     public static EntryResult continueSuspended(@Nullable Long explicitAgentId, @Nullable String currentNodeId,
                                                 TaskCheckpoint checkpoint, ResumeAction effectiveAction) {
         return new EntryResult(null, true, false, explicitAgentId, currentNodeId, checkpoint, effectiveAction);
+    }
+
+    /**
+     * 本轮入口结论；拒绝优先，其次续跑、换人，其余为受理。
+     *
+     * @return 入口结论
+     */
+    public EntryOutcome outcome() {
+        if (Objects.nonNull(failedReply)) {
+            return EntryOutcome.REJECT;
+        }
+
+        if (forceContinue) {
+            return EntryOutcome.CONTINUE;
+        }
+
+        if (agentMismatch) {
+            return EntryOutcome.SWITCH;
+        }
+
+        return EntryOutcome.ACCEPT;
     }
 }

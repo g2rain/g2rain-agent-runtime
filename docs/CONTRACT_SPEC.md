@@ -17,7 +17,7 @@
 7. [inputs：节点输入](#7-inputs节点输入)
 8. [outputs：节点产出](#8-outputs节点产出)
 9. [取值表达式](#9-取值表达式)
-10. [doneWhen：完成条件](#10-donewhen完成条件)
+10. [完成目标与完成判定](#10-完成目标与完成判定)
 11. [平台字段](#11-平台字段)
 12. [内置工具](#12-内置工具)
 13. [工具调用处理链](#13-工具调用处理链)
@@ -75,8 +75,7 @@ Skill 配置在 agent-studio 的四张表中，Runtime 每轮通过 studio 接�
 skill_contract
 ├── mode                    执行模式
 ├── delegatable             能否被委派
-├── target                  主业务工具
-├── doneWhen                完成条件
+├── target                  默认完成目标（写工具）
 ├── inputs.<name>           节点输入
 │   ├── from
 │   ├── required
@@ -85,7 +84,7 @@ skill_contract
 │   ├── type / fields / minItems / hint
 │   ├── required
 │   ├── share
-│   ├── entity { type, id, name }
+│   ├── entity { type, id, name, scalar }
 │   ├── sources
 │   ├── constant
 │   └── sensitive
@@ -117,8 +116,7 @@ skill_contract
 |---|---|---|---|---|
 | `mode` | `REACT` / `PLAN` | `REACT` | 执行模式 | 规划时候选技能只有一个且为 `REACT` → 跳过大模型规划，直接生成单节点图；否则由大模型规划 |
 | `delegatable` | boolean | `false` | 能否被其他节点委派调用 | 为 `true` 时进入同一数字员工的委派目录；要求 `tools` 中没有写工具 |
-| `target` | String | 无 | 主业务工具名 | 投影进节点提示词；未配置 `doneWhen` 时，完成要求该工具成功 |
-| `doneWhen` | String | 无 | 完成条件表达式 | 装载时解析，模型调用 `builtin_node_finish` 时求值（见第 10 节）；不出现在提示词中 |
+| `target` | String | 无 | 默认完成目标：本技能的一个写工具名 | 规划未给节点指定完成目标时采用（见第 10 节）；只做一种写操作的技能配置，承担多种操作的技能留空 |
 | `inputs` | Map | `{}` | 节点开始时绑定的输入 | 见第 7 节 |
 | `outputs` | Map | `{}` | 节点允许写入的产出 | 见第 8 节 |
 | `tools` | Map | `{}` | 各业务工具的契约 | 见第 4 节 |
@@ -201,8 +199,9 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | sources 中的值 | 匹配条件 |
 |---|---|
 | `USER` | 当前追问断点的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2） |
-| `EVIDENCE` | 值与本节点（或委派前置节点）某条成功证据的抽取内容中的某个值完全相等 |
-| `NODE_OUTPUT` / `SHARED` / `SESSION` / `PRIOR_TASK` | 以参数路径为键，在对应数据中查到相同的值 |
+| `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等 |
+| `NODE_OUTPUT` / `SHARED` / `SESSION` | 以参数路径为键，在对应数据中查到相同的值 |
+| `PRIOR_TASK` | 值等于任务前情中某个实体的 id（实体来自查询或保存结果中配置了 `entity` 的抽取项）；配置了 `from: prior.*` 时按该路径比对 |
 | `PLATFORM` / `CONTRACT` | 不会匹配（这两类来源只能通过 `from`/`const` 产生） |
 | `MODEL` | 总是允许 |
 
@@ -211,7 +210,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 判定结果为 `MODEL`，且 `sources` 不包含 `MODEL` 时：
 
 - `sources` 包含 `USER` → 转为向用户追问；
-- 否则拒绝调用，返回 `PARAM_PROVENANCE_REJECTED`，并挂上补参义务。
+- 否则拒绝调用，返回 `PARAM_PROVENANCE_REJECTED`，观测的"下一步"给出追问、先调查询工具或失败。
 
 **第五步：枚举校验**
 
@@ -250,11 +249,11 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `tool` | 无 | `action=CALL_TOOL` 时先调用的工具。必须在 `toolNames` 中，且不能是参数所属的工具本身 |
 | `message` | 无 | `action=FAIL` 时的失败说明 |
 
-| action | 行为 | 返回码 | 挂上的补参义务 |
+| action | 行为 | 返回码 | 观测中的"下一步" |
 |---|---|---|---|
-| `ASK_USER` | 拒绝本次调用，要求模型向用户追问 | `PARAM_PROVENANCE_ASK_USER` | `ASK_USER_REQUIRED` |
-| `CALL_TOOL` | 拒绝本次调用，要求先调用 `tool` 获取数据 | `PARAM_PROVENANCE_CALL_TOOL` | `CALL_TOOL_REQUIRED` |
-| `FAIL` | 拒绝本次调用，只允许节点失败 | `PARAM_PROVENANCE_FAIL` | `PLATFORM_CONTEXT_MISSING` |
+| `ASK_USER` | 拒绝本次调用，要求模型向用户追问 | `PARAM_PROVENANCE_ASK_USER` | 调用 `builtin_node_follow_up` 询问 |
+| `CALL_TOOL` | 拒绝本次调用，要求先调用 `tool` 获取数据 | `PARAM_PROVENANCE_CALL_TOOL` | 先调用 `tool` 查到值再调用 |
+| `FAIL` | 拒绝本次调用，节点应失败 | `PARAM_PROVENANCE_FAIL` | 调用 `builtin_node_fail` 说明原因 |
 
 多个参数同时有问题时，处理优先级为：立即拒绝 > `FAIL` > `CALL_TOOL` > `ASK_USER`。
 
@@ -301,7 +300,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `key` | 建议 | 抽取项名称，供 `evidence.<key>` 表达式和 `evidence.<key> exists` 条件引用；为空时以 `path` 计数 |
 | `path` | 是 | 响应中的路径，如 `data`、`data.records` |
 | `fields` | 否 | 用于计数：`path` 指向对象时，任一字段有值算 1 条 |
-| `entity` | 否 | 实体识别：`{type, id, name}`。对 `path` 下的对象或数组每一项生成实体；`id` 字段默认 `id`，`name` 字段默认 `name` |
+| `entity` | 否 | 实体识别：`{type, id, name, scalar}`，`id`/`name` 填字段名（默认 `id`、`name`）。对 `path` 下的对象或数组每一项生成实体；值为标量时按 `scalar` 命名成字段（如保存接口只回主键时 `"scalar":"id"`），未配 `scalar` 则标量不成实体。写工具以入参为底、返回为准合并后再按字段名取 id、name，其余简单值字段进入实体属性 |
 
 抽取结果的用途：
 
@@ -342,8 +341,8 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `session.<key>` | 会话级共享值 |
 | `shared.<key>` | 任务级共享值 |
 | `outputs.<key>` | 上游已完成节点的产出 |
-| `prior.<type>` | 前情中第一个该类型实体的展示名 |
-| `prior.<type>.<attr>` | 前情中第一个该类型实体的属性 |
+| `prior.<type>` | 前情中最近一个该类型实体的展示名 |
+| `prior.<type>.<attr>` | 前情中最近一个该类型实体的属性；`id` 取实体 id |
 | 不写或其他前缀 | 取最近一个已完成上游节点的同名产出 |
 
 `provider` 规则：
@@ -366,7 +365,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `hint` | String | 无 | 写入说明 | 投影进提示词 |
 | `required` | Boolean | `true` | 完成前是否必须写入 | 完成时检查：必须已写入、非空，且来源合法 |
 | `share` | `TASK` / `SESSION` | 无 | 共享范围 | 节点完成时写入 `shared.<key>` 或 `session.<key>` |
-| `entity` | Object | 无 | 实体识别 `{type, id, name}` | 节点完成时生成实体：值为对象时取 `id`/`name` 字段（默认字段名 `id`、`name`），为标量时取值本身 |
+| `entity` | Object | 无 | 实体识别 `{type, id, name, scalar}` | 节点完成时生成实体：值为对象时按 `id`/`name` 字段名取（默认 `id`、`name`）；值为标量时按 `scalar` 命名成字段后再取 |
 | `sources` | List<SourceType> | `[]` | 允许的来源 | 写入和完成时校验；为空表示除 `MODEL` 外都允许；`MODEL` 永远不允许 |
 | `constant` | JSON | 无 | 常量 | 来源为 `CONTRACT` 时，值必须等于它 |
 | `sensitive` | boolean | `false` | — | 当前未生效 |
@@ -388,13 +387,13 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `outputs.<路径>` | 本节点已写入的产出 | `NODE_OUTPUT` |
 | `shared.<路径>` | 任务级共享值 | `SHARED` |
 | `session.<路径>` | 会话级共享值 | `SESSION` |
-| `prior.<type:id>.<attr>` | 前情实体，键为 `type:id` | `PRIOR_TASK` |
+| `prior.<type>.<attr>` / `prior.<type:id>.<attr>` | 前情实体：按类型取最近一个，或按 `type:id` 精确取；`attr` 为 `id`、`displayName` 或实体属性 | `PRIOR_TASK` |
 | `platform.<字段>` | 本轮登录身份（见第 11 节） | `PLATFORM` |
 | `evidence.<key>[.<路径>]` | 证据抽取内容 | `EVIDENCE` |
 
 `evidence.<key>[.<路径>]` 的解析过程：
 
-1. 取本节点及委派前置节点的成功证据（业务成功，包括空结果），较新的在前。
+1. 取本节点及全部上游节点（沿依赖边追溯，含委派）的成功证据（业务成功，包括空结果）：本节点优先，上游由近到远，同一节点内较新的在前。
 2. 在证据所属工具的 `extracts` 中找到 `key` 相同的抽取项。
 3. 在该抽取项的 `path` 子树上按 `<路径>` 取值。
 
@@ -406,35 +405,19 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 ---
 
-## 10. doneWhen：完成条件
+## 10. 完成目标与完成判定
 
-### 10.1 语法
+### 10.1 节点完成目标
 
-```bnf
-expr    ::= and ( " OR " and )*
-and     ::= atom ( " AND " atom )*
-atom    ::= 下表中的任一形式
-NAME    ::= [a-zA-Z][a-zA-Z0-9_]*
-TOOL    ::= [a-zA-Z0-9_:.-]+
-```
+完成目标（`target`）是节点要完成的那一次写操作对应的写工具。它落在任务图节点上，按以下顺序取值：
 
-- `AND` 优先于 `OR`；不支持括号；关键字不区分大小写。
-- 每个条件必须完整匹配下表的某种形式，否则 Skill 加载失败。
+| 顺序 | 来源 | 说明 |
+|---|---|---|
+| 1 | 规划输出 | 规划模型按本轮目标给节点指定；必须是该技能的写工具（`tools` 中 `sideEffect: WRITE` 且在 `toolNames` 内），否则丢弃 |
+| 2 | 契约 `target` | 规划未指定（单候选直接出图、规划失败走保底、或模型未填）时采用；同样须是该技能的写工具 |
+| 3 | 首个实际写调用 | 节点仍无目标时，执行中第一次发起的写调用（无论是否被拦下）成为目标，并标记 `targetClaimed`；它可能只是前置写操作，GoalGate 会交模型核验目标是否达成 |
 
-| 条件 | 含义 |
-|---|---|
-| `TOOL succeeded` | 本节点该工具最新一条证据"算成功"；或任一委派前置节点有该工具的成功证据 |
-| `TOOL empty` | 本节点该工具最新一条证据调用成功且结果为空 |
-| `target succeeded` | `target` 指定的工具"算成功"（未配置 `target` 时不满足） |
-| `evidence.TOOL succeeded` | 同 `TOOL succeeded` |
-| `evidence.NAME exists` | 本节点有一条"算成功"的证据，其工具名为 NAME，或其抽取项中包含 NAME |
-| `outputs.NAME exists` | 产出已写入且非空 |
-| `outputs.NAME length >= N` | 产出是数组，且长度 ≥ N |
-| `outputs.NAME[*].FIELD exists` | 产出是非空数组，且每一项的 FIELD 都非空 |
-
-**"算成功"**：证据状态为 `SUCCESS`、业务成功、**且结果非空**。
-
-因此查询类工具在"查不到"也应算完成时，要写成 `TOOL succeeded OR TOOL empty`。
+纯查询节点没有完成目标。一个节点最多一个完成目标；多个写操作由规划拆成多个节点。
 
 ### 10.2 完成判定顺序
 
@@ -444,11 +427,11 @@ TOOL    ::= [a-zA-Z0-9_:.-]+
 |---|---|---|
 | 1 | `finish` 的 `output` 参数非空 | `FINISH_MISSING_OUTPUT` |
 | 2 | 没有未结算的写操作（`STARTED` / `UNKNOWN` / `UNKNOWN_PRE_CALL`） | `FINISH_OPEN_EVIDENCE` |
-| 3 | 没有未满足的补参义务 | `FINISH_REPAIR_PENDING` |
-| 4 | 所有 `required=true` 的产出已写入，来源合法 | `FINISH_OUTPUT_*` |
-| 5 | 配置了 `doneWhen` → 只看 `doneWhen` | 对应条件的提示，如 `FINISH_EVIDENCE_TOOL`、`FINISH_OUTPUT_MISSING`；多个 OR 分支都不满足时为 `FINISH_OR_FAILED` |
-| 6 | 未配置 `doneWhen`、配置了 `target` → `target` 必须"算成功" | `FINISH_NEED_TARGET` |
-| 7 | 都没配置、没有声明产出、`toolNames` 非空 → 至少一个业务工具"算成功" | `FINISH_NEED_BUSINESS` |
+| 3 | 所有 `required=true` 的产出已写入，来源合法 | `FINISH_OUTPUT_*` |
+| 4 | 有完成目标 → 该工具在本节点或委派前置节点已完成 | `FINISH_NEED_TARGET` |
+| 5 | 无完成目标、没有声明产出、`toolNames` 非空 → 至少完成过一次业务调用 | `FINISH_NEED_BUSINESS` |
+
+**"完成"**：证据状态为 `SUCCESS` 且业务未判失败；结果为空也算完成。
 
 ---
 
@@ -483,12 +466,12 @@ TOOL    ::= [a-zA-Z0-9_:.-]+
 
 | 工具 | 参数 | 作用 |
 |---|---|---|
-| `builtin_node_follow_up` | `question`、`expectedFields?`、`suggestions?` | 向用户追问，节点挂起（`FOLLOW_UP`）。`expectedFields` 中的参数在用户回答后视为来源 `USER` |
-| `builtin_node_approval` | `summary`、`toolName` | 请求用户确认被写入闸门拦下的那次写调用，节点挂起（`APPROVAL`）。未先调用写工具或工具名不一致时拒绝（`APPROVAL_NOT_GATED`） |
+| `builtin_node_follow_up` | `question`、`expectedFields?`、`suggestions?` | 向用户追问，节点挂起（`FOLLOW_UP`）。`expectedFields` 中的参数在用户回答后视为来源 `USER`；回答进入历史时带上问题与对应参数；本轮刚回答的问题原样再问时拒绝（`FOLLOW_UP_ANSWERED`）。追问须有依据，否则拒绝（`FOLLOW_UP_UNGROUNDED`）：带 `expectedFields` 时，每个字段须是本技能工具中允许来自 `USER` 的参数，或须来自 `EVIDENCE` 且本节点已有非空的成功查询（让用户选）；不带时，本节点最近一次业务调用须结果为空或业务失败（澄清） |
+| `builtin_node_approval` | `summary`、`toolName` | 请求用户确认被写入闸门拦下的那次写调用，节点挂起（`APPROVAL`）。未先调用写工具时拒绝（`APPROVAL_NOT_GATED`），工具名与被拦下的不一致时拒绝并给出实际工具名（`APPROVAL_TOOL_MISMATCH`）。只在本节点有被写闸门拦下待确认的写调用时提供给模型 |
 | `builtin_node_finish` | `output` | 声明完成；通过完成判定（10.2）后节点 `DONE`，写入共享值和实体 |
 | `builtin_node_fail` | `reason` | 声明失败，节点 `FAILED` |
-| `builtin_node_delegate` | `skillKey`、`objective?` | 委派一个只读技能作为前置节点（见第 15 节） |
-| `builtin_output_set` | `key`、`value`、`sourceType`、`sourceRef`、`sourcePath?` | 写一条产出。`sourceType` 不能是 `MODEL`；来源为 `EVIDENCE` 时 `sourceRef` 填 evidenceId、`sourcePath` 填报文路径，值必须与报文中的值相等 |
+| `builtin_node_delegate` | `skillKey`、`objective?` | 委派一个只读技能作为前置节点（见第 15 节）。没有可委派技能或已到委派层级上限时不提供 |
+| `builtin_output_set` | `key`、`value`、`sourceType`、`sourceRef`、`sourcePath?` | 写一条产出。`sourceType` 不能是 `MODEL`；来源为 `EVIDENCE` 时 `sourceRef` 填 evidenceId、`sourcePath` 填报文路径，值必须与报文中的值相等。产出无人使用（无节点依赖本节点，且契约产出均非必填、不共享、不沉淀实体）时不提供 |
 | `builtin_state_set` | `key`、`value` | 写节点私有便签；不能写保留键 |
 | `builtin_evidence_get` | `evidenceId` | 读取证据的原始报文 |
 | `builtin_session_info` | — | 返回会话 ID、节点 ID、节点状态 |
@@ -509,7 +492,7 @@ TOOL    ::= [a-zA-Z0-9_:.-]+
 
 | 顺序 | 环节 | 生效的契约属性 | 拒绝时返回 |
 |---|---|---|---|
-| 1 | 参数规范（ArgPolicy） | 工具 schema；`from`/`const` 参数免除 schema 必填检查 | `ARG_JSON_INVALID`、`ARG_UNRESOLVED_REF`、`ARG_REJECTED` |
+| 1 | 参数规范（ArgPolicy） | 工具 schema；`from`/`const` 参数免除 schema 必填检查 | `ARG_JSON_INVALID`、`ARG_REJECTED` |
 | 2 | 参数绑定（ArgBinding） | `from`、`const`、`when` | 不拒绝 |
 | 3 | 参数契约（ParamContract） | `required`、`sources`、`enum`、`missing` | `PARAM_PROVENANCE_*` |
 | 4 | 重复调用熔断（Fingerprint） | — | 同工具同参数连续成功调用达到上限（默认 3 次）→ `FINGERPRINT_TRIP`，节点失败 |
@@ -519,7 +502,7 @@ TOOL    ::= [a-zA-Z0-9_:.-]+
 | 7 | 证据登记（Evidence） | `extracts` | — |
 | 8 | 熔断计数（Fingerprint） | — | — |
 
-模型只能看到观测中的文字说明，Runtime 根据错误码决定后续约束（补参义务、审批、去重）。
+模型只能看到观测中的文字说明，Runtime 根据错误码决定后续处理（审批、去重、无进展计数）。
 
 ---
 
@@ -532,7 +515,7 @@ TOOL    ::= [a-zA-Z0-9_:.-]+
 | 1 | 模型调用写工具 → 写入闸门返回 `APPROVAL_REQUIRED` |
 | 2 | 模型调用 `builtin_node_approval(summary, toolName)` → 待批参数取闸门记下的绑定后参数 → 节点挂起，问题文案 = `summary` + 参数摘要（"标签：值"，敏感参数打码，平台参数不显示） |
 | 3 | 用户 `CONFIRM` → 校验参数摘要未变 → 执行该写操作（仍经过完整处理链，跳过审批和熔断）→ 节点继续，模型需自行完成 |
-| 3' | 用户 `REJECT` → 节点失败；`CANCEL` → 任务取消 |
+| 3' | 用户 `REJECT` → 不执行该写操作，节点与任务取消，回复说明未执行的操作；`CANCEL` → 任务取消 |
 | 4 | 审批挂起超过 `state.reconfirm-after`（默认 24 小时）后，确认不再直接执行，需要重新确认 |
 
 免审批：`confirm: false`，并把工具名加入配置 `state.write-confirm-bypass-tools`。两者缺一不可。
@@ -596,7 +579,7 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 |---|---|
 | 1 | `skill_contract` 非空，且是合法 JSON |
 | 2 | 所有 `args.*.from` 的前缀合法 |
-| 3 | `doneWhen` 中每个条件都是 10.1 中的合法形式 |
+| 3 | 配置了 `target` 时，它是 `tools` 中的 `WRITE` 工具 |
 | 4 | `delegatable=true` 时，`tools` 中没有 `WRITE` 工具 |
 | 5 | `tools` 的 key 非空 |
 | 6 | `WRITE` 工具配置了 `success` |
@@ -610,8 +593,7 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 
 以下内容**不在装载时校验**，由编写者保证：
 
-- `target`、`missing.tool`、`verify.tool` 是否在 `toolNames` 中；
-- `doneWhen` 引用的工具、产出是否已声明；
+- `target`、`missing.tool`、`verify.tool` 是否在 `toolNames` 中（`target` 不在时运行时视为未配置）；
 - `idempotencyKey`、`verify.args` 引用的参数是否存在；
 - `success.op` 是否配置；
 - 必填参数是否有可满足的来源；
@@ -634,7 +616,6 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.40018` | `TOOL_IO_ERROR` | 工具 IO 异常 |
 | `agent_runtime.40029` | `TOOL_ERROR` | 工具未知错误 |
 | `agent_runtime.40020` | `ARG_JSON_INVALID` | 参数不是合法 JSON |
-| `agent_runtime.40021` | `ARG_UNRESOLVED_REF` | 参数中残留未解析的引用 |
 | `agent_runtime.40032` | `ARG_REJECTED` | 参数不是对象，或缺少 schema 必填项 |
 | `agent_runtime.40022` | `PARAM_PROVENANCE_FAIL` | 必填参数缺失且配置为失败 |
 | `agent_runtime.40023` | `PARAM_PROVENANCE_CALL_TOOL` | 须先调用补数工具 |
@@ -651,6 +632,10 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.42236` | `PLATFORM_FIELD_FORBIDDEN` | 使用了平台保留字段名 |
 | `agent_runtime.42243` | `OUTPUT_PATH_INVALID` | 产出键为空 |
 | `agent_runtime.42244` | `OUTPUT_WRITE_FORBIDDEN` | 产出键未声明 |
+| `agent_runtime.42245` | `APPROVAL_NOT_GATED` | 申请确认前没有被写入闸门拦下的写调用 |
+| `agent_runtime.42246` | `APPROVAL_TOOL_MISMATCH` | 申请确认的工具名与被拦下的写工具不一致 |
+| `agent_runtime.42247` | `FOLLOW_UP_ANSWERED` | 本轮刚回答的追问被原样再问（问题与待补参数都相同） |
+| `agent_runtime.42248` | `FOLLOW_UP_UNGROUNDED` | 追问没有依据：待补参数不可追问，或不带待补参数且不在查询为空、业务失败之后 |
 | `agent_runtime.42235` | `EVIDENCE_PATH_INVALID` | 证据 ID 为空 |
 | `agent_runtime.40411` | `SKILL_NOT_FOUND` | 委派的技能不存在 |
 | `agent_runtime.42237` | `DELEGATE_FORBIDDEN` | 禁止委派 |

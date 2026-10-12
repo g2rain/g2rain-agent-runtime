@@ -3,24 +3,36 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
+import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.react.ReActLoopContext;
 import com.g2rain.agent.runtime.domain.react.ReActLoopResult;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
+import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
-import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
-import com.g2rain.agent.runtime.domain.state.task.RepairDirective;
+import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.tool.Observation;
+import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
+import com.g2rain.agent.runtime.engine.model.ModelUse;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
-import com.g2rain.agent.runtime.engine.tools.guard.ArgRepairObligation;
+import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
+import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
+import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
+import com.g2rain.common.json.JsonCodec;
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.model.nexus.dto.ChatCompletionRequest;
@@ -31,13 +43,11 @@ import com.g2rain.model.nexus.support.ChatMessages;
 import com.g2rain.model.nexus.support.OpenAiChatClientConverter;
 import com.g2rain.model.nexus.vo.ChatCompletionResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -51,10 +61,14 @@ import java.util.Set;
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultReActLoop implements ReActLoop {
+
+    /**
+     * 解析工具入参。
+     */
+    private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
      * 运行时配置：最大轮次、无进展上限、是否自动完成等。
@@ -77,14 +91,14 @@ public class DefaultReActLoop implements ReActLoop {
     private final RuntimeStateFacade stateFacade;
 
     /**
-     * 轮次纠偏：无进展时往历史塞提示。
-     */
-    private final RoundRepair roundRepair;
-
-    /**
      * 提示组装：把节点现场投影成模型请求。
      */
     private final PromptAssembler promptAssembler;
+
+    /**
+     * 证据读取：上游节点的查询结果。
+     */
+    private final EvidenceReader evidenceReader;
 
     /**
      * 跑节点内循环直至控流退出、停滞超限或轮次用尽。
@@ -97,7 +111,7 @@ public class DefaultReActLoop implements ReActLoop {
         int maxRounds = Math.max(1, runtimeProperties.getReact().getMaxRounds());
         int maxStall = Math.max(1, runtimeProperties.getReact().getMaxNoProgressRounds());
 
-        // 调用方传入的可变历史；本循环就地追加 assistant / tool / 纠偏
+        // 调用方传入的可变历史；本循环就地追加 assistant / tool / 提醒
         List<ChatMessage> history = context.historyMessages();
         List<ToolCallback> toolCallbacks = context.toolCallbacks();
 
@@ -106,42 +120,40 @@ public class DefaultReActLoop implements ReActLoop {
             context.frame(), context.node(), context.scope()
         );
         JsonNode platform = context.frame().turn().platform().toJson();
+        // 上游节点在本节点运行期间不再变化，循环外取一次
+        var upstream = evidenceReader.upstreamExtracts(toolContext);
 
-        // 连续无进展计数；最近一次工具观察供下一轮 user 切片
+        // 连续无进展计数
         StallTracker stall = new StallTracker();
-        String lastObservation = null;
 
         for (int round = 0; round < maxRounds; round++) {
-            context.scope().note(NodeNoteKey.PROGRESS, new NodeProgress(
-                context.scope().evidence().size(),
-                !context.scope().outputs().isEmpty()
-            ));
             context.scope().round(0);
-            // 调模型前先刷热态，崩溃后能按当前轮次和进度便签恢复
+            // 调模型前先刷热态，崩溃后能按当前轮次恢复
             stateFacade.flush(context.frame().turn());
 
+            // 本轮可见工具：没有被拦下待确认的写调用时不给审批工具，免得模型抢先申请
+            List<ToolCallback> offered = offered(toolCallbacks, context.scope());
             ChatCompletionRequest request = promptAssembler.assemble(new PromptAssembleRequest(
-                history, toolCallbacks, context.scope(), context.nodeId(), context.dependsOn(),
-                context.skillManual(), context.node().getObjective(), userGoalOf(context), repairOf(context),
-                delegateCatalogOf(context), lastObservation, context.frame().profileText(), platform,
-                context.contract()
+                history, offered, context.scope(), context.nodeId(), context.dependsOn(),
+                context.skillManual(), context.node().getObjective(), userGoalOf(context),
+                delegateCatalogOf(context, offered), context.frame().profileText(), platform,
+                context.contract(), Strings.blankToNull(context.node().getTarget()), context.node().isTargetClaimed(),
+                upstream
             ));
 
-            log.info("[ReAct] round={}/{} nodeId={} historySize={} toolCount={} lastObservation={}",
-                round, maxRounds, context.nodeId(), history.size(), toolCallbacks.size(), lastObservation
-            );
+            Trace.at(TraceStage.REACT, "round")
+                .kv("round", round)
+                .kv("maxRounds", maxRounds)
+                .kv("historySize", history.size())
+                .kv("toolCount", offered.size())
+                .info();
 
-            ChatCompletionResponse response = modelGateway.chat(request);
+            ChatCompletionResponse response = modelGateway.chat(ModelUse.REACT, context.frame().model(), request);
             ChatMessage assistant = OpenAiChatClientConverter.firstMessage(response);
-            log.info("[ReAct] model reply nodeId={} round={} assistantContent={} toolCalls={}",
-                context.nodeId(), round,
-                Objects.nonNull(assistant) ? assistant.getContent() : null,
-                Objects.nonNull(assistant) && Objects.nonNull(assistant.getToolCalls())
-                    ? assistant.getToolCalls().size() : 0);
 
-            // 无 assistant：纠偏并记停滞，超限则失败
+            // 无 assistant：提醒并记停滞，超限则失败
             if (Objects.isNull(assistant)) {
-                if (stalled(history, stall, maxStall, RepairReason.NO_TOOL_CALLS)) {
+                if (nudged(history, stall, maxStall)) {
                     return stalledFail();
                 }
 
@@ -155,38 +167,9 @@ public class DefaultReActLoop implements ReActLoop {
             }
 
             List<ChatToolCall> toolCalls = assistant.getToolCalls();
-            // 有正文但无工具调用：同样按无进展纠偏
+            // 有正文但无工具调用：同样提醒并记停滞
             if (Collections.isEmpty(toolCalls)) {
-                if (stalled(history, stall, maxStall, RepairReason.NO_TOOL_CALLS)) {
-                    return stalledFail();
-                }
-
-                continue;
-            }
-
-            // 参数纠偏义务：本轮调用须先过门禁，违规只写拒绝观察、不真正调工具
-            RepairDirective obligation = ArgRepairObligation.read(context.scope());
-            boolean blocked = false;
-            Set<String> answered = new HashSet<>();
-            for (ChatToolCall toolCall : toolCalls) {
-                ChatToolCallFunction function = toolCall.getFunction();
-                String toolName = function.getName();
-                ToolCallback callback = ToolCallbacks.find(toolCallbacks, toolName);
-                var violation = ArgRepairObligation.validate(obligation, callback, toolName,
-                    context.scope().rounds(), runtimeProperties.getReact().getRepairMaxRounds());
-                if (violation.isPresent()) {
-                    log.info("[ReAct] repair blocked tool={} round={} nodeId={} violation={}", toolName, round, context.nodeId(), violation.get());
-                    history.add(ChatMessages.tool(toolCall.getId()).name(toolName).content(violation.get()).build());
-                    lastObservation = violation.get();
-                    answered.add(toolCall.getId());
-                    blocked = true;
-                }
-            }
-
-            if (blocked) {
-                skipUnexecuted(history, toolCalls, answered, "本波因补参义务未执行");
-                stall.recordStall();
-                if (stall.exceeded(maxStall)) {
+                if (nudged(history, stall, maxStall)) {
                     return stalledFail();
                 }
 
@@ -198,59 +181,43 @@ public class DefaultReActLoop implements ReActLoop {
                 ChatToolCallFunction function = toolCall.getFunction();
                 String toolName = function.getName();
                 String arguments = function.getArguments();
-                log.info("[ReAct] invoke tool={} round={} nodeId={}", toolName, round, context.nodeId());
-
                 Observation observation;
+                int evidenceBefore = context.scope().evidence().size();
                 ToolCallback toolCallback = ToolCallbacks.find(toolCallbacks, toolName);
                 if (Objects.nonNull(toolCallback)) {
                     observation = toolInvoker.invoke(new ToolInvokeRequest(
                         toolContext, toolCallback, arguments
                     ));
                 } else {
-                    observation = Observation.failure("工具不在本节点可见表：[" + toolName + "]", RuntimeErrorCode.CATALOG_DENIED.code());
+                    observation = Observation.rejected(
+                        RuntimeErrorCode.CATALOG_DENIED,
+                        ModelHint.CATALOG_DENIED.text("tool", toolName),
+                        ModelHint.NEXT_CATALOG.text()
+                    );
+                    Trace.at(TraceStage.TOOL, "invoked")
+                        .kv("tool", toolName)
+                        .kv("outcome", observation.outcome())
+                        .kv("errorCode", observation.errorCode())
+                        .info();
                 }
 
-                log.info("[ReAct] tool result tool={} round={} nodeId={} ok={} errorCode={} message={} exited={} finishRejected={}",
-                    toolName, round, context.nodeId(), observation.ok(), observation.errorCode(), observation.message(), toolContext.hasExited(), toolContext.getFinishRejectedReason()
-                );
-
-                // 业务与控流统一写 role=tool
+                // 业务与控流统一写 role=tool；没有产生证据的调用另记为节点动作，供跨轮重建
                 history.add(ChatMessages.tool(toolCall.getId()).name(toolName).content(Objects.toString(observation.message(), "")).build());
-
-                lastObservation = Objects.toString(observation.message(), "");
-
-                // 成功且满足清义务条件：清掉参数纠偏
-                ToolCallback callback = ToolCallbacks.find(toolCallbacks, toolName);
-                if (observation.ok() && Objects.nonNull(obligation) && ArgRepairObligation.shouldClear(callback, toolName, obligation)) {
-                    ArgRepairObligation.clear(context.scope());
-                    obligation = null;
+                if (context.scope().evidence().size() == evidenceBefore) {
+                    remember(context, toolCall, observation.message());
                 }
 
                 // 控流工具已让节点退出（完成/挂起/失败等）
                 if (toolContext.hasExited()) {
-                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), "本波因节点已退出未执行");
-                    // 追问只在工具参数里：补记为本节点回复，续跑时 history 才能还原"问→答"
-                    if (toolContext.getCheckpointType() == CheckpointType.FOLLOW_UP && Strings.isBlank(assistant.getContent())) {
-                        appendNodeReply(context, toolContext.getQuestion());
-                    }
+                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_NODE_EXITED.text());
                     return exited(toolContext);
                 }
 
-                // finish 被拒：纠偏后看是否停滞超限；超限失败，否则打断本波工具改下一轮
+                // finish 被拒（原因已在观测中）：记停滞，超限失败，否则打断本波工具改下一轮
                 if (Objects.nonNull(toolContext.getFinishRejectedReason())) {
                     toolContext.clearFinishRejected();
-                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), "本波因 finish 被拒未执行");
-                    if (stalled(history, stall, maxStall, RepairReason.FINISH_REJECTED)) {
-                        return stalledFail();
-                    }
-
-                    break;
-                }
-
-                // 工具失败：记停滞；超限失败，否则打断本波改下一轮
-                if (!observation.ok()) {
+                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_FINISH_REJECTED.text());
                     stall.recordStall();
-                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), "本波因前序工具失败未执行");
                     if (stall.exceeded(maxStall)) {
                         return stalledFail();
                     }
@@ -258,13 +225,67 @@ public class DefaultReActLoop implements ReActLoop {
                     break;
                 }
 
-                // 本工具成功：清零连续无进展
+                // 按结论类型推进：非成功都打断本波改下一轮，其中停滞类记一次无进展；成功清零
+                Outcome outcome = observation.outcome();
+                if (!outcome.advances()) {
+                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_PREVIOUS_FAILED.text());
+                    if (outcome.stalls()) {
+                        stall.recordStall();
+                        if (stall.exceeded(maxStall)) {
+                            return stalledFail();
+                        }
+                    }
+
+                    break;
+                }
+
                 stall.recordProgress();
             }
         }
 
         // 轮次用尽仍未由控流收口 → 失败
+        Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.MAX_ROUNDS).error();
         return new ReActLoopResult(NodeStatus.FAILED);
+    }
+
+    /**
+     * 把一次没有产生证据的调用记为节点动作：内置工具、执行前被拒或推迟的调用。
+     *
+     * <p>入参按契约脱敏后保存，续跑时与证据一起还原为"调用 → 返回"。</p>
+     *
+     * @param context 循环上下文
+     * @param call    模型的工具调用
+     * @param message 返回给模型的说明
+     */
+    private void remember(ReActLoopContext context, ChatToolCall call, String message) {
+        ChatToolCallFunction function = call.getFunction();
+        String toolName = Objects.isNull(function) ? "tool" : function.getName();
+        String raw = Objects.isNull(function) ? null : function.getArguments();
+        stateFacade.act(context.scope(), NodeAction.model(
+            context.scope().rounds(), call.getId(), toolName, argumentsOf(context, toolName, raw), message
+        ));
+    }
+
+    /**
+     * 入参摘要：按工具契约脱敏并限长；不是合法 JSON 时原样保留。
+     *
+     * @param context  循环上下文
+     * @param toolName 工具名
+     * @param raw      模型给出的入参；可空
+     * @return 入参摘要；没有入参为 {@code null}
+     */
+    private @Nullable String argumentsOf(ReActLoopContext context, String toolName, @Nullable String raw) {
+        if (Strings.isBlank(raw)) {
+            return null;
+        }
+
+        SkillContract contract = context.contract();
+        ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(toolName);
+        try {
+            return ArgsBrief.of(JSON.str2node(raw), spec, runtimeProperties.getState().getNodeActionMaxChars());
+        } catch (RuntimeException _) {
+            return raw;
+        }
     }
 
     /**
@@ -289,16 +310,16 @@ public class DefaultReActLoop implements ReActLoop {
     }
 
     /**
-     * 写入纠偏消息并记一次停滞；若已超限返回 true。
+     * 模型本轮没有发起工具调用：提醒改用工具并记一次停滞；若已超限返回 true。
      *
      * @param history  对话历史
      * @param stall    停滞跟踪
      * @param maxStall 最大无进展轮数
-     * @param reason   纠偏原因
      * @return 超限则为 true
      */
-    private boolean stalled(List<ChatMessage> history, StallTracker stall, int maxStall, RepairReason reason) {
-        history.add(roundRepair.message(reason));
+    private static boolean nudged(List<ChatMessage> history, StallTracker stall, int maxStall) {
+        Trace.at(TraceStage.REACT, "no_tool_calls").info();
+        history.add(ChatMessages.user(ModelHint.NEXT_USE_TOOLS.text()));
         stall.recordStall();
         return stall.exceeded(maxStall);
     }
@@ -309,7 +330,8 @@ public class DefaultReActLoop implements ReActLoop {
      * @return 失败结果
      */
     private static ReActLoopResult stalledFail() {
-        return new ReActLoopResult(NodeStatus.FAILED, "连续无进展", null, null);
+        Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.STALLED).error();
+        return new ReActLoopResult(NodeStatus.FAILED, RuntimeMessage.NODE_STALLED.text(), null, null);
     }
 
     /**
@@ -345,9 +367,11 @@ public class DefaultReActLoop implements ReActLoop {
             case DONE -> finishOutputText(ctx.getOutput());
             default -> ctx.getFailReason();
         };
-        log.info("[ReAct] exited nodeId={} status={} checkpointType={} message={} missing={} suggestions={}",
-            ctx.getNodeId(), status, ctx.getCheckpointType(), message, ctx.getMissingParameters(), ctx.getSuggestions()
-        );
+        Trace.at(TraceStage.REACT, "exited")
+            .kv("status", status)
+            .kv("checkpointType", ctx.getCheckpointType())
+            .kv("missing", ctx.getMissingParameters())
+            .info();
 
         return new ReActLoopResult(
             status, message, ctx.getCheckpointType(), ctx.getPendingAction(),
@@ -372,64 +396,64 @@ public class DefaultReActLoop implements ReActLoop {
     }
 
     /**
-     * 读本节点参数纠偏义务，转成提示文案。
+     * 用户诉求：开任务时的用户原文，摘要会丢细节；续跑补参时追问回答另经历史传入，不替换总诉求。
      *
      * @param context 循环上下文
-     * @return 纠偏提示；无则为 null
-     */
-    private static @Nullable String repairOf(ReActLoopContext context) {
-        RepairDirective repair = context.scope().repair();
-        if (Objects.isNull(repair)) {
-            return null;
-        }
-
-        return repair.toPromptMessage();
-    }
-
-    /**
-     * 用户目标：任务 goalSummary 优先，避免续跑补参把本轮原文当成总目标。
-     *
-     * @param context 循环上下文
-     * @return 目标文案；可空
+     * @return 诉求原文；可空
      */
     private static @Nullable String userGoalOf(ReActLoopContext context) {
-        String goal = context.frame().turn().task()
-            .map(TaskMetadata::getGoalSummary)
+        return context.frame().turn().task()
+            .map(TaskMetadata::getRequest)
             .filter(Strings::isNotBlank)
-            .map(String::trim)
-            .orElse(null);
-        if (Strings.isNotBlank(goal)) {
-            return goal;
-        }
-
-        // 尚无任务摘要时才退回本轮原文，避免续跑补参把追问当总目标
-        if (Strings.isNotBlank(context.frame().userInput())) {
-            return context.frame().userInput().trim();
-        }
-
-        return null;
+            .orElseGet(() -> Strings.blankToNull(Strings.trim(context.frame().userInput())));
     }
 
     /**
-     * 可委派技能目录文案（逗号拼接）。
+     * 本轮提供给模型的工具：审批只在有被拦下待确认的写调用时提供。
+     *
+     * <p>只影响模型可见列表；执行仍按全量工具查找，同一轮先写后申请的并行调用照常处理。</p>
+     *
+     * @param tools 节点全部工具
+     * @param scope 当前节点作用域
+     * @return 本轮可见工具
+     */
+    private static List<ToolCallback> offered(List<ToolCallback> tools, NodeScope scope) {
+        if (Objects.nonNull(scope.note(NodeNoteKey.GATED_WRITE))) {
+            return tools;
+        }
+
+        return ToolCallbacks.without(tools, BuiltinToolAction.APPROVAL);
+    }
+
+    /**
+     * 委派说明：本轮提供了委派工具才给出何时委派与可委派技能，否则不提委派。
      *
      * @param context 循环上下文
-     * @return 目录文案；无可空
+     * @param offered 本轮可见工具
+     * @return 委派说明；不能委派为 {@code null}
      */
-    private static @Nullable String delegateCatalogOf(ReActLoopContext context) {
-        if (Collections.isEmpty(context.delegatableSkillKeys())) {
+    private static @Nullable String delegateCatalogOf(ReActLoopContext context, List<ToolCallback> offered) {
+        boolean delegable = ToolCallbacks.offers(offered, BuiltinToolAction.DELEGATE);
+        if (!delegable || Collections.isEmpty(context.delegatableSkillKeys())) {
             return null;
         }
 
-        return String.join(", ", context.delegatableSkillKeys());
+        return ModelHint.DELEGATE_CATALOG.text("skills", String.join(", ", context.delegatableSkillKeys()));
     }
 
     /**
-     * 节点进度便签：证据条数与是否已有 outputs。
-     *
-     * @param evidenceCount 当前证据条数
-     * @param hasOutput     节点是否已有产出
+     * 节点内循环未经控流工具收口、直接失败的原因。
      */
-    private record NodeProgress(int evidenceCount, boolean hasOutput) {
+    private enum ExitReason {
+
+        /**
+         * 连续无进展超过上限
+         */
+        STALLED,
+
+        /**
+         * 轮次用尽
+         */
+        MAX_ROUNDS
     }
 }

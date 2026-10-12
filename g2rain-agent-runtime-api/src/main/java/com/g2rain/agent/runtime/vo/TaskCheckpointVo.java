@@ -67,12 +67,6 @@ public class TaskCheckpointVo extends BaseVo {
     private String expectedFields;
 
     /**
-     * 候选项（来自证据）
-     */
-    @Schema(description = "候选项（来自证据）")
-    private String choices;
-
-    /**
      * 恢复动作
      */
     @Schema(description = "恢复动作")

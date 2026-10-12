@@ -10,11 +10,16 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
+import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
+import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.EntityExtractor;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
+import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
 import com.g2rain.agent.runtime.engine.tools.policy.FinishContext;
 import com.g2rain.agent.runtime.engine.tools.policy.FinishDecision;
 import com.g2rain.agent.runtime.engine.tools.policy.FinishPolicy;
@@ -25,6 +30,8 @@ import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
 import com.g2rain.agent.runtime.support.tool.BuiltinTools;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -38,7 +45,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 控流内置工具：追问、审批、委派、完成、失败。
@@ -52,10 +61,13 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ControlBuiltinTools implements BuiltinTools {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * finish 门槛（targetTool / doneWhen 等）
+     * finish 门槛（必填产出、节点完成目标等）
      */
     private final FinishPolicy finishPolicy;
 
@@ -95,6 +107,8 @@ public class ControlBuiltinTools implements BuiltinTools {
                                      ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         expectedFields = Objects.requireNonNullElse(expectedFields, List.of());
+        rejectAnswered(ctx, question, expectedFields);
+        requireGrounded(ctx, expectedFields);
         ctx.applyFollowUp(question, expectedFields, suggestions);
         return new NodeActionResult(ctx.getNodeStatus().name(), question);
     }
@@ -160,7 +174,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     /**
      * 本节点完成：结束本节点循环。
      *
-     * <p>先过 finish 门槛（targetTool / doneWhen 等）。通过则节点标 DONE、落下 output，并沉淀实体候选。
+     * <p>先过 finish 门槛（必填产出、节点完成目标等）。通过则节点标 DONE、落下 output，并沉淀实体候选。
      * 未达标只记下拒绝原因，节点状态不变，循环可继续。{@code output} 须是给用户看的结论。
      * 例：{@code finish("已查到 2 条待发货订单", toolContext)}</p>
      *
@@ -222,13 +236,14 @@ public class ControlBuiltinTools implements BuiltinTools {
      * @param objective 子目标说明；可空
      */
     private void delegate(ToolExecutionContext ctx, String skillKey, @Nullable String objective) {
+        List<String> catalog = ctx.getDelegatableSkillKeys();
+        String catalogHint = ModelHint.NEXT_DELEGATE.text("skills", String.join("、", catalog));
         if (Strings.isBlank(skillKey)) {
-            throw new BusinessException(RuntimeErrorCode.SKILL_NOT_FOUND, "skillKey");
+            throw new ToolRejectedException(RuntimeErrorCode.SKILL_NOT_FOUND, catalogHint, "skillKey 为空");
         }
 
-        List<String> catalog = ctx.getDelegatableSkillKeys();
         if (!catalog.contains(skillKey.trim())) {
-            throw new BusinessException(RuntimeErrorCode.DELEGATE_FORBIDDEN, skillKey);
+            throw new ToolRejectedException(RuntimeErrorCode.DELEGATE_FORBIDDEN, catalogHint, skillKey);
         }
 
         TaskGraph graph = ctx.getGraph();
@@ -238,7 +253,7 @@ public class ControlBuiltinTools implements BuiltinTools {
         }
 
         if (parent.getDelegateDepth() + 1 > runtimeProperties.getState().getDelegateMaxDepth()) {
-            throw new BusinessException(RuntimeErrorCode.DELEGATE_FORBIDDEN, "depth");
+            throw new ToolRejectedException(RuntimeErrorCode.DELEGATE_FORBIDDEN, ModelHint.NEXT_NO_DELEGATE.text(), "委派层级已达上限");
         }
 
         String parentId = parent.getNodeId();
@@ -255,7 +270,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             );
 
         if (repeated) {
-            throw new BusinessException(RuntimeErrorCode.DELEGATE_REPEATED, skillKey);
+            throw new ToolRejectedException(RuntimeErrorCode.DELEGATE_REPEATED, ModelHint.NEXT_NO_DELEGATE.text(), skillKey);
         }
 
         // 新建 READY 前置节点，挂到图上
@@ -283,7 +298,94 @@ public class ControlBuiltinTools implements BuiltinTools {
     }
 
     /**
-     * 审批只能挂写工具。
+     * 追问须有依据，否则拒绝：
+     * <ol>
+     *   <li>缺参：待补参数都是本技能工具中允许来自用户的参数，或须来自查询结果且本节点已查到候选（让用户选）；</li>
+     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空或业务失败。</li>
+     * </ol>
+     * 没有契约的技能不做判定。
+     *
+     * @param ctx            节点执行现场
+     * @param expectedFields 待补参数名
+     */
+    private static void requireGrounded(ToolExecutionContext ctx, List<String> expectedFields) {
+        SkillContract contract = ctx.contract();
+        if (Objects.isNull(contract)) {
+            return;
+        }
+
+        if (expectedFields.isEmpty()) {
+            if (!lastCallUnresolved(ctx)) {
+                throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
+                    ModelHint.FOLLOW_UP_NO_BASIS.text());
+            }
+            return;
+        }
+
+        boolean hasCandidates = ctx.scope().evidence().stream().anyMatch(head -> head.done() && !Boolean.TRUE.equals(head.empty()));
+        List<String> invalid = expectedFields.stream().filter(field -> !askable(contract, field, hasCandidates)).toList();
+        if (!invalid.isEmpty()) {
+            throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
+                ModelHint.FOLLOW_UP_FIELDS_INVALID.text("fields", String.join(", ", invalid)));
+        }
+    }
+
+    /**
+     * 参数能否向用户追问（按完整路径或叶子名匹配本技能工具参数）：允许来自用户，或须来自查询结果且已有候选可选。
+     *
+     * @param contract      技能契约
+     * @param field         待补参数名
+     * @param hasCandidates 本节点已有非空的成功查询
+     * @return 可以追问
+     */
+    private static boolean askable(SkillContract contract, String field, boolean hasCandidates) {
+        String leaf = RuntimeUtils.leafKey(field);
+        return contract.getTools().values().stream()
+            .flatMap(tool -> tool.getArgs().entrySet().stream())
+            .filter(arg -> arg.getKey().equals(field) || RuntimeUtils.leafKey(arg.getKey()).equals(leaf))
+            .map(Map.Entry::getValue)
+            .anyMatch(arg -> arg.allows(SourceType.USER) || (hasCandidates && arg.allows(SourceType.EVIDENCE)));
+    }
+
+    /**
+     * 本节点最近一次业务调用结果为空或业务失败（待确认、进行中的不算）。
+     *
+     * @param ctx 节点执行现场
+     * @return 需要向用户澄清
+     */
+    private static boolean lastCallUnresolved(ToolExecutionContext ctx) {
+        List<EvidenceHead> evidence = ctx.scope().evidence();
+        if (evidence.isEmpty()) {
+            return false;
+        }
+
+        EvidenceHead last = evidence.getLast();
+        boolean failed = last.status() == EvidenceStatus.FAILED || last.status() == EvidenceStatus.TIMEOUT
+            || Boolean.FALSE.equals(last.businessOk());
+        return failed || (last.done() && Boolean.TRUE.equals(last.empty()));
+    }
+
+    /**
+     * 本轮刚回答过的追问被原样再问时拒绝：问题与待补参数都相同，说明模型没用上回答。
+     *
+     * @param ctx            节点执行现场
+     * @param question       追问文案
+     * @param expectedFields 待补参数名
+     */
+    private static void rejectAnswered(ToolExecutionContext ctx, String question, List<String> expectedFields) {
+        boolean repeated = ctx.getFrame().turn().resumed()
+            .filter(answered -> answered.getType() == CheckpointType.FOLLOW_UP)
+            .filter(answered -> Objects.equals(Strings.trim(answered.getQuestion()), Strings.trim(question)))
+            .filter(answered -> Set.copyOf(answered.getExpectedFields()).equals(Set.copyOf(expectedFields)))
+            .isPresent();
+        if (repeated) {
+            throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_ANSWERED, ModelHint.NEXT_USE_ANSWER.text(),
+                Strings.defaultIfBlank(ctx.getFrame().userInput(), ""));
+        }
+    }
+
+    /**
+     * 审批只能挂写工具；申请的不是写工具时，按"没有待确认的写调用"拒绝。
      *
      * @param ctx      节点执行现场
      * @param toolName 待审批的工具名
@@ -292,12 +394,14 @@ public class ControlBuiltinTools implements BuiltinTools {
         SkillContract contract = ctx.contract();
         ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(toolName);
         if (Objects.isNull(spec) || spec.sideEffectOrDefault() != SideEffect.WRITE) {
-            throw new BusinessException(RuntimeErrorCode.WRITE_CONTRACT_INCOMPLETE, toolName);
+            throw new ToolRejectedException(RuntimeErrorCode.APPROVAL_NOT_GATED, ModelHint.NEXT_CALL_WRITE.text(), toolName);
         }
     }
 
     /**
      * 取写闸记下的待批调用。
+     *
+     * <p>没有被拦下的记录时提示先调用写工具；有记录但工具名不一致时，提示实际被拦下的工具名。</p>
      *
      * @param ctx      节点执行现场
      * @param toolName 申请审批的工具名
@@ -311,9 +415,16 @@ public class ControlBuiltinTools implements BuiltinTools {
             // 跨轮水合后便签为通用结构，按 JSON 还原
             default -> JSON.str2obj(JSON.obj2str(raw), PendingAction.class);
         };
-        if (Objects.isNull(gated) || !Objects.equals(gated.toolName(), toolName)) {
-            throw new BusinessException(RuntimeErrorCode.APPROVAL_NOT_GATED, toolName);
+
+        if (Objects.isNull(gated)) {
+            throw new ToolRejectedException(RuntimeErrorCode.APPROVAL_NOT_GATED, ModelHint.NEXT_CALL_WRITE.text(), toolName);
         }
+
+        if (!Objects.equals(gated.toolName(), toolName)) {
+            throw new ToolRejectedException(RuntimeErrorCode.APPROVAL_TOOL_MISMATCH,
+                ModelHint.NEXT_APPROVAL_TOOL.text("tool", gated.toolName()), gated.toolName());
+        }
+
         return gated;
     }
 
@@ -334,5 +445,12 @@ public class ControlBuiltinTools implements BuiltinTools {
 
         ctx.applyFinish(output);
         entityExtractor.captureOutputs(ctx.scope(), ctx.contract());
+        // 技能有写工具、节点却无完成目标就结束：观察规划漏填 target 的频率
+        if (Objects.isNull(ctx.getTarget()) && ctx.hasWriteTools()) {
+            Trace.at(TraceStage.NODE, "finished_without_target")
+                .kv("nodeId", ctx.getNodeId())
+                .kv("skillKey", ctx.getSkillKey())
+                .info();
+        }
     }
 }

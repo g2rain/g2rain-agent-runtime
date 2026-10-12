@@ -1,11 +1,18 @@
 package com.g2rain.agent.runtime.engine.flow.finalize;
 
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
+import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
+import com.g2rain.agent.runtime.engine.model.ModelUse;
+import com.g2rain.agent.runtime.enums.RuntimeMessage;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.GoalGatePrompt;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -13,236 +20,256 @@ import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.support.ChatCompletionRequests;
 import com.g2rain.model.nexus.support.OpenAiChatClientConverter;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
- * DefaultGoalGate：默认目标门——够长则直接采纳，否则可选模型润色。
- * <p>
- * 失败或未开启门时，原样返回确定性草稿；成功时优先长证据 / 长草稿，再视配置调 LLM。
- * </p>
+ * DefaultGoalGate：按节点事实决定直接采用节点结论，还是交模型核验目标并合成答复。
+ *
+ * <p>直接采用：只有一个主节点（非委派前置），已完成且有结论，并且有规划或契约给出的完成目标（完成判定已保证目标写工具成功）
+ * 或所用技能没有写工具。其余情况（多个主节点、技能有写工具却无完成目标、完成目标由首个写调用自动记录）交模型核验；模型判定未达成时，
+ * 答复须如实说明已完成与未完成部分，任务状态不变。</p>
  *
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public final class DefaultGoalGate implements GoalGate {
 
     /**
-     * JSON 编解码：解析模型润色返回。
+     * JSON 编解码：组装输入、解析模型输出。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 运行时 GoalGate 开关与字数门槛。
+     * 模型不可用时拼接多个节点结论的分隔符。
+     */
+    private static final String JOINER = "\n";
+
+    /**
+     * 运行时 GoalGate 开关与证据包上限。
      */
     private final RuntimeProperties runtimeProperties;
 
     /**
-     * 模型网关，仅在开启 LLM 润色时调用。
+     * 模型网关，核验目标时调用。
      */
     private final ModelGateway modelGateway;
 
     /**
-     * 呈现最终答复：短路失败 → 采纳长证据 → 够长草稿 → 可选 LLM。
+     * 呈现最终答复：未成功退回草稿 → 可直接采用的单节点结论 → 模型核验 → 拼接节点结论。
      *
-     * @param deterministic 确定性草稿；可空
-     * @param evidence      证据包；可空
-     * @param succeeded     是否终态成功
-     * @return 给人看的答复；失败或未开启时原样返回草稿
+     * @param ctx       本轮上下文
+     * @param draft     执行器带回的文案；可空
+     * @param succeeded 任务是否终态成功
+     * @return 给用户的答复；未成功且草稿为空时为 {@code null}
      */
     @Override
-    public String present(@Nullable String deterministic, @Nullable GoalEvidencePack evidence, boolean succeeded) {
+    public @Nullable String present(TurnContext ctx, @Nullable String draft, boolean succeeded) {
+        if (!succeeded) {
+            String reply = Strings.blankToNull(draft);
+            Trace.at(TraceStage.FINALIZE, "reply").kv("source", ReplySource.NOT_SUCCEEDED).info();
+            return reply;
+        }
+
         RuntimeProperties.GoalGate cfg = runtimeProperties.getGoalGate();
-        FinalMessagePicker.Pick pick = FinalMessagePicker.pick(deterministic);
-        String text = pick.text();
-        int minChars = cfg.getMinDeterministicChars();
-
-        // 失败或未开启：不走证据采纳与润色，只保证有可读草稿
-        if (!succeeded || !cfg.isEnabled()) {
-            return Strings.isNotBlank(deterministic) ? deterministic.trim() : text;
+        GoalEvidencePack pack = GoalEvidenceAssembler.assemble(ctx, cfg);
+        String adopted = adoptable(pack);
+        if (Objects.nonNull(adopted)) {
+            return traced(adopted, ReplySource.NODE);
         }
 
-        String adopted = GoalEvidenceAssembler.adoptLongMessage(evidence, minChars);
-        if (Strings.isNotBlank(adopted)) {
-            return adopted;
-        }
-
-        // 确定性草稿或拣选结果已够长且非兜底
-        if (Strings.isNotBlank(deterministic) && deterministic.trim().length() >= minChars) {
-            return deterministic.trim();
-        }
-        if (text.length() >= minChars && !"FALLBACK".equals(pick.source())) {
-            return text;
-        }
-
-        // 未开 LLM：退回确定性
-        if (!cfg.isLlmEnabled()) {
-            return Strings.isNotBlank(deterministic) ? deterministic.trim() : text;
-        }
-
-        try {
-            String polished = polish(text, evidence);
-            if (Strings.isNotBlank(polished)) {
-                return polished.trim();
+        if (cfg.isEnabled()) {
+            try {
+                GoalGateAnswer answer = verify(pack, cfg.getPromptMaxChars(), ctx.getRequest().getModel());
+                if (Objects.nonNull(answer)) {
+                    if (Boolean.FALSE.equals(answer.achieved())) {
+                        Trace.at(TraceStage.FINALIZE, "goal_unmet").kv("goal", pack.goal()).warn();
+                        return traced(answer.finalMessage().trim(), ReplySource.UNMET);
+                    }
+                    return traced(answer.finalMessage().trim(), ReplySource.VERIFIED);
+                }
+            } catch (RuntimeException ex) {
+                Trace.at(TraceStage.FINALIZE, "verify_failed")
+                    .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
+                    .warn();
             }
-        } catch (RuntimeException ex) {
-            log.warn("goal-gate llm failed: {}", ex.getMessage());
         }
-        return Strings.isNotBlank(deterministic) ? deterministic.trim() : text;
+
+        return traced(joined(pack), ReplySource.JOINED);
     }
 
     /**
-     * 调模型按 GoalGatePrompt 润色，解析 finalMessage。
+     * 可直接采用的节点结论：唯一主节点已完成、有结论，且有非自动记录的完成目标或技能没有写工具。
      *
-     * <p>user JSON 字段用途见 {@link GoalGateUserView}。</p>
-     *
-     * @param deterministic 草稿
-     * @param evidence      证据包；可空
-     * @return 模型给出的 finalMessage；无法解析则为 {@code null}
+     * @param pack 证据包
+     * @return 节点结论；需要模型核验时为 {@code null}
      */
-    private @Nullable String polish(String deterministic, @Nullable GoalEvidencePack evidence) {
-        String goal = Objects.nonNull(evidence) ? Objects.toString(evidence.goalSummary(), "") : "";
-        var view = new GoalGateUserView(goal, deterministic,
-            EvidenceView.from(evidence, runtimeProperties.getGoalGate().getPromptMaxChars()));
-        ChatMessage assistant = OpenAiChatClientConverter.firstMessage(modelGateway.chat(
-            ChatCompletionRequests.of().system(GoalGatePrompt.TEXT).user(JSON.obj2str(view)).build()
-        ));
+    private static @Nullable String adoptable(GoalEvidencePack pack) {
+        List<GoalNodeSummary> primary = pack.nodes().stream().filter(node -> !node.delegated()).toList();
+        if (primary.size() != 1) {
+            return null;
+        }
 
+        GoalNodeSummary node = primary.getFirst();
+        boolean done = NodeStatus.DONE.name().equals(node.status()) && Strings.isNotBlank(node.result());
+        boolean settled = (Objects.nonNull(node.target()) && !node.claimed()) || !node.writable();
+        return done && settled ? node.result() : null;
+    }
+
+    /**
+     * 模型不可用或无有效输出时：按图顺序拼接主节点结论；都没有则用通用完成文案。
+     *
+     * @param pack 证据包
+     * @return 非空答复
+     */
+    private static String joined(GoalEvidencePack pack) {
+        String text = pack.nodes().stream()
+            .filter(node -> !node.delegated())
+            .map(GoalNodeSummary::result)
+            .filter(Strings::isNotBlank)
+            .collect(Collectors.joining(JOINER));
+        return Strings.isNotBlank(text) ? text : RuntimeMessage.REPLY_DONE.text();
+    }
+
+    /**
+     * 输出答复来源轨迹并原样返回答复。
+     *
+     * @param reply  最终答复
+     * @param source 答复来源
+     * @return 最终答复
+     */
+    private static String traced(String reply, ReplySource source) {
+        Trace.at(TraceStage.FINALIZE, "reply").kv("source", source).kv("replyChars", reply.length()).info();
+        return reply;
+    }
+
+    /**
+     * 调模型按 GoalGatePrompt 核验目标并合成答复。
+     *
+     * @param pack     证据包
+     * @param maxChars 单段文本截断上限
+     * @param model    本轮选用的模型名；可空
+     * @return 模型结论；无法解析或答复为空时为 {@code null}
+     */
+    private @Nullable GoalGateAnswer verify(GoalEvidencePack pack, int maxChars, @Nullable String model) {
+        GoalGateView view = GoalGateView.from(pack, maxChars);
+        ChatMessage assistant = OpenAiChatClientConverter.firstMessage(modelGateway.chat(ModelUse.GOAL_GATE, model,
+            ChatCompletionRequests.of().system(GoalGatePrompt.SYSTEM).user(GoalGatePrompt.USER.formatted(JSON.obj2str(view))).build()
+        ));
         if (Objects.isNull(assistant) || Strings.isBlank(assistant.getContent())) {
             return null;
         }
 
-        // 抠 JSON → 反序列化为 Answer record
         GoalGateAnswer answer = JSON.str2obj(RuntimeUtils.extractObject(assistant.getContent()), GoalGateAnswer.class);
-        if (Objects.isNull(answer) || Strings.isBlank(answer.finalMessage())) {
-            return null;
-        }
-
-        return answer.finalMessage();
+        return Objects.isNull(answer) || Strings.isBlank(answer.finalMessage()) ? null : answer;
     }
 
     /**
-     * 模型输出：finalMessage + 可选 reason。
+     * 模型输出。
      *
-     * @param finalMessage 润色后的最终答复；可空
-     * @param reason       模型自述原因；可空
+     * @param achieved     用户目标是否达成；可空按达成处理
+     * @param finalMessage 给用户的最终答复
      */
-    private record GoalGateAnswer(@Nullable String finalMessage, @Nullable String reason) {
+    private record GoalGateAnswer(@Nullable Boolean achieved, String finalMessage) {
 
     }
 
     /**
-     * GoalGate user JSON。
+     * GoalGate 输入数据。
      *
-     * <pre>
-     * goalSummary   — 用户目标：最终答复必须对准它
-     * deterministic — Runtime 确定性草稿：证据不足时的候选底稿
-     * evidence      — 本轮执行证据：见 {@link EvidenceView}；可空
-     * </pre>
-     *
-     * @param goalSummary   用户目标；可空
-     * @param deterministic Runtime 确定性草稿；可空
-     * @param evidence      本轮执行证据；可空
+     * @param goal         用户目标
+     * @param nodes        节点事实
+     * @param dialogueTail 最近对话
      */
-    private record GoalGateUserView(@Nullable String goalSummary, @Nullable String deterministic,
-                                    @Nullable EvidenceView evidence) {
-
-    }
-
-    /**
-     * user.evidence。
-     *
-     * <pre>
-     * evidenceDigest       — 结果摘要：快速把握本轮结果
-     * observationSnippets  — 有效正文片段：答复可用事实句
-     * joinSynthesis        — 多结果汇总：多节点合并说法
-     * nodeSummaries        — 节点结果：优先复用节点 finalMessage
-     * dialogueTail         — 对话尾：指代与接续，不另造事实
-     * </pre>
-     *
-     * @param evidenceDigest      结果摘要；可空
-     * @param observationSnippets 有效正文片段；可空
-     * @param joinSynthesis       多结果汇总；可空
-     * @param nodeSummaries       节点结果
-     * @param dialogueTail        交互历史尾；可空
-     */
-    private record EvidenceView(@Nullable String evidenceDigest, @Nullable List<String> observationSnippets,
-                                @Nullable Map<String, Object> joinSynthesis, List<GoalNodeSummary> nodeSummaries,
-                                @Nullable List<DialogueTurnView> dialogueTail) {
-
-        static @Nullable EvidenceView from(@Nullable GoalEvidencePack pack, int promptMaxChars) {
-            if (Objects.isNull(pack)) {
-                return null;
-            }
-
-            List<GoalNodeSummary> nodes = new ArrayList<>();
-            for (GoalNodeSummary node : pack.nodeSummaries()) {
-                // 长字段截断后再入 View
-                nodes.add(new GoalNodeSummary(
-                    node.nodeId(), node.skillKey(), node.status(),
-                    truncateForPrompt(node.resultSummary(), promptMaxChars),
-                    truncateForPrompt(node.finalMessage(), promptMaxChars)
-                ));
-            }
-
-            List<DialogueTurnView> dial = null;
-            if (!pack.dialogueTail().isEmpty()) {
-                dial = new ArrayList<>();
-                for (DialogueMessage turn : pack.dialogueTail()) {
-                    dial.add(DialogueTurnView.from(turn, promptMaxChars));
-                }
-            }
-
-            return new EvidenceView(
-                pack.evidenceDigest(),
-                pack.observationSnippets().isEmpty() ? null : List.copyOf(pack.observationSnippets()),
-                pack.joinSynthesis().isEmpty() ? null : pack.joinSynthesis(),
-                List.copyOf(nodes),
-                Objects.isNull(dial) ? null : List.copyOf(dial)
-            );
+    private record GoalGateView(String goal, List<NodeView> nodes, List<DialogueView> dialogueTail) {
+        static GoalGateView from(GoalEvidencePack pack, int maxChars) {
+            List<NodeView> nodes = pack.nodes().stream().map(node -> NodeView.from(node, maxChars)).toList();
+            List<DialogueView> tail = pack.dialogueTail().stream().map(turn -> DialogueView.from(turn, maxChars)).toList();
+            return new GoalGateView(Objects.requireNonNull(clip(pack.goal(), maxChars)), nodes, tail);
         }
     }
 
     /**
-     * 对话尾一条：role + text。
+     * 单个节点事实。
+     *
+     * @param title     节点标题；可空
+     * @param objective 节点目标；可空
+     * @param status    节点状态
+     * @param target    完成目标；可空
+     * @param claimed   完成目标是否由首个写调用自动记录
+     * @param writable  技能是否有写工具
+     * @param delegated 是否为委派前置节点
+     * @param result    节点结论；可空
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record NodeView(@Nullable String title, @Nullable String objective, String status, @Nullable String target,
+                            boolean claimed, boolean writable, boolean delegated, @Nullable String result) {
+
+        static NodeView from(GoalNodeSummary node, int maxChars) {
+            return new NodeView(node.title(), clip(node.objective(), maxChars), node.status(), node.target(),
+                node.claimed(), node.writable(), node.delegated(), clip(node.result(), maxChars));
+        }
+    }
+
+    /**
+     * 对话一条：角色 + 正文。
      *
      * @param role 发言角色；可空
      * @param text 发言正文；可空
      */
-    private record DialogueTurnView(@Nullable String role, @Nullable String text) {
-        static DialogueTurnView from(DialogueMessage turn, int promptMaxChars) {
-            return new DialogueTurnView(
-                Objects.isNull(turn.getRole()) ? null : turn.getRole().name(),
-                truncateForPrompt(turn.getText(), promptMaxChars)
-            );
+    private record DialogueView(@Nullable String role, @Nullable String text) {
+
+        static DialogueView from(DialogueMessage turn, int maxChars) {
+            return new DialogueView(Objects.isNull(turn.getRole()) ? null : turn.getRole().name(),
+                clip(turn.getText(), maxChars));
         }
     }
 
     /**
-     * 提示用截断，避免塞爆上下文。
+     * 提示用截断。
      *
-     * @param text 原文；可空或空白时按空串返回
+     * @param text 原文；可空
      * @param max  最大字符数
-     * @return 截断后的文本；空白输入为空串
+     * @return 去空白并截断后的文本；空白为 {@code null}
      */
-    private static String truncateForPrompt(@Nullable String text, int max) {
-        if (Strings.isBlank(text)) {
-            return "";
-        }
+    private static @Nullable String clip(@Nullable String text, int max) {
+        return Strings.isBlank(text) ? null : RuntimeUtils.clip(text.trim(), max);
+    }
 
-        String trimmed = text.trim();
-        if (trimmed.length() > max) {
-            return trimmed.substring(0, max);
-        }
-        return trimmed;
+    /**
+     * 最终答复的来源。
+     */
+    private enum ReplySource {
+
+        /**
+         * 直接采用唯一主节点的结论
+         */
+        NODE,
+
+        /**
+         * 模型核验达成并合成
+         */
+        VERIFIED,
+
+        /**
+         * 模型判定目标未达成，答复如实说明
+         */
+        UNMET,
+
+        /**
+         * 模型关闭、失败或无有效输出，拼接节点结论
+         */
+        JOINED,
+
+        /**
+         * 本轮未成功收口（失败、挂起或取消），退回草稿
+         */
+        NOT_SUCCEEDED
     }
 }

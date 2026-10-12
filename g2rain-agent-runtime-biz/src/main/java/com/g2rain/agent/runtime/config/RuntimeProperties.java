@@ -1,10 +1,12 @@
 package com.g2rain.agent.runtime.config;
 
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -59,6 +61,11 @@ public class RuntimeProperties {
      * 平台身份字段（BasePrincipal 内省 − hidden）
      */
     private final Platform platform = new Platform();
+
+    /**
+     * 链路轨迹日志
+     */
+    private final Tracing trace = new Tracing();
 
     /**
      * 模型调用：端点与超时、重试。
@@ -172,11 +179,6 @@ public class RuntimeProperties {
         private int valueSummaryMaxChars = 256;
 
         /**
-         * 补参义务最多存活轮数
-         */
-        private int repairMaxRounds = 8;
-
-        /**
          * 写入 Observation 的业务错误文案上限（字符）
          */
         private int observationErrorMaxChars = 2048;
@@ -193,26 +195,16 @@ public class RuntimeProperties {
     }
 
     /**
-     * GoalGate：开关、LLM 润色与确定性草稿字数门槛。
+     * GoalGate：开关与证据包上限。
      */
     @Getter
     @Setter
     public static class GoalGate {
 
         /**
-         * 是否启用 GoalGate
+         * 是否启用模型核验；关闭时直接拼接节点结论
          */
         private boolean enabled = true;
-
-        /**
-         * 是否允许 LLM 润色
-         */
-        private boolean llmEnabled = true;
-
-        /**
-         * 确定性草稿达到该字数可直接采纳
-         */
-        private int minDeterministicChars = 24;
 
         /**
          * 写入模型提示时单段截断上限
@@ -273,11 +265,6 @@ public class RuntimeProperties {
         private int evidenceEntitiesMaxChars = 2048;
 
         /**
-         * 是否在 flush 后打 [StateSize] 体量日志
-         */
-        private boolean stateSizeLogEnabled = true;
-
-        /**
          * 节点 space 单字段上限（字节）
          */
         private int spaceFieldMaxBytes = 65536;
@@ -296,6 +283,16 @@ public class RuntimeProperties {
          * 已结束任务记录保留条数
          */
         private int recordsMax = 20;
+
+        /**
+         * 每个节点保留的无证据动作条数（内置工具调用、被拒或推迟的调用、用户确认或拒绝）
+         */
+        private int nodeActionsMax = 50;
+
+        /**
+         * 无证据动作说明的字符上限
+         */
+        private int nodeActionMaxChars = 2048;
 
         /**
          * 实体索引上限
@@ -364,5 +361,67 @@ public class RuntimeProperties {
         private Set<String> hidden = new LinkedHashSet<>(Set.of(
             "passportId", "clientId", "sessionType", "adminUser", "adminCompany"
         ));
+    }
+
+    /**
+     * 链路轨迹日志：总开关、开启的环节、大模型调用内容的输出策略。
+     */
+    @Getter
+    @Setter
+    public static class Tracing {
+
+        /**
+         * 总开关
+         */
+        private boolean enabled = true;
+
+        /**
+         * 开启的环节；默认全部
+         */
+        private Set<TraceStage> stages = EnumSet.allOf(TraceStage.class);
+
+        /**
+         * 大模型调用内容
+         */
+        private final ModelTrace model = new ModelTrace();
+
+        /**
+         * 大模型调用内容的输出策略与截断上限。
+         */
+        @Getter
+        @Setter
+        public static class ModelTrace {
+
+            /**
+             * 何时输出完整请求与响应
+             */
+            private Payload payload = Payload.ABNORMAL;
+
+            /**
+             * 完整内容中请求、响应各自的字符数上限
+             */
+            private int maxChars = 4000;
+        }
+
+        /**
+         * 大模型完整请求与响应的输出时机。
+         */
+        public enum Payload {
+
+            /**
+             * 从不输出
+             */
+            NONE,
+
+            /**
+             * 空响应、输出被截断或调用异常时输出
+             */
+            ABNORMAL,
+
+            /**
+             * 每次调用都输出
+             */
+            ALL
+        }
     }
 }

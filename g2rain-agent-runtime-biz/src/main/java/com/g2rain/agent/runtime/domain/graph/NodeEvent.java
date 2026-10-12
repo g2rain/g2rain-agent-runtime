@@ -50,7 +50,7 @@ public enum NodeEvent {
 
     /**
      * 用户拒绝。
-     * <p>审批不通过，关闭当前挂起。</p>
+     * <p>审批不通过：不执行待批操作，节点取消。</p>
      */
     USER_REJECTED,
 

@@ -1,5 +1,11 @@
 package com.g2rain.agent.runtime.domain.decision;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.g2rain.common.utils.Strings;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Arrays;
+import java.util.Locale;
 
 /**
  * Turn（本轮）意图模式：当前请求如何处理任务。
@@ -76,9 +82,10 @@ public enum TurnMode {
     REPLY_ONLY,
 
     /**
-     * 意图不确定。
+     * 待用户确认（意图模型不输出此值）。
      * <p>
-     * 无法可靠判断请求意图；本轮不得推进任务或写操作，只能向用户澄清。
+     * 存在待确认的写操作、用户只输入了文字而未显式确认时，由调度器产生；
+     * 本轮不推进任务，只向用户确认是否继续执行。
      * </p>
      */
     UNCERTAIN;
@@ -93,5 +100,34 @@ public enum TurnMode {
      */
     public boolean skipsTask() {
         return this == UNCERTAIN || this == REPLY_ONLY;
+    }
+
+    /**
+     * 判断该模式是否需要为本轮选择数字员工。
+     *
+     * @return {@code START_FRESH} / {@code START_WITH_CONTEXT} / {@code SWITCH_AGENT} 为 true
+     */
+    public boolean selectsAgent() {
+        return this == START_FRESH || this == START_WITH_CONTEXT || this == SWITCH_AGENT;
+    }
+
+    /**
+     * 宽松解析模型输出的模式名：忽略大小写与首尾空白，无法识别时返回 {@code null}。
+     * <pre>{@code
+     * TurnMode.of(" start_fresh ");  // START_FRESH
+     * TurnMode.of("NEW_TASK");       // null
+     * }</pre>
+     *
+     * @param raw 模型输出的模式名；可空
+     * @return 对应模式；无法识别为 {@code null}
+     */
+    @JsonCreator
+    public static @Nullable TurnMode of(@Nullable String raw) {
+        if (Strings.isBlank(raw)) {
+            return null;
+        }
+
+        String key = raw.trim().toUpperCase(Locale.ROOT);
+        return Arrays.stream(values()).filter(mode -> mode.name().equals(key)).findFirst().orElse(null);
     }
 }

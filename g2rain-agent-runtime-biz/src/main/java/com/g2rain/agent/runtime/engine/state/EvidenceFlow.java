@@ -10,10 +10,14 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
 import com.g2rain.agent.runtime.dto.ToolCallRecordDto;
+import com.g2rain.agent.runtime.engine.state.repo.CallRepository;
+import com.g2rain.agent.runtime.engine.state.repo.PayloadRepository;
 import com.g2rain.agent.runtime.engine.store.StateStore;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.agent.runtime.vo.ToolCallRecordVo;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
@@ -48,9 +52,14 @@ public class EvidenceFlow {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 工具调用记录与大报文落库。
+     * 工具调用记录落库。
      */
-    private final RuntimeStatePersistence persistence;
+    private final CallRepository calls;
+
+    /**
+     * 大报文落库。
+     */
+    private final PayloadRepository payloads;
 
     /**
      * 把节点证据改动刷入 Redis。
@@ -68,14 +77,16 @@ public class EvidenceFlow {
     private final StateStore store;
 
     /**
-     * @param persistence 冷存储
+     * @param calls       工具调用仓储
+     * @param payloads    报文仓储
      * @param flushPlan   热态刷新
      * @param properties  摘要与报文上限
      * @param store       热态
      */
-    public EvidenceFlow(RuntimeStatePersistence persistence, TurnFlushPlan flushPlan, RuntimeProperties properties,
-                        StateStore store) {
-        this.persistence = persistence;
+    public EvidenceFlow(CallRepository calls, PayloadRepository payloads, TurnFlushPlan flushPlan,
+                        RuntimeProperties properties, StateStore store) {
+        this.calls = calls;
+        this.payloads = payloads;
         this.flushPlan = flushPlan;
         this.properties = properties;
         this.store = store;
@@ -89,30 +100,23 @@ public class EvidenceFlow {
      * @return {@link PrewriteResult.Proceed} 才允许真正调工具
      */
     public PrewriteResult prewrite(DefaultNodeScope node, ToolCall call) {
-        String key = liveKey(call);
-        Optional<EvidenceHead> existing = findLiveEvidence(node, call.toolName(), key);
+        Optional<PrewriteResult> existing = existing(node, call);
         if (existing.isPresent()) {
-            EvidenceHead head = existing.get();
-            // 算成功才复用；STARTED / UNKNOWN* → Blocked
-            if (Objects.equals(head.status(), EvidenceStatus.SUCCESS)
-                && !Boolean.FALSE.equals(head.businessOk())) {
-                return new PrewriteResult.Reused(head.evidenceId());
-            }
-            return new PrewriteResult.Blocked(head.evidenceId(), head.status());
+            return existing.get();
         }
-        EvidenceHead started = headOf(node, call, EvidenceStatus.STARTED, null, FailureKind.NONE, null, null);
+        EvidenceHead started = startedOf(node, call);
         node.addEvidence(started);
         // STARTED 必须先落热态再插库，真正回调发生在 Proceed 之后
         flushPlan.apply(node.turn(), false);
         try {
-            persistence.insertStartedCall(startedDto(node, call, started));
+            calls.insertStarted(startedDto(node, call, started));
             return new PrewriteResult.Proceed(started.evidenceId());
         } catch (TransientDataAccessException e) {
             // 库表瞬时失败：热态改 UNKNOWN_PRE_CALL，禁止本轮再调同一写动作
             return unknownPreCall(node, started);
         } catch (DataAccessException e) {
             // 库表永久失败：热态改 CANCELLED，允许换键或稍后重试，不把 STARTED 留成幽灵
-            EvidenceHead cancelled = withStatus(started, EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
+            EvidenceHead cancelled = started.withStatus(EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
             node.addEvidence(cancelled);
             flushPlan.apply(node.turn(), false);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
@@ -122,9 +126,26 @@ public class EvidenceFlow {
     }
 
     /**
+     * 任务内是否已有同一写操作的生效证据：算成功则复用，STARTED / UNKNOWN* 则阻断；不登记新证据。
+     *
+     * @param node 当前节点
+     * @param call 写工具调用
+     * @return 复用或阻断结论；没有生效证据为空
+     */
+    public Optional<PrewriteResult> existing(DefaultNodeScope node, ToolCall call) {
+        return findLiveEvidence(node, call.toolName(), liveKey(call)).map(head -> {
+            boolean succeeded = Objects.equals(head.status(), EvidenceStatus.SUCCESS)
+                && !Boolean.FALSE.equals(head.businessOk());
+            return succeeded
+                ? new PrewriteResult.Reused(head.evidenceId())
+                : new PrewriteResult.Blocked(head.evidenceId(), head.status());
+        });
+    }
+
+    /**
      * 任务内同工具 + 生效幂等键的有效证据（STARTED / 算成功的 SUCCESS / UNKNOWN / UNKNOWN_PRE_CALL）。
      * FAILED / CANCELLED / SUCCESS 且 businessOk=false 不命中，允许重试。
-     * <p>先看本节点，再 HGET {@code task:writes}，不再全图打开 space。</p>
+     * <p>先看本节点，再按写索引 HGET {@code task:writes}，不打开其他节点空间。</p>
      *
      * @param node     当前节点
      * @param toolName 工具名
@@ -153,9 +174,9 @@ public class EvidenceFlow {
         WriteIndexEntry entry = JSON.str2obj(raw, WriteIndexEntry.class);
         if (Objects.nonNull(entry) && entry.live() && Strings.isNotBlank(entry.evidenceId())) {
             return Optional.of(new EvidenceHead(entry.evidenceId(), toolName, SideEffect.WRITE, entry.status(),
-                entry.businessOk(), null, null, FailureKind.NONE, key, null, null, null, null, null, null, 0, ""));
+                entry.businessOk(), null, null, FailureKind.NONE, key, null, null, null, null, null, null, 0, "", null));
         }
-        return persistence.findLiveWrite(taskId, toolName, key);
+        return calls.findLiveWrite(taskId, toolName, key);
     }
 
     /**
@@ -166,13 +187,17 @@ public class EvidenceFlow {
      * @return 阻断预写结果
      */
     private PrewriteResult unknownPreCall(DefaultNodeScope node, EvidenceHead started) {
-        EvidenceHead unknown = withStatus(started, EvidenceStatus.UNKNOWN_PRE_CALL, FailureKind.UNKNOWN, null);
+        EvidenceHead unknown = started.withStatus(EvidenceStatus.UNKNOWN_PRE_CALL, FailureKind.UNKNOWN, null);
         node.addEvidence(unknown);
         flushPlan.apply(node.turn(), false);
         try {
-            persistence.updateCall(unknown, null);
-        } catch (RuntimeException ignored) {
+            calls.update(unknown, null);
+        } catch (RuntimeException e) {
             // 保留 Redis；轮末 persistTurn 按 call_id 再追
+            Trace.at(TraceStage.STATE, "call_update_deferred")
+                .kv("evidenceId", unknown.evidenceId())
+                .kv("error", e.getClass().getSimpleName() + ": " + e.getMessage())
+                .warn();
         }
         return new PrewriteResult.Blocked(started.evidenceId(), EvidenceStatus.UNKNOWN_PRE_CALL);
     }
@@ -213,10 +238,8 @@ public class EvidenceFlow {
             .findFirst()
             .orElseThrow(() -> new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED));
         String entities = Strings.isNotBlank(result.entities()) ? result.entities() : current.entities();
-        EvidenceHead settled = new EvidenceHead(current.evidenceId(), current.toolName(), current.sideEffect(),
-            result.status(), result.businessOk(), result.empty(), result.extractCounts(), result.failureKind(),
-            current.idempotencyKey(), current.argsHash(), current.argsBrief(), clipBrief(result.resultBrief()),
-            result.errorCode(), clipEntities(entities), current.payloadId(), current.round(), current.traceId());
+        EvidenceHead settled = current.withResult(result, clipBrief(result.resultBrief()), clipEntities(entities),
+            detailOf(result));
         persistPayload(node, settled, result);
         persistCallBody(node, settled, result);
     }
@@ -230,8 +253,8 @@ public class EvidenceFlow {
      * @return 新证据 id
      */
     public String record(DefaultNodeScope node, ToolCall call, ToolResult result) {
-        EvidenceHead head = headOf(node, call, result.status(), result, result.failureKind(), result.errorCode(),
-            result.resultBrief());
+        EvidenceHead head = startedOf(node, call)
+            .withResult(result, clipBrief(result.resultBrief()), clipEntities(result.entities()), detailOf(result));
         persistPayload(node, head, result);
         try {
             String body = json(result.payload());
@@ -241,11 +264,12 @@ public class EvidenceFlow {
             dto.setResponse(oversize ? null : body);
             dto.setResultSummary(head.resultBrief());
             dto.setErrorCode(result.errorCode());
-            persistence.insertStartedCall(dto);
+            dto.setDurationMs(result.durationMs());
+            calls.insertStarted(dto);
             if (oversize) {
                 String taskId = node.turn().task().map(TaskMetadata::getTaskId).orElse(null);
                 if (Strings.isNotBlank(taskId) && Strings.isNotBlank(body)) {
-                    persistence.saveArtifact(head.evidenceId(), taskId, node.nodeId(), head.toolName(),
+                    payloads.saveArtifact(head.evidenceId(), taskId, node.nodeId(), head.toolName(),
                         node.turn().traceId(), body);
                 }
             }
@@ -262,10 +286,10 @@ public class EvidenceFlow {
      * @return 更新后的 CANCELLED 摘要
      */
     public EvidenceHead cancelPreCall(EvidenceHead head) {
-        ToolCallRecordVo row = persistence.findCall(head.evidenceId());
-        EvidenceHead cancelled = withStatus(head, EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
+        ToolCallRecordVo row = calls.find(head.evidenceId());
+        EvidenceHead cancelled = head.withStatus(EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
         if (Objects.nonNull(row)) {
-            persistence.updateCall(head.evidenceId(), EvidenceStatus.CANCELLED.name(), row.getResponse(),
+            calls.update(head.evidenceId(), EvidenceStatus.CANCELLED.name(), row.getResponse(),
                 row.getResultSummary(), row.getErrorCode());
         }
         return cancelled;
@@ -282,14 +306,11 @@ public class EvidenceFlow {
      */
     public void applyOutcome(DefaultNodeScope node, EvidenceHead current, EvidenceStatus status,
                              @Nullable Boolean businessOk, FailureKind kind) {
-        EvidenceHead next = new EvidenceHead(current.evidenceId(), current.toolName(), current.sideEffect(), status,
-            businessOk, current.empty(), current.extractCounts(), kind, current.idempotencyKey(), current.argsHash(),
-            current.argsBrief(), current.resultBrief(), current.errorCode(), current.entities(), current.payloadId(),
-            current.round(), current.traceId());
+        EvidenceHead next = current.withOutcome(status, businessOk, kind);
         node.addEvidence(next);
         flushPlan.apply(node.turn(), false);
-        ToolCallRecordVo row = persistence.findCall(current.evidenceId());
-        persistence.updateCall(next, Objects.isNull(row) ? null : row.getResponse());
+        ToolCallRecordVo row = calls.find(current.evidenceId());
+        calls.update(next, Objects.isNull(row) ? null : row.getResponse());
     }
 
     /**
@@ -299,35 +320,37 @@ public class EvidenceFlow {
      * @return 请求体；库中无记录为 {@code null}
      */
     public @Nullable String requestJson(String evidenceId) {
-        ToolCallRecordVo row = persistence.findCall(evidenceId);
+        ToolCallRecordVo row = calls.find(evidenceId);
         return Objects.isNull(row) ? null : row.getRequest();
     }
 
     /**
-     * 按本次调用拼一条证据头。
+     * 按本次调用拼一条 STARTED 证据头：新证据 id、入参摘要与定位信息，尚无结果。
      *
-     * @param node        当前节点
-     * @param call        工具调用
-     * @param status      证据状态
-     * @param result      工具结果；可空
-     * @param failureKind 失败分类
-     * @param errorCode   错误码；可空
-     * @param resultBrief 结果摘要；可空
+     * @param node 当前节点
+     * @param call 工具调用
      * @return 新证据头
      */
-    private EvidenceHead headOf(DefaultNodeScope node, ToolCall call, EvidenceStatus status,
-                                @Nullable ToolResult result, FailureKind failureKind, @Nullable String errorCode,
-                                @Nullable String resultBrief) {
-        String evidenceId = RuntimeUtils.uuid();
-        String argsHash = RuntimeUtils.argsHash(call.args());
-        String argsBrief = ArgsBrief.of(call.args(), call.contract(),
-            properties.getReact().getBriefMaxChars());
-        return new EvidenceHead(evidenceId, call.toolName(), call.sideEffect(), status,
-            Objects.isNull(result) ? null : result.businessOk(), Objects.isNull(result) ? null : result.empty(),
-            Objects.isNull(result) ? null : result.extractCounts(), failureKind, liveKey(call), argsHash, argsBrief,
-            clipBrief(resultBrief), errorCode,
-            clipEntities(Objects.isNull(result) ? null : result.entities()), null, node.rounds(),
-            node.turn().traceId());
+    private EvidenceHead startedOf(DefaultNodeScope node, ToolCall call) {
+        String argsBrief = ArgsBrief.of(call.args(), call.contract(), properties.getReact().getBriefMaxChars());
+        return new EvidenceHead(RuntimeUtils.uuid(), call.toolName(), call.sideEffect(), EvidenceStatus.STARTED,
+            null, null, null, FailureKind.NONE, liveKey(call), RuntimeUtils.argsHash(call.args()), argsBrief,
+            null, null, null, null, node.rounds(), node.turn().traceId(), null);
+    }
+
+    /**
+     * 未成功调用的完整说明：执行失败或业务失败时取观测说明，按观测错误上限裁剪；成功为 {@code null}。
+     *
+     * @param result 工具结果
+     * @return 完整说明；成功为 {@code null}
+     */
+    private @Nullable String detailOf(ToolResult result) {
+        boolean succeeded = result.status() == EvidenceStatus.SUCCESS && !Boolean.FALSE.equals(result.businessOk());
+        if (succeeded) {
+            return null;
+        }
+
+        return RuntimeUtils.clip(result.resultBrief(), properties.getReact().getObservationErrorMaxChars());
     }
 
     /**
@@ -337,7 +360,7 @@ public class EvidenceFlow {
      * @return 裁剪后文本；空白入参原样返回
      */
     private @Nullable String clipBrief(@Nullable String text) {
-        return clipChars(text, properties.getReact().getBriefMaxChars());
+        return RuntimeUtils.clip(text, properties.getReact().getBriefMaxChars());
     }
 
     /**
@@ -347,37 +370,7 @@ public class EvidenceFlow {
      * @return 裁剪后文本；空白入参原样返回
      */
     private @Nullable String clipEntities(@Nullable String text) {
-        return clipChars(text, properties.getState().getEvidenceEntitiesMaxChars());
-    }
-
-    /**
-     * 按字符数截断文本。
-     *
-     * @param text     原文；可空
-     * @param maxChars 最大字符数；小于等于 0 不截
-     * @return 截断结果；空白入参原样返回
-     */
-    private static @Nullable String clipChars(@Nullable String text, int maxChars) {
-        if (Strings.isBlank(text) || maxChars <= 0 || text.length() <= maxChars) {
-            return text;
-        }
-        return text.substring(0, maxChars);
-    }
-
-    /**
-     * 复制证据头并改状态、失败分类与错误码。
-     *
-     * @param head   原证据
-     * @param status 新状态
-     * @param kind   失败分类
-     * @param error  错误码；可空
-     * @return 新证据头
-     */
-    @SuppressWarnings("SameParameterValue")
-    private static EvidenceHead withStatus(EvidenceHead head, EvidenceStatus status, FailureKind kind, @Nullable String error) {
-        return new EvidenceHead(head.evidenceId(), head.toolName(), head.sideEffect(), status, head.businessOk(),
-            head.empty(), head.extractCounts(), kind, head.idempotencyKey(), head.argsHash(), head.argsBrief(),
-            head.resultBrief(), error, head.entities(), head.payloadId(), head.round(), head.traceId());
+        return RuntimeUtils.clip(text, properties.getState().getEvidenceEntitiesMaxChars());
     }
 
     /**
@@ -404,6 +397,7 @@ public class EvidenceFlow {
         dto.setRequest(json(call.args()));
         dto.setResultSummary(head.resultBrief());
         dto.setErrorCode(head.errorCode());
+        dto.setErrorMessage(head.detail());
         dto.setEmptyResult(Boolean.TRUE.equals(head.empty()) ? (byte) 1 : (byte) 0);
         dto.setFailureKind(head.failureKind().name());
         if (Objects.nonNull(head.businessOk())) {
@@ -415,20 +409,6 @@ public class EvidenceFlow {
     }
 
     /**
-     * 复制证据头并改报文 id。
-     *
-     * @param head      原证据
-     * @param payloadId 报文 id；可空表示内联
-     * @return 新证据头
-     */
-    private static EvidenceHead withPayloadId(EvidenceHead head, @Nullable String payloadId) {
-        return new EvidenceHead(head.evidenceId(), head.toolName(), head.sideEffect(), head.status(),
-            head.businessOk(), head.empty(), head.extractCounts(), head.failureKind(), head.idempotencyKey(),
-            head.argsHash(), head.argsBrief(), head.resultBrief(), head.errorCode(), head.entities(), payloadId,
-            head.round(), head.traceId());
-    }
-
-    /**
      * Redis 始终写完整报文；超限时 EvidenceHead.payloadId = evidenceId。
      *
      * @param node   当前节点
@@ -437,7 +417,7 @@ public class EvidenceFlow {
      */
     private void persistPayload(DefaultNodeScope node, EvidenceHead head, ToolResult result) {
         String body = json(result.payload());
-        EvidenceHead stored = oversized(body) ? withPayloadId(head, head.evidenceId()) : head;
+        EvidenceHead stored = oversized(body) ? head.withPayloadId(head.evidenceId()) : head;
         node.addEvidence(stored);
         node.turn().putPayload(stored.evidenceId(), result.payload());
         flushPlan.apply(node.turn(), false);
@@ -453,15 +433,15 @@ public class EvidenceFlow {
     private void persistCallBody(DefaultNodeScope node, EvidenceHead head, ToolResult result) {
         String body = json(result.payload());
         if (!oversized(body)) {
-            persistence.updateCall(head, body);
+            calls.update(head, body, result.durationMs());
             return;
         }
-        persistence.updateCall(head, null);
+        calls.update(head, null, result.durationMs());
         String taskId = node.turn().task().map(TaskMetadata::getTaskId).orElse(null);
         if (Strings.isBlank(taskId) || Strings.isBlank(body)) {
             return;
         }
-        persistence.saveArtifact(head.evidenceId(), taskId, node.nodeId(), head.toolName(),
+        payloads.saveArtifact(head.evidenceId(), taskId, node.nodeId(), head.toolName(),
             node.turn().traceId(), body);
     }
 

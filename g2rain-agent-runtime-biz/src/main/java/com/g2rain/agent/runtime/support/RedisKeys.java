@@ -53,11 +53,6 @@ public enum RedisKeys {
     ENTITIES("g2rain:rt:{%s:%s}:entities"),
 
     /**
-     * 敏感值明文：与任务记忆中的脱敏占位对应，按需解密。
-     */
-    SECRET("g2rain:rt:{%s:%s}:secret:%s"),
-
-    /**
      * 任务元数据 Hash：粗状态、当前节点、Agent 等哨兵字段。
      */
     METADATA("g2rain:rt:{%s:%s}:task:%s:metadata"),

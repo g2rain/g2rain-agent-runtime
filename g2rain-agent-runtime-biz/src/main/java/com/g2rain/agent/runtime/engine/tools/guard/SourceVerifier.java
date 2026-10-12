@@ -9,6 +9,7 @@ import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -33,10 +34,19 @@ import java.util.Optional;
 @Component
 public class SourceVerifier {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
+    /**
+     * 证据读取：校验 EVIDENCE 来源的值。
+     */
     private final EvidenceReader evidenceReader;
 
+    /**
+     * 运行时配置：对话窗口上限。
+     */
     private final RuntimeProperties properties;
 
     /**
@@ -127,14 +137,14 @@ public class SourceVerifier {
     }
 
     /**
-     * FOLLOW_UP 检查点的 expectedFields 是否已直接认定该参数路径。
+     * 本轮已回答的 FOLLOW_UP 检查点的 expectedFields 是否已直接认定该参数路径。
      *
      * @param ctx       当前工具执行上下文
      * @param paramPath 参数路径
-     * @return 当前检查点为追问且字段列表含该路径或叶子键
+     * @return 本轮回答的检查点为追问且字段列表含该路径或叶子键
      */
     public boolean followUpAccepted(ToolExecutionContext ctx, String paramPath) {
-        Optional<TaskCheckpoint> checkpoint = ctx.getFrame().turn().checkpoint();
+        Optional<TaskCheckpoint> checkpoint = ctx.getFrame().turn().resumed();
         if (checkpoint.isEmpty() || checkpoint.get().getType() != CheckpointType.FOLLOW_UP) {
             return false;
         }
@@ -144,8 +154,27 @@ public class SourceVerifier {
             return false;
         }
 
-        String leaf = leafKey(paramPath);
+        String leaf = RuntimeUtils.leafKey(paramPath);
         return fields.contains(paramPath) || fields.contains(leaf);
+    }
+
+    /**
+     * 入参值是否等于任务前情中某个实体的 id：模型引用之前任务里的对象（如"刚建的空间"）时据此认定来源。
+     *
+     * @param ctx    当前工具执行上下文
+     * @param argVal 待比对的入参值；可空
+     * @return 存在 id 相等的前情实体
+     */
+    public boolean matchesPriorId(ToolExecutionContext ctx, @Nullable JsonNode argVal) {
+        if (!JSON.hasValue(argVal) || !argVal.isValueNode()) {
+            return false;
+        }
+
+        String text = argVal.asString().trim();
+        return ctx.getFrame().turn().prior()
+            .map(prior -> prior.entities().keySet().stream()
+                .anyMatch(key -> key.indexOf(':') > 0 && text.equals(key.substring(key.indexOf(':') + 1))))
+            .orElse(false);
     }
 
     /**
@@ -232,9 +261,15 @@ public class SourceVerifier {
             return false;
         }
 
-        return ctx.getFrame().turn().platform().matches(leafKey(key), expected);
+        return ctx.getFrame().turn().platform().matches(RuntimeUtils.leafKey(key), expected);
     }
 
+    /**
+     * 归一化文本用于宽松比对：NFKC 归一、全角空格转半角、去除空白并转小写。
+     *
+     * @param raw 原文；可空
+     * @return 归一化文本；空白时为空串
+     */
     static String normalizeText(@Nullable String raw) {
         if (Strings.isBlank(raw)) {
             return "";
@@ -244,20 +279,5 @@ public class SourceVerifier {
         return str.replace('\u3000', ' ')
             .replaceAll("\\s+", "")
             .toLowerCase(Locale.ROOT);
-    }
-
-    /**
-     * 取路径最后一段。
-     *
-     * @param path 字段路径
-     * @return 叶子键；空白路径为空串
-     */
-    private static String leafKey(String path) {
-        if (Strings.isBlank(path)) {
-            return "";
-        }
-
-        int dot = path.lastIndexOf('.');
-        return dot < 0 ? path.trim() : path.substring(dot + 1).trim();
     }
 }

@@ -1,7 +1,6 @@
 package com.g2rain.agent.runtime.domain.decision;
 
 
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import lombok.Getter;
@@ -45,7 +44,7 @@ public final class IntentResult {
     private @Nullable String goalSummary;
 
     /**
-     * 分类器选中的 Agent 主键；收口时若不在候选列表中会被清空。
+     * 分类器选中的 Agent 主键；收口时非选人模式或不在本轮候选内会被清空。
      */
     private @Nullable Long agentId;
 
@@ -60,46 +59,24 @@ public final class IntentResult {
     private @Nullable String reason;
 
     /**
-     * 规范化并校验分类结果，使它可以安全地交给入口路由。
+     * 规范化模型结论，使其可以安全地交给调度器校正。
      *
-     * <p>方法会清除文本首尾空白；不需要 Agent 的模式会清除 {@code agentId}；不确定模式
-     * 会补充默认追问文案；当候选列表可用时，还会拒绝不存在的 Agent id。方法原地修改并
-     * 返回当前实例，便于在构造模型输出后立即收口。</p>
+     * <p>清除文本首尾空白；任务前情开关由模式推导；只有选人模式保留 {@code agentId}，
+     * 且必须来自本轮候选，避免启动不存在或不在候选内的 Agent。方法原地修改并返回当前实例。</p>
      *
-     * @param candidates Agent 候选列表；可空/空则跳过 id 校验
+     * @param candidates 本轮 Agent 候选；可空
      * @return this（便于链式调用）
      */
     public IntentResult complete(@Nullable List<AgentSelection> candidates) {
-        // 只有「带前情再开」才允许沿用任务前情，其它模式一律关掉以免策略打架
+        // 只有「带前情再开」才沿用任务前情
         useContinuity = mode == TurnMode.START_WITH_CONTEXT;
-
-        if (mode == TurnMode.UNCERTAIN) {
-            agentId = null;
-            if (Strings.isBlank(userReply)) {
-                userReply = RuntimeMessage.ROUTE_UNCERTAIN.text();
-            }
-        }
-
-        // 续跑、改题、取消、仅回复都不重新选人，清掉误带的 agentId
-        if (mode == TurnMode.CONTINUE_TASK || mode == TurnMode.REPLACE_TASK || mode == TurnMode.CANCEL_TASK
-            || mode == TurnMode.REPLY_ONLY) {
-            agentId = null;
-        }
-
         goalSummary = Strings.blankToNull(goalSummary);
         userReply = Strings.blankToNull(userReply);
         reason = Strings.blankToNull(reason);
 
-        if (Objects.isNull(agentId) || Collections.isEmpty(candidates)) {
-            return this;
-        }
-
-        boolean allowed = candidates.stream()
-            .map(AgentSelection::getAgentId)
-            .anyMatch(id -> Objects.equals(agentId, id));
-
-        // 不在候选集合里的 id 不能当路由依据，避免启动不存在的 Agent
-        if (!allowed) {
+        boolean listed = Objects.nonNull(agentId) && Collections.isNotEmpty(candidates)
+            && candidates.stream().anyMatch(candidate -> Objects.equals(agentId, candidate.getAgentId()));
+        if (Objects.isNull(mode) || !mode.selectsAgent() || !listed) {
             agentId = null;
         }
 

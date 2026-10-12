@@ -9,7 +9,7 @@ import tools.jackson.databind.JsonNode;
 /**
  * 工具业务成功条件：对响应体某路径做算子判定。
  *
- * <p>与 {@link ResponseContract.SuccessCondition} 同一套 {@link SuccessOp}；未命中则业务成败留空，
+ * <p>与运行时成功判定同一套 {@link SuccessOp}；未命中则业务成败留空，
  * 由上层按副作用策略处理。</p>
  *
  * @author alpha

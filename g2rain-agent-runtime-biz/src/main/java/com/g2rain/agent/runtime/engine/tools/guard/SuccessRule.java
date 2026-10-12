@@ -1,7 +1,7 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ResponseContract;
+import com.g2rain.agent.runtime.domain.hydrate.SuccessOp;
 import com.g2rain.agent.runtime.domain.hydrate.SuccessSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.common.json.JsonCodec;
@@ -21,6 +21,9 @@ import java.util.Objects;
  */
 public final class SuccessRule {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
@@ -50,7 +53,7 @@ public final class SuccessRule {
      * @return 业务成功/失败；未配置为 {@code null}
      */
     public static @Nullable Boolean businessOk(@Nullable ToolSpec contract, @Nullable JsonNode body) {
-        ResponseContract.SuccessCondition condition = conditionOf(contract);
+        Condition condition = conditionOf(contract);
         if (Objects.isNull(condition)) {
             return null;
         }
@@ -68,7 +71,7 @@ public final class SuccessRule {
      * @param contract 工具契约；可空
      * @return 成功条件；未配 path 为 {@code null}
      */
-    public static ResponseContract.@Nullable SuccessCondition conditionOf(@Nullable ToolSpec contract) {
+    public static @Nullable Condition conditionOf(@Nullable ToolSpec contract) {
         if (Objects.isNull(contract)) {
             return null;
         }
@@ -78,7 +81,7 @@ public final class SuccessRule {
             return null;
         }
 
-        return new ResponseContract.SuccessCondition(
+        return new Condition(
             success.getPath().trim(),
             success.getOp(),
             success.getValue()
@@ -92,8 +95,9 @@ public final class SuccessRule {
      * @param condition 契约成功条件
      * @return 条件成立为 {@code true}
      */
-    public static boolean evalSuccess(JsonNode body, ResponseContract.SuccessCondition condition) {
+    public static boolean evalSuccess(JsonNode body, Condition condition) {
         JsonNode actual = JSON.lookupNode(body, condition.path());
+        // 按算子比较；IN / NOT_IN 的期望值须为数组，非数组时 IN 不成立、NOT_IN 成立
         switch (condition.op()) {
             case EQ -> {
                 return looseEquals(actual, condition.value());
@@ -137,6 +141,13 @@ public final class SuccessRule {
         }
     }
 
+    /**
+     * 宽松相等：节点相等，或两边都能转成数值且数值相等，或文本相等。
+     *
+     * @param actual   实际值；可空
+     * @param expected 期望值；可空
+     * @return 视为相等时为 {@code true}
+     */
     static boolean looseEquals(@Nullable JsonNode actual, @Nullable JsonNode expected) {
         if (Objects.equals(actual, expected)) {
             return true;
@@ -177,6 +188,12 @@ public final class SuccessRule {
         return null;
     }
 
+    /**
+     * 判断值是否为真：布尔取本值，数字非零，字符串非空且不为 {@code 0} / {@code false}，容器非空，其余标量为真。
+     *
+     * @param node JSON 节点
+     * @return 为真时为 {@code true}
+     */
     static boolean isTruthy(JsonNode node) {
         if (!JSON.hasValue(node)) {
             return false;
@@ -204,5 +221,16 @@ public final class SuccessRule {
         }
 
         return true;
+    }
+
+    /**
+     * Condition（成功条件）：对响应体某路径做算子判定。
+     *
+     * @param path  点分路径，如 {@code status}
+     * @param op    比较算子（与技能契约 {@link SuccessOp} 同一套）
+     * @param value 期望值（IN/NOT_IN 时常为集合）；可空
+     */
+    public record Condition(String path, SuccessOp op, @Nullable JsonNode value) {
+
     }
 }

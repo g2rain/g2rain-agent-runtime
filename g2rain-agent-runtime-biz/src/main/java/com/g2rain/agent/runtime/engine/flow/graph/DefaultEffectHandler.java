@@ -75,7 +75,7 @@ public class DefaultEffectHandler implements EffectHandler {
             return;
         }
 
-        log.info("[EffectHandler] apply taskId={} effects={}",
+        log.debug("[EffectHandler] apply taskId={} effects={}",
             frame.taskId(), effects
         );
 
@@ -161,6 +161,12 @@ public class DefaultEffectHandler implements EffectHandler {
         return parts.isEmpty() ? null : String.join("，", parts);
     }
 
+    /**
+     * 参数是否取自平台字段（{@code from: platform.*}）；平台字段不进审批摘要。
+     *
+     * @param arg 参数契约；可空
+     * @return 平台字段时为 {@code true}
+     */
     private static boolean isPlatform(@Nullable ArgSpec arg) {
         return Objects.nonNull(arg) && Objects.nonNull(arg.getValueRef())
             && arg.getValueRef().bag() == ValueRef.Bag.PLATFORM;

@@ -56,12 +56,17 @@ public class ChatMessagePo extends BasePo {
     private String channel;
 
     /**
+     * 本轮选用的模型名
+     */
+    private String model;
+
+    /**
      * 角色[USER, AGENT]
      */
     private String role;
 
     /**
-     * 消息类型[USER_TEXT, AGENT_REPLY, CONFIRM_CARD]
+     * 消息类型[USER_TEXT, AGENT_REPLY]
      */
     private String messageType;
 

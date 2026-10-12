@@ -79,6 +79,7 @@ public final class JsonSchemaSupport {
             if (Objects.isNull(value) || value.isNull()) {
                 return true;
             }
+
             return value.isString() && Strings.isBlank(value.asString());
         }).toList();
     }

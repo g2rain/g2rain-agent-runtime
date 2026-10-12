@@ -2,21 +2,22 @@ package com.g2rain.agent.runtime.engine.state;
 
 
 import com.g2rain.agent.runtime.engine.store.FlushOp;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 按 key 类型汇总本轮 flush 写入体量，供运维判断是否做大报文压缩等后续项。
+ * 按 key 类型汇总本轮 flush 写入体量，输出为 {@code [Trace][STATE] size} 轨迹，供运维判断是否做大报文压缩等后续项。
+ *
+ * <p>会话与任务 ID 由本轮轨迹作用域写入 MDC，不在事件字段中重复。</p>
  *
  * @author alpha
  * @since 2026/10/4
  */
-@Slf4j
 public final class StateSizeProbe {
 
     /**
@@ -27,14 +28,12 @@ public final class StateSizeProbe {
     }
 
     /**
-     * 统计并打日志：payload / evidence / space / prior / writes。
+     * 统计并输出轨迹：payload / evidence / space / prior / writes；无写入时不输出。
      *
-     * @param conversationId 会话 id；可空
-     * @param taskId         任务 id；可空
-     * @param ops            本轮 flush 改动
+     * @param ops 本轮 flush 改动
      */
-    public static void record(@Nullable String conversationId, @Nullable String taskId, List<FlushOp> ops) {
-        if (!log.isInfoEnabled() || Collections.isEmpty(ops)) {
+    public static void record(List<FlushOp> ops) {
+        if (!Trace.enabled(TraceStage.STATE) || Collections.isEmpty(ops)) {
             return;
         }
         long payload = 0L;
@@ -42,8 +41,9 @@ public final class StateSizeProbe {
         long space = 0L;
         long prior = 0L;
         long writes = 0L;
+        // 只统计写操作，按 Redis key 后缀归类累计字节数
         for (FlushOp op : ops) {
-            if (skip(op.op())) {
+            if (!op.op().writes()) {
                 continue;
             }
             long n = bytes(op);
@@ -63,18 +63,14 @@ public final class StateSizeProbe {
         if (payload == 0L && evidence == 0L && space == 0L && prior == 0L && writes == 0L) {
             return;
         }
-        log.info("[StateSize] conversationId={} taskId={} payloadBytes={} evidenceBytes={} spaceBytes={} priorBytes={} writesBytes={} ops={}",
-            conversationId, taskId, payload, evidence, space, prior, writes, ops.size());
-    }
-
-    /**
-     * 删除与仅续期不计入写入体量。
-     *
-     * @param op flush 操作名；可空
-     * @return 是否跳过统计
-     */
-    private static boolean skip(@Nullable String op) {
-        return "DEL".equals(op) || "HDEL".equals(op) || "EXPIRE".equals(op);
+        Trace.at(TraceStage.STATE, "size")
+            .kv("payloadBytes", payload)
+            .kv("evidenceBytes", evidence)
+            .kv("spaceBytes", space)
+            .kv("priorBytes", prior)
+            .kv("writesBytes", writes)
+            .kv("opCount", ops.size())
+            .info();
     }
 
     /**

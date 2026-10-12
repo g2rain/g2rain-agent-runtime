@@ -1,7 +1,9 @@
 package com.g2rain.agent.runtime.support;
 
 
+import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
+import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
@@ -62,5 +64,65 @@ public final class ToolCallbacks {
             .filter(o -> toolName.equals(o.getToolDefinition().name()))
             .findFirst()
             .orElse(null);
+    }
+
+    /**
+     * 是否为指定动作的内置工具。
+     *
+     * <pre>{@code
+     * ToolCallbacks.is(callback, BuiltinToolAction.APPROVAL); // 申请审批工具为 true
+     * }</pre>
+     *
+     * @param callback 工具回调；可空
+     * @param action   内置工具动作
+     * @return 是该动作的内置工具时为 {@code true}
+     */
+    public static boolean is(@Nullable ToolCallback callback, BuiltinToolAction action) {
+        return callback instanceof BuiltinToolCallback builtin && builtin.action() == action;
+    }
+
+    /**
+     * 是否为指定类别的内置工具。
+     *
+     * <pre>{@code
+     * ToolCallbacks.is(callback, BuiltinToolCategory.CONTROL); // 控流类内置工具为 true
+     * }</pre>
+     *
+     * @param callback 工具回调；可空
+     * @param category 内置工具类别
+     * @return 是该类别的内置工具时为 {@code true}
+     */
+    public static boolean is(@Nullable ToolCallback callback, BuiltinToolCategory category) {
+        return callback instanceof BuiltinToolCallback builtin && builtin.category() == category;
+    }
+
+    /**
+     * 工具表中是否有指定动作的内置工具。
+     *
+     * <pre>{@code
+     * ToolCallbacks.offers(tools, BuiltinToolAction.DELEGATE); // 本轮提供了委派工具为 true
+     * }</pre>
+     *
+     * @param tools  工具表
+     * @param action 内置工具动作
+     * @return 有该动作的内置工具时为 {@code true}
+     */
+    public static boolean offers(List<ToolCallback> tools, BuiltinToolAction action) {
+        return tools.stream().anyMatch(tool -> is(tool, action));
+    }
+
+    /**
+     * 去掉指定动作的内置工具，其余保持原顺序。
+     *
+     * <pre>{@code
+     * ToolCallbacks.without(tools, BuiltinToolAction.APPROVAL); // 不含申请审批工具
+     * }</pre>
+     *
+     * @param tools  工具表
+     * @param action 内置工具动作
+     * @return 去掉后的工具表
+     */
+    public static List<ToolCallback> without(List<ToolCallback> tools, BuiltinToolAction action) {
+        return tools.stream().filter(tool -> !is(tool, action)).toList();
     }
 }

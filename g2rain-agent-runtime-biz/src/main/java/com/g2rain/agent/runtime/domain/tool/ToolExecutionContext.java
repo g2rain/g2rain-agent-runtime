@@ -219,23 +219,37 @@ public final class ToolExecutionContext {
     }
 
     /**
-     * 契约声明的目标业务工具名（空白归一为 null）。
+     * 节点完成目标：要完成的写工具注册名（空白归一为 null）。
      *
      * @return 目标工具名；可空
      */
-    public @Nullable String getTargetToolName() {
-        SkillContract contract = contract();
-        return Objects.isNull(contract) ? null : Strings.blankToNull(contract.getTarget());
+    public @Nullable String getTarget() {
+        return Strings.blankToNull(node.getTarget());
     }
 
     /**
-     * 契约声明的完成条件文案（空白归一为 null）。
+     * 节点尚无完成目标时，把本次实际发起的写调用记为目标；之后 finish 须等它成功。
      *
-     * @return 完成条件；可空
+     * @param toolName 本次调用的工具注册名
+     * @return 本次记为目标时为 {@code true}
      */
-    public @Nullable String getDoneWhen() {
-        SkillContract contract = contract();
-        return Objects.isNull(contract) ? null : Strings.blankToNull(contract.getDoneWhen());
+    public boolean claimTarget(String toolName) {
+        if (Strings.isNotBlank(node.getTarget()) || Objects.isNull(skill) || !skill.writeTools().contains(toolName)) {
+            return false;
+        }
+
+        node.setTarget(toolName);
+        node.setTargetClaimed(true);
+        return true;
+    }
+
+    /**
+     * 当前技能是否有可作为完成目标的写工具。
+     *
+     * @return 有写工具时为 {@code true}
+     */
+    public boolean hasWriteTools() {
+        return Objects.nonNull(skill) && !skill.writeTools().isEmpty();
     }
 
     /**

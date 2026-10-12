@@ -1,6 +1,5 @@
 package com.g2rain.agent.runtime.engine.flow.graph;
 
-import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.NodeEvent;
@@ -8,8 +7,6 @@ import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.VerifySpec;
 import com.g2rain.agent.runtime.domain.react.ChatTurn;
 import com.g2rain.agent.runtime.domain.react.ReActLoopContext;
 import com.g2rain.agent.runtime.domain.react.ReActLoopResult;
@@ -18,9 +15,9 @@ import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
+import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -32,33 +29,27 @@ import com.g2rain.agent.runtime.engine.state.DefaultNodeScope;
 import com.g2rain.agent.runtime.engine.state.EvidenceFlow;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
+import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
-import com.g2rain.agent.runtime.support.mcp.McpToolCallbackProvider;
-import com.g2rain.agent.runtime.support.tool.BuiltinToolCallbackProvider;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceScope;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
-import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.support.ChatMessages;
-import io.modelcontextprotocol.client.McpSyncClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -76,24 +67,19 @@ import java.util.Objects;
 public class DefaultNodeRunner implements NodeRunner {
 
     /**
-     * 解析待批参数哈希与 verify 入参时使用的 JSON 编解码器。
-     */
-    private static final JsonCodec JSON = JsonCodecFactory.instance();
-
-    /**
      * 节点状态机：选中与循环结果后的状态迁移。
      */
     private final NodeStateMachine nodeStateMachine;
 
     /**
-     * 内置工具回调提供方。
+     * 节点工具集：内置工具筛选 + 技能 MCP 工具。
      */
-    private final BuiltinToolCallbackProvider builtinTools;
+    private final NodeToolset nodeToolset;
 
     /**
-     * MCP 同步客户端：按技能声明装配外部工具。
+     * 未知写收口：verify 工具回查，调不了则 VERIFY 挂起。
      */
-    private final McpSyncClient mcpSyncClient;
+    private final WriteVerifier writeVerifier;
 
     /**
      * 节点内循环：思考 → 调工具 → 观察，直到完成/挂起/失败。
@@ -111,14 +97,31 @@ public class DefaultNodeRunner implements NodeRunner {
     private final RuntimeStateFacade runtimeStateFacade;
 
     /**
-     * 证据流：未知写工具回查与用户确认收口。
+     * 证据流：用户确认后的证据收口。
      */
     private final EvidenceFlow evidenceFlow;
 
     /**
-     * {@code mcp.max-retries}：listTools 建连失败额外重试。
+     * 在节点轨迹作用域内跑单个节点：节点内所有日志带节点 ID，并输出开始与结束轨迹。
+     *
+     * @param node  要跑的节点
+     * @param frame 当前图执行帧
+     * @return 本拍副作用列表
      */
-    private final RuntimeProperties runtimeProperties;
+    @Override
+    public List<GraphEffect> run(TaskNode node, GraphFrame frame) {
+        try (TraceScope ignored = TraceScope.node(node.getNodeId())) {
+            long start = System.nanoTime();
+            Trace.at(TraceStage.NODE, "node_start").kv("skillKey", node.getSkillKey()).kv("action", frame.action()).info();
+            List<GraphEffect> effects = execute(node, frame);
+            Trace.at(TraceStage.NODE, "node_end")
+                .kv("status", node.getStatus())
+                .kv("errorCode", node.getErrorCode())
+                .kv("durationMs", (System.nanoTime() - start) / 1_000_000L)
+                .info();
+            return effects;
+        }
+    }
 
     /**
      * 跑单个节点：open → 发开始事件 → 组历史与工具 → 跑节点内循环 → 按结果产副作用。
@@ -135,12 +138,8 @@ public class DefaultNodeRunner implements NodeRunner {
      * @param frame 当前图执行帧
      * @return 本拍副作用列表
      */
-    @Override
-    public List<GraphEffect> run(TaskNode node, GraphFrame frame) {
+    private List<GraphEffect> execute(TaskNode node, GraphFrame frame) {
         List<GraphEffect> effects = new ArrayList<>();
-        log.info("[NodeRunner] start nodeId={} skillKey={} action={} taskId={}",
-            node.getNodeId(), node.getSkillKey(), frame.action(), frame.taskId()
-        );
 
         // 先打开节点空间并修未收口证据，后续循环都挂在这份 NodeScope 上
         Skill skill = frame.findSkill(node.getSkillKey());
@@ -153,7 +152,6 @@ public class DefaultNodeRunner implements NodeRunner {
             ProviderNodes.copySharedOutputs(frame.turn(), nodeScope, skill);
             node.setStatus(NodeStatus.SKIPPED);
             frame.turn().mark(node.getNodeId(), NodeStatus.SKIPPED, null, null);
-            effects.add(new GraphEffect.ClearSuspend(node.getNodeId()));
             return effects;
         }
 
@@ -164,15 +162,17 @@ public class DefaultNodeRunner implements NodeRunner {
         frame.turn().mark(node.getNodeId(), node.getStatus(), null, null);
 
         // 历史与可见工具表必须在循环外组好，循环内只追加本轮消息
-        List<ChatMessage> history = historyFor(node, frame, nodeScope);
-        List<ToolCallback> tools = toolsFor(node, frame);
-        log.info("[NodeRunner] prepared nodeId={} historySize={} toolNames={}",
-            node.getNodeId(), history.size(), tools.stream().map(t -> t.getToolDefinition().name()).toList()
-        );
+        List<ToolCallback> tools = nodeToolset.of(node, frame);
+        List<ChatMessage> history = historyFor(node, frame, nodeScope, tools);
+        Trace.at(TraceStage.NODE, "node_ready")
+            .kv("historySize", history.size())
+            .kv("toolCount", tools.size())
+            .kv("tools", tools.stream().map(t -> t.getToolDefinition().name()).toList())
+            .info();
 
         if (nodeScope instanceof DefaultNodeScope defaultNode) {
-            applyVerifyResume(defaultNode, frame);
-            if (haltUnknownWrites(node, frame, skill, tools, defaultNode, effects)) {
+            applyVerifyResume(defaultNode, frame, history);
+            if (writeVerifier.haltUnknown(node, frame, skill, tools, defaultNode, effects)) {
                 return effects;
             }
         }
@@ -184,11 +184,8 @@ public class DefaultNodeRunner implements NodeRunner {
 
         // 节点内循环；循环结果决定节点终态，本方法不直接调控流工具
         ReActLoopResult nodeResult = reActLoop.run(new ReActLoopContext(frame, node, nodeScope, history, tools));
-        log.info("[NodeRunner] react done nodeId={} status={} message={} checkpointType={} suggestions={}",
-            node.getNodeId(), nodeResult.nodeStatus(), nodeResult.message(), nodeResult.checkpointType(), nodeResult.suggestions()
-        );
-        if (nodeResult.nodeStatus() == NodeStatus.DONE) {
-            frame.completionMessage(nodeResult.message());
+        if (nodeResult.nodeStatus() == NodeStatus.DONE && Strings.isNotBlank(nodeResult.message())) {
+            node.setResult(nodeResult.message().trim());
         }
 
         // 用循环给出的事件过状态机，失败/取消才把错误码写进图节点
@@ -226,10 +223,8 @@ public class DefaultNodeRunner implements NodeRunner {
         boolean delegateChild = graph.getEdges().stream()
             .anyMatch(edge -> edge.isDelegate() && nodeId.equals(edge.getFrom()));
         return switch (event) {
-            case LOOP_DONE -> {
-                effects.add(new GraphEffect.ClearSuspend(nodeId));
-                yield effects;
-            }
+            // 断点在节点被唤醒时已消费，完成时无需再清
+            case LOOP_DONE -> effects;
             case LOOP_SUSPENDED -> {
                 String message = Strings.defaultIfBlank(result.message(), RuntimeMessage.STEP_WAITING.text());
                 effects.add(new GraphEffect.SaveSuspend(nodeId, result.checkpointType(), message, result.pendingAction(), result.missingParameters(), result.suggestions()));
@@ -264,11 +259,12 @@ public class DefaultNodeRunner implements NodeRunner {
      * @param node      当前节点
      * @param frame     当前图执行帧
      * @param nodeScope 当前节点作用域
+     * @param tools     本节点可见工具
      * @return 可变对话历史；至少可能被种入一条用户目标
      */
-    private List<ChatMessage> historyFor(TaskNode node, GraphFrame frame, NodeScope nodeScope) {
+    private List<ChatMessage> historyFor(TaskNode node, GraphFrame frame, NodeScope nodeScope, List<ToolCallback> tools) {
         List<ChatMessage> history = new ArrayList<>();
-        for (ChatTurn turn : runtimeStateFacade.history(nodeScope)) {
+        for (ChatTurn turn : runtimeStateFacade.history(nodeScope, tools)) {
             history.add(toChatMessage(turn));
         }
         seedUserGoalIfAbsent(history, frame, node);
@@ -294,13 +290,6 @@ public class DefaultNodeRunner implements NodeRunner {
                     }
                     yield builder.build();
                 }
-                if (Strings.isNotBlank(turn.toolCallId()) && Strings.isNotBlank(turn.toolName())) {
-                    yield ChatMessages.assistant()
-                        .content(content)
-                        .toolCall(tc -> tc.id(turn.toolCallId())
-                            .function(turn.toolName(), Strings.defaultIfBlank(turn.arguments(), "{}")))
-                        .build();
-                }
                 yield ChatMessages.assistant(content);
             }
             case TOOL -> ChatMessages.tool(Objects.toString(turn.toolCallId(), "tool"))
@@ -311,7 +300,7 @@ public class DefaultNodeRunner implements NodeRunner {
     }
 
     /**
-     * 历史仍空时，优先任务 goalSummary，再节点目标，再本轮原文。
+     * 历史仍空时，优先开任务时的用户原文，再节点目标，再本轮原文。
      *
      * @param history 当前对话历史
      * @param frame   当前图执行帧
@@ -322,7 +311,7 @@ public class DefaultNodeRunner implements NodeRunner {
             return;
         }
 
-        String goal = frame.turn().task().map(TaskMetadata::getGoalSummary).filter(Strings::isNotBlank).orElse(null);
+        String goal = frame.turn().task().map(TaskMetadata::getRequest).filter(Strings::isNotBlank).orElse(null);
         if (Strings.isBlank(goal)) {
             goal = node.getObjective();
         }
@@ -338,50 +327,7 @@ public class DefaultNodeRunner implements NodeRunner {
     }
 
     /**
-     * 组装本节点可用工具：内置工具 + 技能声明的 MCP 工具。
-     *
-     * <p>业务 MCP 按 {@code skill.toolNames()} 挂载；内置控流始终保留。
-     * {@code targetToolName} 只供完成策略锚定，不收窄可见工具。
-     *
-     * @param node  当前节点
-     * @param frame 当前图执行帧
-     * @return 内置工具加技能 MCP 工具；无技能时仅内置
-     */
-    private List<ToolCallback> toolsFor(TaskNode node, GraphFrame frame) {
-        List<ToolCallback> result = new ArrayList<>(Arrays.asList(builtinTools.getToolCallbacks()));
-
-        String sk = node.getSkillKey();
-        if (Strings.isBlank(sk)) {
-            return result;
-        }
-
-        Skill skill = frame.findSkill(sk);
-        if (Objects.isNull(skill) || Collections.isEmpty(skill.toolNames())) {
-            return result;
-        }
-
-        // 可调用以 toolNames 为准；contract.tools 仅可选配置
-        LinkedHashSet<String> tools = new LinkedHashSet<>(skill.toolNames());
-        if (tools.isEmpty()) {
-            return result;
-        }
-        try {
-            var mcpProvider = new McpToolCallbackProvider(
-                mcpSyncClient, tools, runtimeProperties.getMcp().getMaxRetries()
-            );
-            result.addAll(Arrays.asList(mcpProvider.getToolCallbacks()));
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (RuntimeException ex) {
-            log.error("MCP toolsFor failed nodeId={}", node.getNodeId(), ex);
-            throw new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, ex, "MCP Registry");
-        }
-
-        return result;
-    }
-
-    /**
-     * 确认续跑时执行挂起检查点上的待批工具；结果写入本节点 history，并清 pending。
+     * 确认续跑时执行已消费断点上的待批工具：先记下用户确认，再派发；确认与结果写入本节点 history，并清 pending。
      *
      * @param node      当前节点
      * @param history   本节点对话历史
@@ -389,7 +335,7 @@ public class DefaultNodeRunner implements NodeRunner {
      * @param nodeScope 当前节点作用域
      */
     private void dispatchPending(TaskNode node, List<ChatMessage> history, GraphFrame frame, NodeScope nodeScope) {
-        var checkpoint = frame.turn().checkpoint().orElse(null);
+        var checkpoint = frame.turn().resumed().orElse(null);
         PendingAction pending = Objects.isNull(checkpoint) ? null : checkpoint.getPendingAction();
         if (Objects.isNull(pending) || Strings.isBlank(pending.toolName())) {
             return;
@@ -407,7 +353,7 @@ public class DefaultNodeRunner implements NodeRunner {
             }
         }
 
-        List<ToolCallback> tools = toolsFor(node, frame);
+        List<ToolCallback> tools = nodeToolset.of(node, frame);
         ToolCallback toolCallback = ToolCallbacks.find(tools, pending.toolName());
         if (Objects.isNull(toolCallback)) {
             log.warn("dispatchPending tool missing nodeId={} tool={}",
@@ -415,6 +361,10 @@ public class DefaultNodeRunner implements NodeRunner {
             );
             return;
         }
+
+        // 用户确认单独成轮：记在派发结果之前，跨轮重建时顺序为"确认 → 执行 → 结果"
+        nodeScope.round(0);
+        recordUser(nodeScope, history, ModelHint.USER_CONFIRMED.text("tool", pending.toolName()));
 
         ToolExecutionContext toolContext = new ToolExecutionContext(frame, node, nodeScope);
         toolContext.markApprovedWrite();
@@ -432,18 +382,19 @@ public class DefaultNodeRunner implements NodeRunner {
             .content(Objects.toString(observation.message(), ""))
             .build());
 
-        // 派发后清热态 pending；不走 saveCheckpoint（会把 metadata 打回 SUSPENDED）
+        // 派发后清掉已消费断点上的 pending，同轮再次进入节点不会重复派发
         checkpoint.setPendingAction(null);
     }
 
     /**
-     * VERIFY 检查点上用户确认/拒绝：把未知写证据收成 SUCCESS / FAILED。
+     * VERIFY 检查点上用户确认/拒绝：把未知写证据收成 SUCCESS / FAILED，并记下用户的回应。
      *
-     * @param node  当前节点作用域
-     * @param frame 当前图执行帧
+     * @param node    当前节点作用域
+     * @param frame   当前图执行帧
+     * @param history 本节点对话历史
      */
-    private void applyVerifyResume(DefaultNodeScope node, GraphFrame frame) {
-        boolean verify = frame.turn().checkpoint()
+    private void applyVerifyResume(DefaultNodeScope node, GraphFrame frame, List<ChatMessage> history) {
+        boolean verify = frame.turn().resumed()
             .map(checkpoint -> checkpoint.getType() == CheckpointType.VERIFY)
             .orElse(false);
         if (!verify) {
@@ -461,122 +412,31 @@ public class DefaultNodeRunner implements NodeRunner {
         } else {
             return;
         }
+        ModelHint said = action == ResumeAction.CONFIRM ? ModelHint.USER_VERIFIED : ModelHint.USER_UNVERIFIED;
+        boolean opened = false;
         for (EvidenceHead head : List.copyOf(node.evidence())) {
-            if (!isUnknownWrite(head)) {
+            if (!WriteVerifier.isUnknownWrite(head)) {
                 continue;
             }
             evidenceFlow.applyOutcome(node, head, status, businessOk, FailureKind.NONE);
-        }
-    }
-
-    /**
-     * 仍未知的写证据：先调 verify.tool；调不了则 VERIFY 挂起。
-     *
-     * @param node      当前节点
-     * @param frame     当前图执行帧
-     * @param skill     当前技能；可空
-     * @param tools     本节点可见工具
-     * @param nodeScope 当前节点作用域
-     * @param effects   收集挂起副作用
-     * @return 已发出 VERIFY 挂起时为 {@code true}
-     */
-    private boolean haltUnknownWrites(TaskNode node, GraphFrame frame, @Nullable Skill skill,
-                                      List<ToolCallback> tools, DefaultNodeScope nodeScope,
-                                      List<GraphEffect> effects) {
-        for (EvidenceHead head : List.copyOf(nodeScope.evidence())) {
-            if (!isUnknownWrite(head)) {
-                continue;
+            // 用户的回应单独成轮，排在之后的模型调用之前
+            if (!opened) {
+                node.round(0);
+                opened = true;
             }
-            if (settleByVerifyTool(node, frame, skill, tools, nodeScope, head)) {
-                continue;
-            }
-            String ask = RuntimeMessage.VERIFY_ASK.text();
-            node.setStatus(NodeStatus.SUSPENDED);
-            frame.turn().mark(node.getNodeId(), NodeStatus.SUSPENDED, null, null);
-            effects.add(new GraphEffect.SaveSuspend(node.getNodeId(), CheckpointType.VERIFY, ask, null, List.of(),
-                List.of()));
-            effects.add(new GraphEffect.Halt(new ExecutorResult(TaskStatus.SUSPENDED, node.getNodeId(), ask,
-                CheckpointType.VERIFY)));
-            return true;
+            recordUser(node, history, said.text("tool", head.toolName()));
         }
-        return false;
     }
 
     /**
-     * 调用契约 verify 工具收口未知写证据。
+     * 记一条用户对挂起的回应：写入节点动作供跨轮重建，同时追加到本轮历史。
      *
-     * @param node      当前节点
-     * @param frame     当前图执行帧
-     * @param skill     当前技能；可空
-     * @param tools     本节点可见工具
-     * @param nodeScope 当前节点作用域
-     * @param head      待核实的写证据
-     * @return 已调用 verify 工具则为 {@code true}；无工具可调则为 {@code false}
+     * @param node    当前节点
+     * @param history 本节点对话历史
+     * @param text    回应描述
      */
-    private boolean settleByVerifyTool(TaskNode node, GraphFrame frame, @Nullable Skill skill,
-                                       List<ToolCallback> tools, DefaultNodeScope nodeScope, EvidenceHead head) {
-        if (Objects.isNull(skill) || Objects.isNull(skill.contract())) {
-            return false;
-        }
-        ToolSpec spec = skill.contract().tool(head.toolName());
-        if (Objects.isNull(spec) || Objects.isNull(spec.getVerify()) || Strings.isBlank(spec.getVerify().getTool())) {
-            return false;
-        }
-        VerifySpec verify = spec.getVerify();
-        ToolCallback callback = ToolCallbacks.find(tools, verify.getTool());
-        if (Objects.isNull(callback)) {
-            return false;
-        }
-        ToolExecutionContext toolContext = new ToolExecutionContext(frame, node, nodeScope);
-        Observation observation = toolInvoker.invoke(new ToolInvokeRequest(
-            toolContext, callback, verifyArgs(verify, head)
-        ));
-        if (observation.ok()) {
-            evidenceFlow.applyOutcome(nodeScope, head, EvidenceStatus.SUCCESS, true, FailureKind.NONE);
-        } else {
-            evidenceFlow.applyOutcome(nodeScope, head, EvidenceStatus.FAILED, false, FailureKind.NONE);
-        }
-        return true;
-    }
-
-    /**
-     * 按 verify.args 从原始请求 JSON 抽出入参；无映射时整份请求透传。
-     *
-     * @param verify 工具上的核实声明
-     * @param head   待核实的写证据
-     * @return 调用 verify 工具的 JSON 参数
-     */
-    private String verifyArgs(VerifySpec verify, EvidenceHead head) {
-        String request = evidenceFlow.requestJson(head.evidenceId());
-        if (Collections.isEmpty(verify.getArgs())) {
-            return Strings.isBlank(request) ? "{}" : request;
-        }
-        JsonNode original = Strings.isBlank(request) ? JSON.str2node("{}") : JSON.str2node(request);
-        Map<String, Object> built = new LinkedHashMap<>();
-        verify.getArgs().forEach((key, spec) -> {
-            if (Objects.nonNull(spec.getConstant())) {
-                built.put(key, spec.getConstant());
-            } else if (Strings.isNotBlank(spec.getFrom()) && spec.getFrom().startsWith("call.")) {
-                JsonNode value = JSON.lookupNode(original, spec.getFrom().substring("call.".length()));
-                if (Objects.nonNull(value)) {
-                    built.put(key, value);
-                }
-            }
-        });
-        return JSON.obj2str(built);
-    }
-
-    /**
-     * 是否为尚未收口的写证据（UNKNOWN 或 UNKNOWN_PRE_CALL）。
-     *
-     * @param head 证据头
-     * @return 仍是未知写证据时为 {@code true}
-     */
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private static boolean isUnknownWrite(EvidenceHead head) {
-        if (head.sideEffect() != SideEffect.WRITE) {
-            return false;
-        }
-        return head.status() == EvidenceStatus.UNKNOWN || head.status() == EvidenceStatus.UNKNOWN_PRE_CALL;
+    private void recordUser(NodeScope node, List<ChatMessage> history, String text) {
+        runtimeStateFacade.act(node, NodeAction.user(node.rounds(), text));
+        history.add(ChatMessages.user(text));
     }
 }

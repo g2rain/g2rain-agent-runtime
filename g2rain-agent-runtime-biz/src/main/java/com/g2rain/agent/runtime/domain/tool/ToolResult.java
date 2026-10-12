@@ -24,15 +24,17 @@ import java.util.Map;
  * @param errorCode     错误码
  * @param resultBrief   结果摘要
  * @param entities      extracts[].entity 候选 JSON；无可空
+ * @param durationMs    工具实际执行的耗时（毫秒）；未知为空
  * @author alpha
  * @since 2026/10/3
  */
 public record ToolResult(EvidenceStatus status, @Nullable JsonNode payload, @Nullable Boolean businessOk,
                          @Nullable Boolean empty, @Nullable Map<String, Integer> extractCounts, FailureKind failureKind,
-                         @Nullable String errorCode, @Nullable String resultBrief, @Nullable String entities) {
+                         @Nullable String errorCode, @Nullable String resultBrief, @Nullable String entities,
+                         @Nullable Long durationMs) {
 
     /**
-     * 创建不带实体候选的结果。
+     * 创建不带实体候选与耗时的结果。
      *
      * <p>适用于不抽取实体的工具；其它字段与完整构造器含义相同。</p>
      *
@@ -48,6 +50,6 @@ public record ToolResult(EvidenceStatus status, @Nullable JsonNode payload, @Nul
     public ToolResult(EvidenceStatus status, @Nullable JsonNode payload, @Nullable Boolean businessOk,
                       @Nullable Boolean empty, @Nullable Map<String, Integer> extractCounts, FailureKind failureKind,
                       @Nullable String errorCode, @Nullable String resultBrief) {
-        this(status, payload, businessOk, empty, extractCounts, failureKind, errorCode, resultBrief, null);
+        this(status, payload, businessOk, empty, extractCounts, failureKind, errorCode, resultBrief, null, null);
     }
 }

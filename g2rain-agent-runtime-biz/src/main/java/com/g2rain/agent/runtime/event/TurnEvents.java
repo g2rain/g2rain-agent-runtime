@@ -16,6 +16,9 @@ import java.util.Objects;
  */
 public final class TurnEvents {
 
+    /**
+     * 静态工厂，禁止实例化。
+     */
     private TurnEvents() {
 
     }
@@ -62,6 +65,13 @@ public final class TurnEvents {
         return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(), traceId);
     }
 
+    /**
+     * 复制为不可变列表；空入参返回空列表。
+     *
+     * @param values 原列表；可空
+     * @param <T>    元素类型
+     * @return 不可变列表
+     */
     private static <T> List<T> copy(@Nullable List<T> values) {
         return Objects.isNull(values) ? List.of() : List.copyOf(values);
     }

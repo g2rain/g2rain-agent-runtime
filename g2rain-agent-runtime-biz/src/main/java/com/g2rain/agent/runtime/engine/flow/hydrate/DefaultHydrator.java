@@ -2,23 +2,27 @@ package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
+import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceEvent;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
+import com.g2rain.common.utils.Collections;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
  * 默认 Hydrator：按已绑定 Agent 装本轮技能列表。
  *
- * <p>Prior 在 {@code turn.start} 时生成一次，这里不再写入任务记忆种子。</p>
+ * <p>只装载技能；Prior 由 {@code turn.start} 生成，本类不写任务记忆。</p>
  *
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultHydrator implements Hydrator {
@@ -29,7 +33,7 @@ public class DefaultHydrator implements Hydrator {
     private final BundleLoader bundleLoader;
 
     /**
-     * 有 Agent 主键时写入 {@code ctx.skills}；否则跳过。
+     * 有 Agent 主键时写入 {@code ctx.skills} 并输出装载轨迹；没有可用技能时以 WARN 输出。否则跳过。
      *
      * @param context 本轮上下文
      */
@@ -41,8 +45,20 @@ public class DefaultHydrator implements Hydrator {
             agent = decision.agent();
         }
 
-        if (Objects.nonNull(agent) && Objects.nonNull(agent.getAgentId())) {
-            context.setSkills(bundleLoader.load(agent.getAgentId()));
+        if (Objects.isNull(agent) || Objects.isNull(agent.getAgentId())) {
+            return;
+        }
+
+        List<Skill> skills = bundleLoader.load(agent.getAgentId());
+        context.setSkills(skills);
+        TraceEvent event = Trace.at(TraceStage.HYDRATE, "loaded")
+            .kv("agentId", agent.getAgentId())
+            .kv("skillCount", Objects.isNull(skills) ? 0 : skills.size())
+            .kv("skills", Objects.isNull(skills) ? null : skills.stream().map(Skill::skillKey).toList());
+        if (Collections.isEmpty(skills)) {
+            event.warn();
+        } else {
+            event.info();
         }
     }
 }

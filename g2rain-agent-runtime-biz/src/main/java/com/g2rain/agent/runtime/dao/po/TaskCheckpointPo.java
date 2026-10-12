@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-
 /**
  * 任务检查点表返回Po
  * 关联表名: task_checkpoint
@@ -54,11 +53,6 @@ public class TaskCheckpointPo extends BasePo {
      * 追问期望补充的字段
      */
     private String expectedFields;
-
-    /**
-     * 候选项（来自证据）
-     */
-    private String choices;
 
     /**
      * 恢复动作

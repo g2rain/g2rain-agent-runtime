@@ -1,11 +1,11 @@
 package com.g2rain.agent.runtime.engine.state;
 
 
+import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.EdgeType;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.react.ChatRole;
 import com.g2rain.agent.runtime.domain.react.ChatTurn;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
@@ -18,36 +18,43 @@ import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.DelegateResult;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
+import com.g2rain.agent.runtime.domain.state.task.FailureKind;
+import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
 import com.g2rain.agent.runtime.engine.TurnRequest;
-import com.g2rain.agent.runtime.engine.store.FlushOp;
+import com.g2rain.agent.runtime.engine.state.repo.CallRepository;
+import com.g2rain.agent.runtime.engine.state.repo.ConversationRepository;
+import com.g2rain.agent.runtime.engine.state.repo.PayloadRepository;
 import com.g2rain.agent.runtime.engine.store.StateStore;
+import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
-import com.g2rain.agent.runtime.support.platform.PlatformCatalog;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceEvent;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.NullNode;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
-import java.util.TreeSet;
 
 /**
  * {@link RuntimeStateFacade} 的默认实现。
@@ -89,9 +96,24 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     private final StateStore store;
 
     /**
-     * 负责轮末关系数据持久化的组件。
+     * 轮末冷库落库编排。
      */
     private final RuntimeStatePersistence persistence;
+
+    /**
+     * 会话仓储：入口登记用户消息。
+     */
+    private final ConversationRepository conversations;
+
+    /**
+     * 工具调用仓储：证据报文冷读。
+     */
+    private final CallRepository calls;
+
+    /**
+     * 报文仓储：大报文冷读。
+     */
+    private final PayloadRepository payloads;
 
     /**
      * 从完成任务和工具结果中提取可复用实体。
@@ -102,6 +124,11 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
      * 捕获当前请求可注入的租户和用户身份信息。
      */
     private final PlatformCatalog platformCatalog;
+
+    /**
+     * 运行时配置：无证据动作的条数与说明上限。
+     */
+    private final RuntimeProperties properties;
 
     /**
      * 从热态或冷存储装载会话，并登记当前请求的用户消息。
@@ -125,6 +152,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         user.setMessageId(RuntimeUtils.uuid());
         user.setTraceId(turn.traceId());
         user.setType(MessageType.USER_TEXT);
+        user.setModel(Strings.blankToNull(Strings.trim(request.getModel())));
         user.setTaskId(turn.conversation().activeTaskId());
         turn.checkpoint().filter(checkpoint -> checkpoint.getType() == CheckpointType.FOLLOW_UP).ifPresent(_ -> {
             String nodeId = turn.task().map(TaskMetadata::getCurrentNodeId).orElse(null);
@@ -143,7 +171,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
 
         try {
             // 热态已 flush；交互历史再落 MySQL，失败则整轮 begin 作废
-            persistence.insertMessage(turn.conversation().conversationId(), user.getTaskId(), user, request.getChannel());
+            conversations.insertMessage(turn.conversation().conversationId(), user.getTaskId(), user, request.getChannel());
         } catch (RuntimeException e) {
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
@@ -213,13 +241,19 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             return;
         }
         node.note(NodeNoteKey.AWAITING, null);
+        TraceEvent settled = Trace.at(TraceStage.NODE, "delegate_done")
+            .kv("childId", childId)
+            .kv("skillKey", child.getSkillKey())
+            .kv("status", child.getStatus())
+            .kv("errorCode", child.getErrorCode());
         if (child.getStatus() == NodeStatus.DONE) {
+            settled.info();
             // 成功委派不残留失败便签
             node.note(NodeNoteKey.DELEGATE_RESULT, null);
             return;
         }
-        log.info("[Delegate] result nodeId={} childId={} skillKey={} status={} errorCode={}",
-            node.nodeId(), childId, child.getSkillKey(), child.getStatus(), child.getErrorCode());
+
+        settled.warn();
         node.note(NodeNoteKey.DELEGATE_RESULT,
             new DelegateResult(child.getSkillKey(), child.getStatus(), child.getErrorCode(), child.getErrorMessage()));
     }
@@ -234,7 +268,43 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     @Override
     public PrewriteResult prewrite(NodeScope node, ToolCall call) {
         EvidenceFlow.requireWrite(call);
-        return evidenceFlow.prewrite(asNode(node), call);
+        DefaultNodeScope current = asNode(node);
+        return adopt(current, call, evidenceFlow.prewrite(current, call));
+    }
+
+    /**
+     * 查看任务内是否已有同一写操作的生效证据；复用其他节点的成功结果时补记到本节点。
+     *
+     * @param node 当前节点
+     * @param call 写工具调用
+     * @return 复用或阻断结论；没有生效证据为空
+     */
+    @Override
+    public Optional<PrewriteResult> existing(NodeScope node, ToolCall call) {
+        EvidenceFlow.requireWrite(call);
+        DefaultNodeScope current = asNode(node);
+        return evidenceFlow.existing(current, call).map(result -> adopt(current, call, result));
+    }
+
+    /**
+     * 复用的成功证据不在本节点时，以原报文在本节点记一条成功证据；其余结论原样返回。
+     *
+     * @param node   当前节点
+     * @param call   写工具调用
+     * @param result 预写结论
+     * @return 原结论
+     */
+    private PrewriteResult adopt(DefaultNodeScope node, ToolCall call, PrewriteResult result) {
+        if (!(result instanceof PrewriteResult.Reused reused)
+            || node.evidence().stream().anyMatch(head -> Objects.equals(head.evidenceId(), reused.evidenceId()))) {
+            return result;
+        }
+
+        String taskId = node.turn().task().map(TaskMetadata::getTaskId).orElse(null);
+        JsonNode body = Strings.isBlank(taskId) ? NullNode.getInstance() : payload(node.turn(), taskId, reused.evidenceId());
+        evidenceFlow.record(node, call, new ToolResult(EvidenceStatus.SUCCESS, body, null, null, Map.of(),
+            FailureKind.NONE, null, ModelHint.WRITE_REUSED.text(), null, 0L));
+        return result;
     }
 
     /**
@@ -282,7 +352,10 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         if (Strings.isNotBlank(raw)) {
             return JSON.str2node(raw);
         }
-        String cold = persistence.loadEvidenceBody(evidenceId);
+        String cold = calls.response(evidenceId);
+        if (Strings.isBlank(cold)) {
+            cold = payloads.loadArtifact(evidenceId);
+        }
         return Strings.isBlank(cold) ? NullNode.getInstance() : JSON.str2node(cold);
     }
 
@@ -322,172 +395,35 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     }
 
     /**
-     * 把本节点交互历史与证据按轮次投影为 ReAct {@link ChatTurn} 列表。
+     * 按轮次合并本节点的对话消息、业务证据与无证据动作，重建为 ReAct {@link ChatTurn} 列表（见 {@link NodeHistory}）。
      *
-     * @param node 当前节点
+     * @param node  当前节点
+     * @param tools 本节点可见工具，用于识别追问调用
      * @return 含 USER / ASSISTANT / TOOL 的跨轮历史
      */
     @Override
-    public List<ChatTurn> history(NodeScope node) {
+    public List<ChatTurn> history(NodeScope node, List<ToolCallback> tools) {
         DefaultNodeScope current = asNode(node);
-        String nodeId = current.nodeId();
-        Map<Integer, List<String>> textsByRound = new TreeMap<>();
-        Map<Integer, List<String>> usersByRound = new TreeMap<>();
-        List<String> textsWithoutRound = new ArrayList<>();
-        List<ChatTurn> leadingUser = new ArrayList<>();
-        current.turn().allDialogue().forEach(message -> {
-            // 只投影本节点、有角色的交互历史；会话级消息不进 ReAct
-            if (!Objects.equals(message.getNodeId(), nodeId) || Objects.isNull(message.getRole())) {
-                return;
-            }
-            switch (message.getRole()) {
-                case USER -> {
-                    Integer round = message.getRound();
-                    if (Objects.isNull(round)) {
-                        leadingUser.add(new ChatTurn(ChatRole.USER, message.getText()));
-                    } else {
-                        usersByRound.computeIfAbsent(round, key -> new ArrayList<>())
-                            .add(Objects.toString(message.getText(), ""));
-                    }
-                }
-                case AGENT -> {
-                    Integer round = message.getRound();
-                    if (Objects.isNull(round)) {
-                        textsWithoutRound.add(Objects.toString(message.getText(), ""));
-                    } else {
-                        textsByRound.computeIfAbsent(round, key -> new ArrayList<>())
-                            .add(Objects.toString(message.getText(), ""));
-                    }
-                }
-            }
-        });
-        Map<Integer, List<EvidenceHead>> evidenceByRound = new TreeMap<>();
-        current.evidence().forEach(head ->
-            evidenceByRound.computeIfAbsent(head.round(), key -> new ArrayList<>()).add(head));
-
-        // 无 round 的用户句打头；有 round 的交互历史与证据按轮交错，供 ReAct 还原
-        List<ChatTurn> turns = new ArrayList<>(leadingUser);
-        for (String text : textsWithoutRound) {
-            if (Strings.isNotBlank(text)) {
-                turns.add(new ChatTurn(ChatRole.ASSISTANT, text));
-            }
-        }
-        TreeSet<Integer> rounds = new TreeSet<>();
-        rounds.addAll(textsByRound.keySet());
-        rounds.addAll(evidenceByRound.keySet());
-        rounds.addAll(usersByRound.keySet());
-        for (Integer round : rounds) {
-            for (String userText : usersByRound.getOrDefault(round, List.of())) {
-                if (Strings.isNotBlank(userText)) {
-                    turns.add(new ChatTurn(ChatRole.USER, userText));
-                }
-            }
-            String content = joinTexts(textsByRound.get(round));
-            List<EvidenceHead> heads = evidenceByRound.getOrDefault(round, List.of());
-            if (heads.isEmpty()) {
-                if (Strings.isNotBlank(content)) {
-                    turns.add(new ChatTurn(ChatRole.ASSISTANT, content));
-                }
-                // 该轮无工具证据，不补空 TOOL 消息
-                continue;
-            }
-            List<ChatTurn.ToolCallPart> calls = heads.stream()
-                .map(head -> new ChatTurn.ToolCallPart(
-                    head.evidenceId(),
-                    head.toolName(),
-                    Strings.defaultIfBlank(head.argsBrief(), "{}")
-                ))
-                .toList();
-            // 有证据的轮次必须带 TOOL 回填，否则模型看不到上次工具结果
-            turns.add(ChatTurn.assistantWithCalls(content, calls));
-            for (EvidenceHead head : heads) {
-                turns.add(new ChatTurn(
-                    ChatRole.TOOL, head.resultBrief(), head.evidenceId(), null, head.toolName()
-                ));
-            }
-        }
-        return turns;
+        String taskId = current.turn().task().map(TaskMetadata::getTaskId).orElse(null);
+        return NodeHistory.build(current, tools, evidenceId -> Strings.isBlank(taskId)
+            ? NullNode.getInstance()
+            : payload(current.turn(), taskId, evidenceId));
     }
 
     /**
-     * 把同一轮多段 AGENT 文本用换行拼成一条 assistant 内容。
+     * 记录一条无证据动作：裁剪说明后追加到节点，超过上限丢弃最早的。
      *
-     * @param texts 同一 round 的 AGENT 文本；可空
-     * @return 拼接结果；无有效文本时为空串
-     */
-    private static String joinTexts(@Nullable List<String> texts) {
-        if (Objects.isNull(texts) || texts.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (String text : texts) {
-            if (Strings.isBlank(text)) {
-                continue;
-            }
-            if (!sb.isEmpty()) {
-                sb.append('\n');
-            }
-            sb.append(text);
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 投影本轮尚未持久化的 USER/AGENT 消息，供同轮继续 ReAct。
-     *
-     * @param node 当前节点
-     * @return 仅含本节点、本轮 pending 对话的 ChatTurn
+     * @param node   当前节点
+     * @param action 动作
      */
     @Override
-    public List<ChatTurn> turnMessages(NodeScope node) {
-        DefaultNodeScope current = asNode(node);
-        List<ChatTurn> turns = new ArrayList<>();
-        current.turn().pendingDialogue().forEach(message -> addDialogueTurn(turns, current.nodeId(), message));
-        return turns;
-    }
+    public void act(NodeScope node, NodeAction action) {
+        RuntimeProperties.State state = properties.getState();
+        String clipped = Objects.requireNonNull(RuntimeUtils.clip(
+            action.message(), state.getNodeActionMaxChars()
+        ));
+        asNode(node).act(action.withMessage(clipped), state.getNodeActionsMax());
 
-    /**
-     * 将会话交互历史投影为 ReAct 轮次：{@code USER → USER}、{@code AGENT → ASSISTANT}。
-     *
-     * @param turns   输出列表
-     * @param nodeId  仅收录该节点的消息
-     * @param message 一条交互历史
-     */
-    private static void addDialogueTurn(List<ChatTurn> turns, String nodeId, DialogueMessage message) {
-        if (!Objects.equals(message.getNodeId(), nodeId)) {
-            return;
-        }
-        DialogueRole role = message.getRole();
-        if (Objects.isNull(role)) {
-            return;
-        }
-        switch (role) {
-            case USER -> turns.add(new ChatTurn(ChatRole.USER, message.getText()));
-            case AGENT -> turns.add(new ChatTurn(ChatRole.ASSISTANT, message.getText()));
-        }
-    }
-
-    /**
-     * 把明文写入 Redis secret 键并返回短期 handle；失败时抛栅栏冲突。
-     *
-     * @param turn      本轮视图
-     * @param value     明文对象
-     * @param expiresAt 过期时间（epoch 毫秒）
-     * @return secret handle
-     * @throws BusinessException 热态栅栏冲突
-     */
-    @Override
-    public String putSecret(TurnScope turn, Object value, long expiresAt) {
-        String handle = RuntimeUtils.uuid();
-        long ttlMs = Math.max(1L, expiresAt - System.currentTimeMillis());
-        SessionKeys keys = SessionKeys.of(turn);
-        boolean ok = store.flush(keys.state(), turn.conversation().version(),
-            List.of(FlushOp.set(keys.secret(handle), JSON.obj2str(value), ttlMs)));
-        // 栅栏冲突说明热态已被别轮改写，明文不得落成孤立 secret
-        if (!ok) {
-            throw new BusinessException(RuntimeErrorCode.STATE_FENCED);
-        }
-        return handle;
     }
 
     /**

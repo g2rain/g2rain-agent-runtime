@@ -266,6 +266,7 @@ public final class ArgsBrief {
                 leaves.add(new StringLeaf(frame.path(), node.asString()));
                 continue;
             }
+
             if (node.isObject()) {
                 for (var field : node.properties()) {
                     String child = Strings.isBlank(frame.path()) ? field.getKey() : frame.path() + "." + field.getKey();
@@ -278,6 +279,7 @@ public final class ArgsBrief {
                 }
             }
         }
+
         return leaves;
     }
 

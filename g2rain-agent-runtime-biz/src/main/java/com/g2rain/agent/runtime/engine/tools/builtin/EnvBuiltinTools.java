@@ -32,7 +32,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * @author alpha
  * @since 2026/8/21
  */
-@Component
+// @Component
 public class EnvBuiltinTools implements BuiltinTools {
 
     /**

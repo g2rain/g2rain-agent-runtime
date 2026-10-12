@@ -8,7 +8,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -276,6 +279,7 @@ public class TaskGraph {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -330,5 +334,29 @@ public class TaskGraph {
                 parent.setStatus(NodeStatus.READY);
             }
         }
+    }
+
+    /**
+     * 沿依赖边（含委派）向上追溯的全部上游节点，近的在前。
+     *
+     * @param nodeId 当前节点 id
+     * @return 上游节点 id；没有为空列表
+     */
+    public List<String> upstream(String nodeId) {
+        List<String> found = new ArrayList<>();
+        Set<String> seen = new HashSet<>(Set.of(nodeId));
+        Deque<String> queue = new ArrayDeque<>(List.of(nodeId));
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            edges.stream()
+                .filter(edge -> current.equals(edge.getTo()))
+                .map(TaskEdge::getFrom)
+                .filter(seen::add)
+                .forEach(from -> {
+                    found.add(from);
+                    queue.add(from);
+                });
+        }
+        return found;
     }
 }

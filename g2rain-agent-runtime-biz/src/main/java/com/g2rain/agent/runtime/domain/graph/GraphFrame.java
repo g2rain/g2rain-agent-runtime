@@ -26,6 +26,11 @@ import java.util.Objects;
 public final class GraphFrame {
 
     /**
+     * 本轮选用的模型名；为空时由模型服务按默认路由。
+     */
+    private final @Nullable String model;
+
+    /**
      * 本轮可读写的任务视图；图、会话和对话数据均从该视图访问。
      */
     private final TurnScope turn;
@@ -61,11 +66,6 @@ public final class GraphFrame {
     private @Nullable ExecutorResult halt;
 
     /**
-     * 节点 finish 带回的完成说明；空闲成功收口时作为面向用户的文案。
-     */
-    private @Nullable String completionMessage;
-
-    /**
      * 是否已经执行过焦点唤醒，避免同一次调度重复把挂起节点置为就绪。
      */
     private boolean wakeDone;
@@ -82,10 +82,11 @@ public final class GraphFrame {
      * @param requestAction 请求上的恢复动作
      * @param entry         入口结论；可空
      * @param selection     Agent 人选；可空
+     * @param model         本轮选用的模型名；可空
      */
     public GraphFrame(TurnScope turn, @Nullable List<Skill> skills, @Nullable String userInput,
                       @Nullable ResumeAction requestAction, @Nullable EntryResult entry,
-                      @Nullable AgentSelection selection) {
+                      @Nullable AgentSelection selection, @Nullable String model) {
         // 入口结论上的恢复动作优先于请求默认值
         ResumeAction action = Objects.nonNull(entry) ? entry.effectiveAction() : requestAction;
         String currentNodeId = turn.task().map(TaskMetadata::getCurrentNodeId).orElse(null);
@@ -100,6 +101,7 @@ public final class GraphFrame {
         this.currentNodeId = currentNodeId;
         this.action = action;
         this.profileText = Objects.nonNull(selection) ? selection.getProfileText() : null;
+        this.model = model;
     }
 
     /**
@@ -184,6 +186,13 @@ public final class GraphFrame {
     }
 
     /**
+     * @return 本轮选用的模型名；未指定为空
+     */
+    public @Nullable String model() {
+        return model;
+    }
+
+    /**
      * @return 是否已唤醒
      */
     public boolean wakeDone() {
@@ -213,25 +222,6 @@ public final class GraphFrame {
      */
     public void halt(ExecutorResult result) {
         this.halt = result;
-    }
-
-    /**
-     * @return 完成说明；可空
-     */
-    public @Nullable String completionMessage() {
-        return completionMessage;
-    }
-
-    /**
-     * 记下节点 finish 的产出文案；空白不覆盖已有值。
-     *
-     * @param message 完成说明；空白忽略
-     */
-    public void completionMessage(@Nullable String message) {
-        // 空白不覆盖已有完成说明，避免空 finish 冲掉节点产出
-        if (Strings.isNotBlank(message)) {
-            this.completionMessage = message.trim();
-        }
     }
 
     /**

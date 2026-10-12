@@ -5,8 +5,8 @@ import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
+import com.g2rain.agent.runtime.domain.state.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.Sourced;
-import com.g2rain.agent.runtime.domain.state.conversation.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
@@ -19,6 +19,11 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnRequest;
+import com.g2rain.agent.runtime.engine.state.repo.CallRepository;
+import com.g2rain.agent.runtime.engine.state.repo.ConversationRepository;
+import com.g2rain.agent.runtime.engine.state.repo.GraphRepository;
+import com.g2rain.agent.runtime.engine.state.repo.PayloadRepository;
+import com.g2rain.agent.runtime.engine.state.repo.TaskRepository;
 import com.g2rain.agent.runtime.engine.store.KeyTtl;
 import com.g2rain.agent.runtime.engine.store.RenewResult;
 import com.g2rain.agent.runtime.engine.store.StateStore;
@@ -80,9 +85,29 @@ public class TurnSessionHydrate {
     private final StateStore store;
 
     /**
-     * 会话和任务冷数据回源组件。
+     * 会话冷数据回源。
      */
-    private final RuntimeStatePersistence persistence;
+    private final ConversationRepository conversations;
+
+    /**
+     * 任务冷数据回源。
+     */
+    private final TaskRepository tasks;
+
+    /**
+     * 图与节点空间冷数据回源。
+     */
+    private final GraphRepository graphs;
+
+    /**
+     * 证据头冷数据回源。
+     */
+    private final CallRepository calls;
+
+    /**
+     * 节点空间超长字段溢出存储。
+     */
+    private final PayloadRepository payloads;
 
     /**
      * 状态窗口与 TTL 配置。
@@ -91,12 +116,22 @@ public class TurnSessionHydrate {
 
     /**
      * @param store          热态 Redis
-     * @param persistence    冷存储回源
+     * @param conversations  会话仓储
+     * @param tasks          任务仓储
+     * @param graphs         图仓储
+     * @param calls          工具调用仓储
+     * @param payloads       报文仓储
      * @param properties     TTL 与窗口配置
      */
-    public TurnSessionHydrate(StateStore store, RuntimeStatePersistence persistence, RuntimeProperties properties) {
+    public TurnSessionHydrate(StateStore store, ConversationRepository conversations, TaskRepository tasks,
+                              GraphRepository graphs, CallRepository calls, PayloadRepository payloads,
+                              RuntimeProperties properties) {
         this.store = store;
-        this.persistence = persistence;
+        this.conversations = conversations;
+        this.tasks = tasks;
+        this.graphs = graphs;
+        this.calls = calls;
+        this.payloads = payloads;
         this.properties = properties;
     }
 
@@ -124,7 +159,7 @@ public class TurnSessionHydrate {
         } catch (RuntimeException e) {
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
-        ChatConversationVo row = persistence.conversationOf(conversationId);
+        ChatConversationVo row = conversations.find(conversationId);
         ConversationFence fence = readFence(conversationId, hash);
         // Redis state 未命中：从 chat_conversation 回灌 version / activeTaskId / userId
         if (Collections.isEmpty(hash) && Objects.nonNull(row)) {
@@ -148,21 +183,21 @@ public class TurnSessionHydrate {
             throw new BusinessException(RuntimeErrorCode.CONVERSATION_FORBIDDEN);
         }
         if (Objects.isNull(row)) {
-            persistence.createConversation(conversationId, user, request.getUserInput());
+            conversations.create(conversationId, user, request.getUserInput());
         }
         int dialogueMax = properties.getState().getDialogueMax();
         List<DialogueMessage> dialogue = readDialogue(keys, dialogueMax);
         if (Collections.isEmpty(dialogue)) {
-            dialogue = persistence.loadDialogue(conversationId, dialogueMax);
+            dialogue = conversations.loadDialogue(conversationId, dialogueMax);
         }
         List<TaskRecord> records = readRecords(keys);
         if (Collections.isEmpty(records)) {
-            records = persistence.loadRecords(conversationId, properties.getState().getRecordsMax());
+            records = tasks.loadRecords(conversationId, properties.getState().getRecordsMax());
         }
         Map<String, EntityEntry> entities = readEntities(keys);
         Map<String, Sourced<?>> sessionShared = readShared(keys.sessionShared());
         if (Collections.isEmpty(sessionShared)) {
-            sessionShared = new LinkedHashMap<>(persistence.loadSessionShared(conversationId));
+            sessionShared = new LinkedHashMap<>(conversations.loadSessionShared(conversationId));
         }
         TaskMetadata task = null;
         TaskGraph graph = new TaskGraph();
@@ -173,7 +208,7 @@ public class TurnSessionHydrate {
             String activeTaskId = fence.activeTaskId();
             task = HashCodec.toObject(store.hGetAll(keys.metadata(activeTaskId)), TaskMetadata.class);
             if (Objects.isNull(task)) {
-                task = persistence.loadTaskMetadata(activeTaskId);
+                task = tasks.loadMetadata(activeTaskId);
             } else if (Strings.isBlank(task.getTaskId())) {
                 task.setTaskId(activeTaskId);
             }
@@ -182,22 +217,22 @@ public class TurnSessionHydrate {
             }
             graph = HashCodec.graphOf(store.hGetAll(keys.graph(activeTaskId)));
             if (Objects.isNull(graph)) {
-                graph = persistence.loadGraph(activeTaskId);
+                graph = graphs.load(activeTaskId);
             }
             if (Objects.isNull(graph)) {
                 graph = new TaskGraph();
             }
             checkpoint = JSON.str2obj(store.get(keys.checkpoint(activeTaskId)), TaskCheckpoint.class);
             if (Objects.isNull(checkpoint)) {
-                checkpoint = persistence.loadCheckpoint(activeTaskId);
+                checkpoint = tasks.loadCheckpoint(activeTaskId);
             }
             shared = readShared(keys.shared(activeTaskId));
             if (Collections.isEmpty(shared)) {
-                shared = new LinkedHashMap<>(persistence.loadTaskShared(activeTaskId));
+                shared = new LinkedHashMap<>(tasks.loadShared(activeTaskId));
             }
             prior = JSON.str2obj(store.get(keys.prior(activeTaskId)), Prior.class);
             if (Objects.isNull(prior)) {
-                prior = persistence.loadTaskPrior(activeTaskId);
+                prior = tasks.loadPrior(activeTaskId);
             }
         }
         DefaultTurnScope turn = new DefaultTurnScope(organId, userId, traceId, fence, dialogue, records, entities, task,
@@ -250,10 +285,7 @@ public class TurnSessionHydrate {
             if (Objects.isNull(head) || !Objects.equals(head.status(), EvidenceStatus.STARTED)) {
                 return;
             }
-            EvidenceHead unknown = new EvidenceHead(head.evidenceId(), head.toolName(), head.sideEffect(),
-                EvidenceStatus.UNKNOWN, head.businessOk(), head.empty(), head.extractCounts(), head.failureKind(),
-                head.idempotencyKey(), head.argsHash(), head.argsBrief(), head.resultBrief(), head.errorCode(),
-                head.entities(), head.payloadId(), head.round(), head.traceId());
+            EvidenceHead unknown = head.withStatus(EvidenceStatus.UNKNOWN);
             DefaultNodeScope opened = openSpace(turn, keys, node.getNodeId());
             opened.addEvidence(unknown);
         });
@@ -270,13 +302,13 @@ public class TurnSessionHydrate {
     public DefaultNodeScope openSpace(DefaultTurnScope turn, SessionKeys keys, String nodeId) {
         return turn.node(nodeId).orElseGet(() -> {
             String taskId = turn.task().map(TaskMetadata::getTaskId).orElse(null);
-            NodeSpace space = new NodeSpace(Map.of(), Map.of(), Map.of(), null, 0, 0);
+            NodeSpace space = new NodeSpace(Map.of(), Map.of(), Map.of(), 0, 0, List.of());
             List<EvidenceHead> evidence = new ArrayList<>();
             if (Strings.isNotBlank(taskId)) {
                 NodeSpace loaded = HashCodec.toObject(expandSpace(store.hGetAll(keys.space(taskId, nodeId))),
                     NodeSpace.class);
                 if (Objects.isNull(loaded)) {
-                    loaded = persistence.loadNodeSpace(taskId, nodeId);
+                    loaded = graphs.loadSpace(taskId, nodeId);
                 }
                 if (Objects.nonNull(loaded)) {
                     space = loaded;
@@ -288,11 +320,11 @@ public class TurnSessionHydrate {
                     }
                 });
                 if (evidence.isEmpty()) {
-                    evidence.addAll(persistence.loadNodeEvidence(taskId, nodeId));
+                    evidence.addAll(calls.loadNodeEvidence(taskId, nodeId));
                 }
             }
             DefaultNodeScope node = new DefaultNodeScope(turn, nodeId, space.inputs(), space.outputs(), space.state(),
-                space.repair(), evidence, space.rounds(), space.tokens());
+                evidence, space.actions(), space.rounds(), space.tokens());
             turn.attach(node);
             return node;
         });
@@ -386,7 +418,7 @@ public class TurnSessionHydrate {
         }
         String payloadId = RuntimeUtils.uuid();
         try {
-            persistence.saveSpaceField(payloadId, taskId, nodeId, field, PrincipalContextHolder.getTraceId(), raw);
+            payloads.saveSpaceField(payloadId, taskId, nodeId, field, PrincipalContextHolder.getTraceId(), raw);
         } catch (RuntimeException e) {
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
@@ -407,7 +439,7 @@ public class TurnSessionHydrate {
         if (Objects.isNull(spill) || !spill.valid()) {
             return raw;
         }
-        String body = persistence.loadSpaceField(spill.payloadId());
+        String body = payloads.loadSpaceField(spill.payloadId());
         if (Strings.isBlank(body)) {
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }

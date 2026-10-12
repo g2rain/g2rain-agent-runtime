@@ -2,15 +2,15 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.domain.hydrate.ResponseContract;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.tool.Observation;
+import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
-import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -26,7 +26,7 @@ import java.util.Objects;
  * 调用后嗅探业务成败，失败则改写观测。
  *
  * <p>有 {@code successCondition} 时按条件判断；否则尝试顶层 {@code status} HTTP 码。
- * {@code errorPath} 只在业务失败时抽错误码和文案。仅处理业务工具且调用层 {@code ok=true} 的观测；
+ * {@code errorPath} 只在业务失败时抽错误码和文案。仅处理业务工具且调用层结果为 {@link Outcome#SUCCESS} 的观测；
  * 内置工具与传输层失败跳过。</p>
  *
  * @author alpha
@@ -60,7 +60,7 @@ public class ResponseContractInterceptor implements ToolInterceptor {
      * 调用后嗅探业务结果。
      * <p>
      * 首先过滤不需要嗅探的场景，然后根据工具响应契约判断业务成败。
-     * 当工具本身调用成功，但响应内容明确表示业务失败时，将原成功观察改写为失败观察。
+     * 当工具本身调用成功，但响应内容明确表示业务失败时，将原成功观察改写为 {@link Outcome#FAILED} 观察。
      *
      * <p>
      * 成功条件存在时：
@@ -83,7 +83,7 @@ public class ResponseContractInterceptor implements ToolInterceptor {
             return result;
         }
 
-        if (!result.ok()) {
+        if (result.outcome() != Outcome.SUCCESS) {
             return result;
         }
 
@@ -97,15 +97,35 @@ public class ResponseContractInterceptor implements ToolInterceptor {
             return result;
         }
 
-        ResponseContract.ErrorPath errorPath = errorPathOf(request.contract());
-        String code = Objects.nonNull(body) ? extractErrorCode(body, errorPath) : null;
-        if (Strings.isBlank(code)) {
-            code = RuntimeErrorCode.TOOL_BUSINESS_FAILED.code();
+        // 保留 data，供外层 Evidence / extracts 使用；下游错误码写进原因，运行时错误码统一为业务失败
+        return Observation.failed(
+            RuntimeErrorCode.TOOL_BUSINESS_FAILED, reasonOf(body, errorPathOf(request.contract())),
+            ModelHint.NEXT_BUSINESS.text(), body
+        );
+    }
+
+    /**
+     * 业务失败原因：带上下游错误码与错误信息；响应体为空时给固定原因。
+     *
+     * <p>例：响应 {@code {"errorCode":"system.50001","errorMessage":"分类不能为空"}} 得到
+     * {@code 业务失败 [system.50001]：分类不能为空}。</p>
+     *
+     * @param body      响应体；可空
+     * @param errorPath 错误字段路径；可空
+     * @return 失败原因
+     */
+    private String reasonOf(@Nullable JsonNode body, @Nullable ErrorPath errorPath) {
+        if (Objects.isNull(body)) {
+            return ModelHint.BUSINESS_EMPTY_BODY.text();
         }
 
-        String msg = Objects.nonNull(body) ? extractErrorMessage(body, errorPath) : ModelHint.BUSINESS_EMPTY_BODY.text();
-        // 保留 data，供外层 Evidence / extracts 使用；表外错误码表示业务失败
-        return new Observation(false, msg, body, code);
+        String message = extractErrorMessage(body, errorPath);
+        String code = extractErrorCode(body, errorPath);
+        if (Strings.isBlank(code)) {
+            return ModelHint.BUSINESS_FAILED.text("message", message);
+        }
+
+        return ModelHint.BUSINESS_FAILED_CODE.text("code", code, "message", message);
     }
 
     /**
@@ -114,7 +134,7 @@ public class ResponseContractInterceptor implements ToolInterceptor {
      * @param contract 工具契约；可空
      * @return 错误字段路径；未配置为 {@code null}
      */
-    private static ResponseContract.@Nullable ErrorPath errorPathOf(@Nullable ToolSpec contract) {
+    private static @Nullable ErrorPath errorPathOf(@Nullable ToolSpec contract) {
         if (Objects.isNull(contract) || Objects.isNull(contract.getError())) {
             return null;
         }
@@ -125,27 +145,27 @@ public class ResponseContractInterceptor implements ToolInterceptor {
             return null;
         }
 
-        return new ResponseContract.ErrorPath(codePath, messagePath);
+        return new ErrorPath(codePath, messagePath);
     }
 
     /**
      * 从响应体中提取业务错误编码。
      * <p>
-     * 优先使用工具契约配置的 {@code errorCodePath}；
-     * 未配置或指定路径没有值时，再回退到通用 {@code errorCode} 字段。
+     * 使用工具契约配置的 {@code errorCodePath}；未配置或指定路径没有值时返回 {@code null}。
      *
      * @param body 工具响应体
      * @param ep   错误字段路径；允许为空
-     * @return 错误编码
+     * @return 下游错误编码；没有为 {@code null}
      */
-    private String extractErrorCode(JsonNode body, ResponseContract.@Nullable ErrorPath ep) {
+    private static @Nullable String extractErrorCode(JsonNode body, @Nullable ErrorPath ep) {
         if (Objects.nonNull(ep) && Strings.isNotBlank(ep.codePath())) {
             JsonNode val = JSON.lookupNode(body, ep.codePath());
             if (JSON.hasValue(val)) {
                 return JSON.asString(val);
             }
         }
-        return RuntimeErrorCode.TOOL_BUSINESS_FAILED.code();
+
+        return null;
     }
 
     /**
@@ -158,31 +178,26 @@ public class ResponseContractInterceptor implements ToolInterceptor {
      * @param ep   错误字段路径；允许为空
      * @return 错误文案
      */
-    private String extractErrorMessage(JsonNode body, ResponseContract.@Nullable ErrorPath ep) {
+    private @Nullable String extractErrorMessage(JsonNode body, @Nullable ErrorPath ep) {
+        // 截断防止完整的大型响应体进入观测、证据与模型上下文
+        int max = runtimeProperties.getReact().getObservationErrorMaxChars();
         if (Objects.nonNull(ep) && Strings.isNotBlank(ep.messagePath())) {
             JsonNode val = JSON.lookupNode(body, ep.messagePath());
             if (JSON.hasValue(val)) {
-                return truncate(JSON.asString(val));
+                return RuntimeUtils.abbreviate(JSON.asString(val), max);
             }
         }
-        return truncate(JSON.obj2str(body));
+
+        return RuntimeUtils.abbreviate(JSON.obj2str(body), max);
     }
 
     /**
-     * 截断过长的错误信息。
-     * <p>
-     * 防止将完整的大型业务响应体直接写入 Observation，
-     * 从而避免错误信息过大影响后续日志、证据或模型上下文。
+     * ErrorPath（错误路径）：失败时从哪取业务码与文案。
      *
-     * @param s 原始文本
-     * @return 不超过配置上限的文本
+     * @param codePath    错误码路径；可空
+     * @param messagePath 错误文案路径；可空
      */
-    private String truncate(String s) {
-        int max = runtimeProperties.getReact().getObservationErrorMaxChars();
-        if (s.length() <= max) {
-            return s;
-        }
+    private record ErrorPath(@Nullable String codePath, @Nullable String messagePath) {
 
-        return s.substring(0, max) + "...";
     }
 }

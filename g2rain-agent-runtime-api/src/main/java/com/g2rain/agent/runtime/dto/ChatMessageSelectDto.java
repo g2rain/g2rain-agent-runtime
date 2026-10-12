@@ -65,15 +65,21 @@ public class ChatMessageSelectDto extends BaseSelectListDto {
     private String channel;
 
     /**
+     * 本轮选用的模型名
+     */
+    @Schema(description = "本轮选用的模型名")
+    private String model;
+
+    /**
      * 角色[USER, AGENT]
      */
     @Schema(description = "角色[USER, AGENT]")
     private String role;
 
     /**
-     * 消息类型[USER_TEXT, AGENT_REPLY, CONFIRM_CARD]
+     * 消息类型[USER_TEXT, AGENT_REPLY]
      */
-    @Schema(description = "消息类型[USER_TEXT, AGENT_REPLY, CONFIRM_CARD]")
+    @Schema(description = "消息类型[USER_TEXT, AGENT_REPLY]")
     private String messageType;
 
     /**

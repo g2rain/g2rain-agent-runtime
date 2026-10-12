@@ -137,7 +137,7 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
 | 4 | 为需要约束来源的参数写 `args` | 第 4.3 节 |
 | 5 | 为写工具写 `idempotencyKey`，需要时写 `verify` | 第 4.4 节 |
 | 6 | 需要向下游或后续任务传值时，写 `outputs`（含 `share`）和对应的 `inputs` | 第 4.5 节 |
-| 7 | 写 `doneWhen` | 第 4.6 节 |
+| 7 | 只做一种写操作时写 `target` | 第 4.6 节 |
 | 8 | 确定 `mode`、`delegatable` | 第 4.1 节 |
 
 ### 步骤 6：生成 SQL
@@ -206,17 +206,18 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
 | O3 | 必须 | 产出的 key 不能与平台字段同名：`userId`、`memberId`、`name`、`organId`、`organName`、`organType`、`deptPath` |
 | O4 | 应当 | 跨技能传值使用 `outputs.<k>.share`（`TASK` 或 `SESSION`），接收方用 `inputs.<k>.from: "shared.<k>"` 或 `"session.<k>"` |
 | O5 | 应当 | `outputs.<k>.sources` 写 `["EVIDENCE"]` 或 `["EVIDENCE", "USER"]`，保证产出来自真实结果 |
-| O6 | 应当 | 业务对象需要在后续任务中引用时，在查询工具的 `extracts` 上配置 `entity: {"type": "...", "id": "id", "name": "<名称字段>"}` |
+| O6 | 应当 | 业务对象需要在后续任务中引用时，在查询工具的 `extracts` 上配置 `entity: {"type": "...", "id": "id", "name": "<名称字段>"}`；保存工具只回主键时配置 `entity: {"type": "...", "scalar": "id", "name": "<入参名称字段>"}` |
 
-### 4.6 完成条件
+### 4.6 完成目标
+
+节点完成目标由规划按本轮目标指定，契约 `target` 只是默认值，判定规则见契约规范第 10 节。
 
 | # | 级别 | 规则 |
 |---|---|---|
-| D1 | 必须 | `doneWhen` 只使用规范中的条件形式 |
-| D2 | 必须 | 查询工具出现在 `doneWhen` 中时，写成 `<tool> succeeded OR <tool> empty`。只写 `succeeded` 时，查询结果为空会导致节点无法完成 |
-| D3 | 应当 | 多用途 Skill 的 `doneWhen` 为各类完成动作的 `OR` 组合：每种写操作成功、以及作为最终目的的查询成功或为空 |
-| D4 | 应当 | 单一目的 Skill 使用 `target` + `"doneWhen": "target succeeded"` |
-| D5 | 禁止 | 在 `doneWhen` 中使用括号；`AND` 的优先级高于 `OR` |
+| D1 | 必须 | 写工具在 `tools` 中声明 `"sideEffect": "WRITE"`，规划只会从这些工具中选择完成目标 |
+| D2 | 应当 | 只做一种写操作的 Skill 配置 `target`（该写工具名），单候选直接出图时也有完成目标 |
+| D3 | 应当 | 承担多种写操作（新增、修改、删除等）的 Skill 不配 `target`，由规划按节点指定 |
+| D4 | 必须 | `target` 必须是本 Skill 的 `WRITE` 工具，否则 Skill 加载失败 |
 
 ---
 
@@ -277,7 +278,8 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
   },
   "success": {"path": "status", "op": "EQ", "value": 200},
   "error": {"code": "errorCode", "message": "errorMessage"},
-  "extracts": [{"key": "tag_saved", "path": "data"}]
+  "extracts": [{"key": "tag_saved", "path": "data",
+                  "entity": {"type": "tag", "scalar": "id", "name": "tagName"}}]
 }
 ```
 
@@ -381,7 +383,6 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
 {
   "mode": "REACT",
   "delegatable": false,
-  "doneWhen": "post_article_tag_relation_batch_add_tags succeeded OR post_tag_save succeeded OR delete_tag_id succeeded OR delete_article_tag_relation_id succeeded OR get_tag_list succeeded OR get_tag_list empty OR get_article_tag_relation_list succeeded OR get_article_tag_relation_list empty",
   "tools": {
     "get_tag_list": {
       "label": "查询标签",
@@ -407,7 +408,8 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
       },
       "success": {"path": "status", "op": "EQ", "value": 200},
       "error": {"code": "errorCode", "message": "errorMessage"},
-      "extracts": [{"key": "tag_saved", "path": "data"}]
+      "extracts": [{"key": "tag_saved", "path": "data",
+                  "entity": {"type": "tag", "scalar": "id", "name": "tagName"}}]
     },
     "delete_tag_id": {
       "label": "删除标签",
@@ -480,7 +482,7 @@ organ_id：<填写>，resource_type：<PLATFORM 或 CUSTOM>
 | `delete_tag_id.id` | 只接受查询结果中的 ID；缺失时要求先调用 `get_tag_list` |
 | `articleId` | 用户直接给出的 ID，或文章查询结果中的 ID；缺失时先查文章 |
 | `tagIds[]` | 每个标签 ID 都必须来自查询或创建结果 |
-| `doneWhen` | 每种写操作成功即完成；查询作为最终目的时，有结果或为空都算完成 |
+| 不配 `target` | 承担多种写操作，由规划按节点指定完成目标；纯查询节点拿到结果（含为空）即可完成 |
 
 ### 6.3 SQL
 
@@ -561,8 +563,8 @@ VALUES
 
 - [ ] 产出 key 不与平台字段同名
 - [ ] 不一定写入的产出设置了 `"required": false`
-- [ ] `doneWhen` 中的查询工具都写成 `succeeded OR empty`
-- [ ] `doneWhen` 引用的工具都在 `toolNames` 中
+- [ ] 写工具都声明了 `"sideEffect": "WRITE"`
+- [ ] 配置了 `target` 时，它是本 Skill 的 `WRITE` 工具且在 `toolNames` 中
 - [ ] `delegatable: true` 的 Skill 中没有 `WRITE` 工具
 
 ---
@@ -577,10 +579,10 @@ VALUES
 | 参数没写 `required`，实际是选填 | 默认必填，缺值时被拦截或追问 | 写 `"required": false` |
 | `from: "shared.x"`，但没有任何 `share` 写入 `x` | 永远取不到值 | 在提供方 Skill 的 `outputs.x` 上配置 `share` |
 | `from` + `sources: ["USER"]` | 绑定失败时反复追问 | `from` + `sources: ["MODEL"]` |
-| `doneWhen: "get_x succeeded"` | 结果为空时无法完成 | `get_x succeeded OR get_x empty` |
+| 多用途 Skill 配了 `target` | 规划未指定时，所有节点都要求该写工具成功 | 去掉 `target`，交给规划按节点指定 |
 | 产出 key 命名为 `name`、`userId` | 写入被拒绝 | 改为 `tagName`、`ownerUserId` 等 |
 | 声明了产出但不总是写入，没写 `required: false` | 节点无法完成 | 写 `"required": false` |
 | 写工具设 `"confirm": false` 期望免确认 | 仍需确认 | 同时在部署配置 `state.write-confirm-bypass-tools` 中加入工具名 |
 | `NONE` 工具写 `"confirm": true` | Skill 加载失败 | 去掉 |
 | 写工具没有 `success` | Skill 加载失败 | 补充 `success` |
-| `doneWhen` 使用括号或自定义写法 | Skill 加载失败 | 只用规范中的条件形式 |
+| `target` 指向查询工具 | Skill 加载失败 | 指向 `WRITE` 工具，或不配 |
