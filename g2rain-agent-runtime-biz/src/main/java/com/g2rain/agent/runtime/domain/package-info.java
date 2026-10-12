@@ -13,10 +13,9 @@
  *     <li>{@link com.g2rain.agent.runtime.domain.state} — 会话/任务/交互历史与证据热冷态</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.hydrate} — 技能与工具契约</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.tool} — 工具调用观测与执行上下文</li>
- *     <li>{@link com.g2rain.agent.runtime.domain.decision} — 选人与意图结果</li>
+ *     <li>{@link com.g2rain.agent.runtime.domain.decision} — 选人、意图与目标评估结果</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.entry} — 入口受理结论</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.execute} — 执行器收口结果</li>
- *     <li>{@link com.g2rain.agent.runtime.domain.finalize} — GoalGate 评估结论</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.plan} — 规划步骤</li>
  *     <li>{@link com.g2rain.agent.runtime.domain.react} — ReAct 循环上下文与结果</li>
  * </ul>

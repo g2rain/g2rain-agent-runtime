@@ -43,6 +43,9 @@
     <!-- 业务日志 -->
     <logger name="com.g2rain" level="DEBUG"/>
 
+    <!-- 链路轨迹：[Trace][环节] 事件 key=value；输出格式中的 [会话/任务/节点] 见 application.yml 的 logging.pattern -->
+    <logger name="g2rain.agent.trace" level="INFO"/>
+
     <!-- ==========================
          4. 环境感知输出
          ========================== -->

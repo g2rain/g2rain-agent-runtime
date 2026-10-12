@@ -34,8 +34,6 @@ for _, op in ipairs(ops) do
     if has_ttl(op) then
       redis.call('LTRIM', op.key, 0, tonumber(op.ttl) - 1)
     end
-  elseif name == 'LREM' then
-    redis.call('LREM', op.key, 0, op.value)
   elseif name == 'EXPIRE' then
     redis.call('PEXPIRE', op.key, op.ttl)
   else

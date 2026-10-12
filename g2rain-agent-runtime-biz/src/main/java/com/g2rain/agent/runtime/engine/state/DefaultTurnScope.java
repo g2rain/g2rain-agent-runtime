@@ -1,14 +1,13 @@
 package com.g2rain.agent.runtime.engine.state;
 
 
-import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
-import com.g2rain.agent.runtime.domain.platform.Platform;
+import com.g2rain.agent.runtime.domain.state.ConversationFence;
+import com.g2rain.agent.runtime.domain.state.Platform;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
-import com.g2rain.agent.runtime.domain.state.conversation.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
@@ -61,19 +60,14 @@ public final class DefaultTurnScope implements TurnScope {
     private final String traceId;
 
     /**
-     * 会话对话保留条数。
-     */
-    private final int dialogueMax;
-
-    /**
      * 会话栅栏。
      */
     private ConversationFence fence;
 
     /**
-     * 会话对话（含中间文字）。
+     * 会话对话（含中间文字）及刷写游标。
      */
-    private final List<DialogueMessage> dialogue;
+    private final DialogueLog dialogue;
 
     /**
      * 已结束任务记录。
@@ -101,6 +95,11 @@ public final class DefaultTurnScope implements TurnScope {
     private @Nullable TaskCheckpoint checkpoint;
 
     /**
+     * 本轮已被用户回应、已消费的断点。
+     */
+    private @Nullable TaskCheckpoint resumed;
+
+    /**
      * 任务级共享值。
      */
     private final Map<String, Sourced<?>> shared;
@@ -124,16 +123,6 @@ public final class DefaultTurnScope implements TurnScope {
      * 触发恢复的消息的唯一标识。
      */
     private @Nullable String lastResumeMessageId;
-
-    /**
-     * 已 flush 到 Redis 的对话条数（之后的才 LPUSH）。
-     */
-    private int flushedDialogue;
-
-    /**
-     * 已 persist 到 MySQL 的对话条数（之后的才 insert chat_message）。
-     */
-    private int persistedDialogue;
 
     /**
      * 被新任务顶替的旧终态，persist 时一并写入。
@@ -185,7 +174,7 @@ public final class DefaultTurnScope implements TurnScope {
         this.userId = userId;
         this.traceId = traceId;
         this.fence = fence;
-        this.dialogue = new ArrayList<>(dialogue);
+        this.dialogue = new DialogueLog(dialogue, dialogueMax);
         this.records = new ArrayList<>(records);
         this.entities = new LinkedHashMap<>(entities);
         this.task = task;
@@ -194,9 +183,6 @@ public final class DefaultTurnScope implements TurnScope {
         this.shared = new LinkedHashMap<>(shared);
         this.prior = prior;
         this.sessionShared = new LinkedHashMap<>(sessionShared);
-        this.dialogueMax = dialogueMax;
-        this.flushedDialogue = this.dialogue.size();
-        this.persistedDialogue = this.dialogue.size();
     }
 
     /**
@@ -207,17 +193,6 @@ public final class DefaultTurnScope implements TurnScope {
     public void attachPlatform(Platform platform) {
         this.platform = Objects.requireNonNullElseGet(platform, Platform::empty);
     }
-
-    /**
-     * 从配置构造对话上限。
-     *
-     * @param properties runtime.state
-     * @return 对话保留条数
-     */
-    public static int dialogueMax(RuntimeProperties properties) {
-        return properties.getState().getDialogueMax();
-    }
-
 
     /**
      * @return 机构 id
@@ -270,12 +245,7 @@ public final class DefaultTurnScope implements TurnScope {
      */
     @Override
     public List<DialogueMessage> dialogue(int limit) {
-        // 路由/投影只要不带 nodeId 的用户消息与最终回复
-        List<DialogueMessage> routed = dialogue.stream()
-            .filter(message -> message.getRole() != DialogueRole.AGENT || Objects.isNull(message.getNodeId()))
-            .toList();
-        int from = Math.max(0, routed.size() - limit);
-        return List.copyOf(routed.subList(from, routed.size()));
+        return dialogue.window(limit);
     }
 
     /**
@@ -285,7 +255,7 @@ public final class DefaultTurnScope implements TurnScope {
      */
     @Override
     public List<DialogueMessage> allDialogue() {
-        return List.copyOf(dialogue);
+        return dialogue.all();
     }
 
     /**
@@ -310,6 +280,8 @@ public final class DefaultTurnScope implements TurnScope {
 
     /**
      * persist 实体双写用的可变索引。
+     *
+     * @return 实体索引（可变，键为 {@code type:id}）
      */
     Map<String, EntityEntry> entityIndex() {
         return entities;
@@ -337,6 +309,14 @@ public final class DefaultTurnScope implements TurnScope {
     @Override
     public Optional<TaskCheckpoint> checkpoint() {
         return Objects.isNull(checkpoint) ? Optional.empty() : Optional.of(checkpoint);
+    }
+
+    /**
+     * @return 本轮已回应的断点；本轮未恢复为空
+     */
+    @Override
+    public Optional<TaskCheckpoint> resumed() {
+        return Objects.isNull(resumed) ? Optional.empty() : Optional.of(resumed);
     }
 
     /**
@@ -373,13 +353,7 @@ public final class DefaultTurnScope implements TurnScope {
      */
     @Override
     public void append(DialogueMessage message) {
-        dialogue.add(message);
-        int overflow = dialogue.size() - dialogueMax;
-        if (overflow > 0) {
-            dialogue.subList(0, overflow).clear();
-            flushedDialogue = Math.max(0, flushedDialogue - overflow);
-            persistedDialogue = Math.max(0, persistedDialogue - overflow);
-        }
+        dialogue.append(message);
     }
 
     /**
@@ -397,7 +371,7 @@ public final class DefaultTurnScope implements TurnScope {
         if (Objects.nonNull(this.task)) {
             Map<String, NodeSpace> spaces = new LinkedHashMap<>();
             nodes.forEach((id, node) -> spaces.put(id, new NodeSpace(
-                node.inputs(), node.outputs(), node.state(), node.repair(), node.rounds(), node.tokens()
+                node.inputs(), node.outputs(), node.state(), node.rounds(), node.tokens(), node.actions()
             )));
             closedTasks.add(new ClosedTask(this.task, this.graph, Map.copyOf(this.shared), this.prior,
                 List.copyOf(allPayloadIds()), spaces));
@@ -406,6 +380,7 @@ public final class DefaultTurnScope implements TurnScope {
         this.prior = prior;
         this.graph = new TaskGraph();
         this.checkpoint = null;
+        this.resumed = null;
         this.shared.clear();
         nodes.clear();
         payloads.clear();
@@ -439,7 +414,7 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
-     * 更新任务图中指定节点的状态和错误信息。
+     * 更新任务图中指定节点的状态和错误信息，并记下首次运行与进入终态的时间。
      *
      * @param nodeId       节点 id
      * @param status       新状态
@@ -455,6 +430,13 @@ public final class DefaultTurnScope implements TurnScope {
         node.setStatus(status);
         node.setErrorCode(errorCode);
         node.setErrorMessage(errorMessage);
+        long now = System.currentTimeMillis();
+        if (status == NodeStatus.RUNNING && Objects.isNull(node.getStartedAt())) {
+            node.setStartedAt(now);
+        }
+        if (status.isTerminal()) {
+            node.setFinishedAt(now);
+        }
     }
 
     /**
@@ -472,16 +454,19 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
-     * 消费当前断点并记录恢复审计信息。
+     * 消费当前断点并记录恢复审计信息；没有当前断点时只把任务置为运行中。
      *
      * @param action    用户选择的恢复动作
      * @param messageId 触发恢复的消息 id
      */
     @Override
     public void resume(ResumeAction action, String messageId) {
-        this.checkpoint = null;
-        this.lastResumeAction = action;
-        this.lastResumeMessageId = messageId;
+        if (Objects.nonNull(checkpoint)) {
+            this.resumed = checkpoint;
+            this.checkpoint = null;
+            this.lastResumeAction = action;
+            this.lastResumeMessageId = messageId;
+        }
         if (Objects.nonNull(task)) {
             task.setStatus(TaskStatus.RUNNING);
         }
@@ -659,7 +644,7 @@ public final class DefaultTurnScope implements TurnScope {
      * @return 待写入 Redis List 的消息
      */
     public List<DialogueMessage> pendingDialogue() {
-        return List.copyOf(dialogue.subList(flushedDialogue, dialogue.size()));
+        return dialogue.pendingFlush();
     }
 
     /**
@@ -668,21 +653,21 @@ public final class DefaultTurnScope implements TurnScope {
      * @return 待 insert 的消息
      */
     public List<DialogueMessage> pendingPersistDialogue() {
-        return List.copyOf(dialogue.subList(persistedDialogue, dialogue.size()));
+        return dialogue.pendingPersist();
     }
 
     /**
      * Redis flush 成功后推进已写入游标。
      */
     public void markDialogueFlushed() {
-        this.flushedDialogue = dialogue.size();
+        dialogue.markFlushed();
     }
 
     /**
      * MySQL persist 成功后推进已落库游标。
      */
     public void markDialoguePersisted() {
-        this.persistedDialogue = dialogue.size();
+        dialogue.markPersisted();
     }
 
     /**

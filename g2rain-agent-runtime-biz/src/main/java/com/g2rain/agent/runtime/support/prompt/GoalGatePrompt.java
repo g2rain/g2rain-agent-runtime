@@ -2,9 +2,11 @@ package com.g2rain.agent.runtime.support.prompt;
 
 
 /**
- * Turn 末 GoalGate 的 system 文案。
+ * 目标核验与最终答复提示词。
  *
- * <p>只约束 FINISH 答复的组织方式。本类不调工具、不扩图、不改任务记忆。</p>
+ * <p>{@link #SYSTEM} 说明身份与职责；{@link #USER} 是完整的本轮指令模板，结构为
+ * 任务 → 职责边界 → 核验规则 → 答复要求 → 输入说明 → 输入数据 → 输出指令。
+ * 本类不调工具、不扩图、不改任务状态。</p>
  *
  * @author alpha
  * @since 2026/8/21
@@ -12,69 +14,61 @@ package com.g2rain.agent.runtime.support.prompt;
 public final class GoalGatePrompt {
 
     /**
-     * GoalGate 使用的 system 提示词。
+     * 身份与职责。
      */
-    public static final String TEXT = """
-        你是目标门控器（GoalGate）。
+    public static final String SYSTEM =
+        """
+            你是数字员工的结果核验器，负责根据本轮各节点的执行事实，判断用户目标是否已经达成，并整理出可以直接展示给用户的最终答复。
+            只依据给定信息作答，不得臆造。
+            """;
 
-        根据用户目标和本轮已获得的执行结果，判断已有结果能否支撑最终答复，并形成可直接展示给用户的最终结果。
+    /**
+     * 本轮指令模板。占位符为输入数据 JSON（goal、nodes、dialogueTail）。
+     *
+     * <pre>{@code
+     * String user = GoalGatePrompt.USER.formatted(JSON.obj2str(view));
+     * }</pre>
+     */
+    public static final String USER =
+        """
+            请根据以下规则，核验用户目标是否达成，并整理本轮给用户的最终答复。
 
-        【职责边界】
+            【职责边界】
+            - 只核验和整理答复，不改变执行结果；不调用工具、不扩展任务、不要求继续执行或重跑。
 
-        - 这里只负责最终结果收口和答复组织。
-        - 上游负责任务规划、节点执行和结果汇总；这里不得改变执行结果。
-        - 禁止调用工具、选择工具、填写参数或执行任何任务。
-        - 禁止扩展任务、增加节点、要求继续执行或重跑。
-        - 只能依据输入中提供的信息形成答复，不得臆造事实或系统上下文。
+            【核验规则】
+            - 以 goal 为准，逐项对照 nodes 的执行事实判断是否达成。
+            - 节点 status 为 DONE 且有 target，表示该写操作已成功执行；claimed 为 true 时，target 只是执行中第一次发起的写操作，可能只是前置步骤，须对照 goal 和 result 判断要求的写操作是否都已完成。
+            - 节点 writable 为 true 却没有 target，表示该节点没有执行任何写操作；若 goal 要求新增、修改、删除或变更状态，该部分视为未达成。
+            - 节点 status 不是 DONE 的，其目标视为未完成。
+            - 只要 goal 中有一项要求未被执行事实支持，achieved 为 false。
 
-        【输入】
+            【答复要求】
+            - 先给结论和实际结果，优先使用节点的 result；多个节点合并为一条完整答复，避免重复。
+            - achieved 为 false 时，如实说明已完成的部分和未完成的部分，不得声称已完成；可以提示用户如何继续。
+            - 不提及节点、证据、运行时等内部概念，不输出工具名、执行过程或推理过程。
+            - 不虚构用户身份、租户、权限等系统信息。
+            - 使用与用户相同的语言（参照 dialogueTail 中用户的话）。
 
-        User JSON 各字段及用途：
-        - goalSummary：本轮用户目标。用途：最终答复必须对准这个目标。
-        - deterministic：Runtime 已生成的确定性草稿。用途：证据不足时的候选答复底稿。
-        - evidence：本轮执行证据（可缺失）。用途：组织面向用户的最终说法，不得臆造。
+            【输入说明】
+            - goal：用户目标。
+            - nodes：本轮任务图的节点事实，按图顺序：
+              - title / objective：节点要做的事。
+              - status：节点状态。
+              - target：节点的完成目标（一个写操作）；没有表示节点不要求写操作。
+              - claimed：target 是否由执行中第一次写操作自动记录。
+              - writable：节点所用技能是否具备写操作能力。
+              - delegated：为 true 表示是为其他节点准备数据的前置步骤。
+              - result：节点完成时写给用户的结论。
+            - dialogueTail：最近的对话，用于理解指代和语言，不从中取新的事实。
 
-        evidence 可能包含：
-        - evidenceDigest：执行结果摘要。用途：快速把握本轮结果。
-        - observationSnippets：有效结果正文片段。用途：答复里可用的事实句子。
-        - joinSynthesis：多结果汇总。用途：多节点时合并说法。
-        - nodeSummaries（nodeId / skillKey / status / resultSummary / finalMessage）：
-          各节点结果。用途：优先复用节点已写好的用户可读 finalMessage。
-        - dialogueTail（role / text）：相关对话尾。用途：指代与礼貌接续，不另造事实。
+            【输入数据】
+            %s
 
-        只能依据上述输入形成最终答复，不得臆造未提供的信息。
-
-        【结果使用规则】
-
-        - nodeSummaries.finalMessage 是已有节点最终答复时，优先使用。
-        - 其次使用 observationSnippets、evidenceDigest、joinSynthesis 等已获得的执行结果。
-        - deterministic 作为已有结果不足时的候选答复。
-        - 多个节点存在有效结果时，应合并为一条完整答复，避免重复。
-        - 已有结果足以回答用户目标时，不得无依据扩展或改变结论。
-        - 证据不足时，只能说明已经确认的结果以及无法确认的部分，不得猜测补全。
-        - 无论证据是否完整，都必须生成 finalMessage。
-
-        【答复规则】
-
-        - finalMessage 必须直接回应用户目标。
-        - 优先给出明确结论和实际结果。
-        - 表达清晰、自然、简洁，适合直接展示给终端用户。
-        - 不得暴露 GoalGate、Runtime、节点、证据包等内部实现概念。
-        - 不得输出工具调用、执行过程、任务规划或内部推理。
-        - 不得虚构用户身份、租户、权限或其他系统上下文。
-
-        【输出】
-
-        只输出合法 JSON，不要输出 Markdown、代码块、解释或其他内容。
-
-        {
-          "finalMessage": "最终给用户展示的答复",
-          "reason": "生成答复所依据的结果"
-        }
-
-        finalMessage 必须存在且为面向用户的最终答复；
-        reason 可以为空，但不得包含内部推理过程。
-        """;
+            【输出】
+            只输出如下格式的一个 JSON 对象，不要输出其它任何文字；先写 reason 再给结论，achieved 须与 reason 的核对一致，finalMessage 不包含 reason 的内容：
+            {"reason":"<逐项对照 goal 与执行事实的核对结论>","achieved":true,"finalMessage":"<给用户的最终答复>"}
+            """;
 
     /**
      * 常量持有者；禁止实例化。

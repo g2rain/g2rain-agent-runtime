@@ -5,6 +5,7 @@ import com.g2rain.model.nexus.dto.ChatCompletionRequest;
 import com.g2rain.model.nexus.dto.EmbeddingsRequest;
 import com.g2rain.model.nexus.vo.ChatCompletionResponse;
 import com.g2rain.model.nexus.vo.EmbeddingsResponse;
+import org.jspecify.annotations.Nullable;
 
 /**
  * ModelGateway（模型网关）：对大模型服务的统一出站口。
@@ -19,12 +20,14 @@ import com.g2rain.model.nexus.vo.EmbeddingsResponse;
 public interface ModelGateway {
 
     /**
-     * 发起一次 Chat Completions 请求。
+     * 发起一次 Chat Completions 请求，并输出调用轨迹。
      *
-     * @param request 聊天补全请求（模型、消息、可选 tools 等）
+     * @param use     调用用途
+     * @param model   本轮选用的模型名；为空时由模型服务按默认路由
+     * @param request 聊天补全请求（消息、可选 tools 等）
      * @return 聊天补全响应
      */
-    ChatCompletionResponse chat(ChatCompletionRequest request);
+    ChatCompletionResponse chat(ModelUse use, @Nullable String model, ChatCompletionRequest request);
 
     /**
      * 发起一次 Embeddings 向量化请求。

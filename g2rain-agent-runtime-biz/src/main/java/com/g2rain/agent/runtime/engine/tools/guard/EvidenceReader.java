@@ -1,8 +1,6 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.graph.EdgeType;
-import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
@@ -33,7 +31,7 @@ import java.util.Optional;
 /**
  * 按 extract 的 key 与 path 精确取证。
  *
- * <p>报文按需加载；可读本节点与委派前置节点的成功证据，不扫描整图。</p>
+ * <p>报文按需加载；可读本节点与全部上游节点（沿依赖边追溯，含委派）的成功证据，不扫描整图。</p>
  *
  * @author alpha
  * @since 2026/10/4
@@ -41,8 +39,14 @@ import java.util.Optional;
 @Component
 public class EvidenceReader {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
+    /**
+     * 运行时状态门面：读节点证据与载荷。
+     */
     private final RuntimeStateFacade stateFacade;
 
     /**
@@ -58,7 +62,7 @@ public class EvidenceReader {
      * 按已解析的 {@link ValueRef} 从成功证据中取值。
      *
      * <p>袋必须为 EVIDENCE。path 第一段是 extract key，其后为相对路径。
-     * 只读本节点与委派前置节点的成功证据，新的优先。</p>
+     * 只读本节点与全部上游节点的成功证据：本节点优先，上游由近到远，同一节点内新的在前。</p>
      *
      * @param ctx 当前工具执行上下文
      * @param ref 证据取值引用
@@ -69,6 +73,7 @@ public class EvidenceReader {
             return Optional.empty();
         }
 
+        // path 拆成 extract 键与其后的相对路径
         String rest = ref.path();
         int dot = rest.indexOf('.');
         String key = dot < 0 ? rest : rest.substring(0, dot);
@@ -77,6 +82,7 @@ public class EvidenceReader {
             return Optional.empty();
         }
 
+        // 按可见顺序找第一条声明了该 extract 且取得到值的证据
         for (OwnedEvidence owned : successfulEvidenceNewestFirst(ctx)) {
             ExtractSpec extract = extractOf(ctx, owned, key);
             if (Objects.isNull(extract) || Strings.isBlank(extract.getPath())) {
@@ -131,6 +137,7 @@ public class EvidenceReader {
             return Optional.empty();
         }
 
+        // 只看声明了 extracts 的工具证据，在每个 extract 子树里找相等节点
         for (OwnedEvidence owned : successfulEvidenceNewestFirst(ctx)) {
             ToolSpec tool = toolOf(ctx, owned.ownerNodeId(), owned.head().toolName());
             if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
@@ -196,6 +203,7 @@ public class EvidenceReader {
                 }
             }
         }
+
         return Optional.empty();
     }
 
@@ -248,33 +256,75 @@ public class EvidenceReader {
     }
 
     /**
-     * 本节点与委派前置节点上「算成功」的证据，新的在前。
+     * 本节点与全部上游节点（沿依赖边追溯，含委派）上「算成功」的证据。
      *
-     * <p>带所属节点 id，便于取对应 Skill 的 extracts。</p>
+     * <p>本节点在前，上游按距离由近到远；同一节点内新的在前。带所属节点 id，便于取对应 Skill 的 extracts。</p>
      *
      * @param ctx 当前工具执行上下文
-     * @return 成功证据列表，最新在前；可为空列表
+     * @return 成功证据列表；可为空列表
      */
     public List<OwnedEvidence> successfulEvidenceNewestFirst(ToolExecutionContext ctx) {
         List<OwnedEvidence> heads = new ArrayList<>();
         String nodeId = ctx.getNodeId();
-        for (EvidenceHead head : ctx.scope().evidence()) {
-            if (isToolCallSuccess(head)) {
-                heads.add(new OwnedEvidence(nodeId, head));
+        addNewestFirst(heads, nodeId, ctx.scope().evidence());
+        for (String owner : ctx.getGraph().upstream(nodeId)) {
+            addNewestFirst(heads, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
+        }
+
+        return heads;
+    }
+
+    /**
+     * 上游节点成功证据按抽取项取出的原文，供下游节点直接使用。
+     *
+     * <p>上游按距离由近到远；只取配置了 extracts 的工具，每个抽取项一条。</p>
+     *
+     * @param ctx 当前工具执行上下文
+     * @return 上游抽取原文；没有为空列表
+     */
+    public List<UpstreamExtract> upstreamExtracts(ToolExecutionContext ctx) {
+        List<UpstreamExtract> extracts = new ArrayList<>();
+        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
+            List<OwnedEvidence> heads = new ArrayList<>();
+            addNewestFirst(heads, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
+            for (OwnedEvidence owned : heads) {
+                ToolSpec tool = toolOf(ctx, owner, owned.head().toolName());
+                if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
+                    continue;
+                }
+
+                JsonNode payload = stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), owned.head().evidenceId());
+                for (ExtractSpec extract : tool.getExtracts()) {
+                    if (Strings.isBlank(extract.getPath())) {
+                        continue;
+                    }
+
+                    JsonNode value = JSON.lookupNode(payload, extract.getPath().trim());
+                    if (JSON.hasValue(value)) {
+                        extracts.add(new UpstreamExtract(owner, owned.head().evidenceId(), owned.head().toolName(),
+                            extract.getKey(), extract.getPath().trim(), value));
+                    }
+                }
             }
         }
 
-        TaskGraph graph = ctx.getGraph();
-        graph.getEdges().stream()
-            .filter(edge -> edge.getType() == EdgeType.DELEGATE && nodeId.equals(edge.getTo()))
-            .forEach(edge -> {
-                String owner = edge.getFrom();
-                stateFacade.evidenceOf(ctx.getFrame().turn(), owner).stream()
-                    .filter(EvidenceReader::isToolCallSuccess)
-                    .forEach(head -> heads.add(new OwnedEvidence(owner, head)));
-            });
-        java.util.Collections.reverse(heads);
-        return heads;
+        return extracts;
+    }
+
+    /**
+     * 按新的在前追加某节点的成功证据。
+     *
+     * @param heads 输出列表
+     * @param owner 证据所属节点
+     * @param all   该节点全部证据（按发生顺序）
+     */
+    private static void addNewestFirst(List<OwnedEvidence> heads, String owner, List<EvidenceHead> all) {
+        for (int i = all.size() - 1; i >= 0; i--) {
+            EvidenceHead head = all.get(i);
+            if (isToolCallSuccess(head)) {
+                heads.add(new OwnedEvidence(owner, head));
+            }
+        }
     }
 
     /**
@@ -315,7 +365,7 @@ public class EvidenceReader {
     }
 
     /**
-     * 按证据所属节点的 skillKey 取 ToolSpec（委派前置节点用其自身契约）。
+     * 按证据所属节点的 skillKey 取 ToolSpec（上游节点用其自身契约）。
      *
      * @param ctx         执行上下文
      * @param ownerNodeId 证据所属节点
@@ -363,6 +413,21 @@ public class EvidenceReader {
      * @param head        证据摘要
      */
     public record OwnedEvidence(String ownerNodeId, EvidenceHead head) {
+
+    }
+
+    /**
+     * 上游节点一条抽取项的原文。
+     *
+     * @param nodeId     所属上游节点
+     * @param evidenceId 证据标识
+     * @param tool       工具名
+     * @param key        抽取键
+     * @param path       报文路径
+     * @param value      路径上的原值
+     */
+    public record UpstreamExtract(String nodeId, String evidenceId, String tool, @Nullable String key, String path,
+                                  JsonNode value) {
 
     }
 

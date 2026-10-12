@@ -1,9 +1,9 @@
 package com.g2rain.agent.runtime.engine.flow.finalize;
 
+import com.g2rain.agent.runtime.domain.decision.GoalEvaluation;
 import com.g2rain.agent.runtime.domain.decision.IntentResult;
 import com.g2rain.agent.runtime.domain.decision.TurnMode;
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
-import com.g2rain.agent.runtime.domain.finalize.GoalEvaluation;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
@@ -44,7 +44,7 @@ import java.util.Optional;
 public final class DefaultFinalizer implements Finalizer {
 
     /**
-     * 把确定性草稿与证据收成给人看的答复。
+     * 成功收口时核验目标并合成答复。
      */
     private final GoalGate goalGate;
 
@@ -101,7 +101,7 @@ public final class DefaultFinalizer implements Finalizer {
                 .map(IntentResult::getUserReply)
                 .filter(Strings::isNotBlank)
                 .orElse(RuntimeMessage.REPLY_CANCELLED.text());
-            return new GoalEvaluation(TaskStatus.CANCELED, true, false, false, reply);
+            return new GoalEvaluation(TaskStatus.CANCELED, true, reply);
         }
         if (Objects.nonNull(decision) && decision.mode().skipsTask()) {
             TaskStatus keep = ctx.getTurn().task().map(TaskMetadata::getStatus).orElse(TaskStatus.SUCCEEDED);
@@ -111,17 +111,15 @@ public final class DefaultFinalizer implements Finalizer {
                 .orElse(decision.mode() == TurnMode.UNCERTAIN
                     ? RuntimeMessage.ROUTE_UNCERTAIN.text()
                     : RuntimeMessage.REPLY_ACK.text());
-            return new GoalEvaluation(keep, false, false, false, reply);
+            return new GoalEvaluation(keep, false, reply);
         }
         ExecutorResult executed = ctx.getExecutorResult();
         TaskStatus status = resolveStatus(ctx.getTurn(), executed);
         boolean terminal = TaskStatus.isTerminal(status);
         boolean succeeded = terminal && status == TaskStatus.SUCCEEDED;
-        String executorMsg = Objects.nonNull(executed) && Strings.isNotBlank(executed.message())
-            ? executed.message().trim()
-            : null;
-        String summary = goalGate.present(executorMsg, null, succeeded);
-        return new GoalEvaluation(status, terminal, succeeded, succeeded, summary);
+        String draft = Objects.isNull(executed) ? null : Strings.blankToNull(executed.message());
+        String summary = goalGate.present(ctx, draft, succeeded);
+        return new GoalEvaluation(status, terminal, summary);
     }
 
     /**

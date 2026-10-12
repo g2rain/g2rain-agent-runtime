@@ -23,44 +23,42 @@ public enum RuntimeErrorCode implements ErrorCode {
      */
     TOOL_NOT_FOUND("agent_runtime.40401", "工具不存在：{0:toolName}"),
 
-    MCP_TOOL_ERROR("agent_runtime.40003", "{0}"),
+    MCP_TOOL_ERROR("agent_runtime.40003", "{0:message}"),
 
-    TOOL_BUSINESS_FAILED("agent_runtime.40004", "{0}"),
+    TOOL_BUSINESS_FAILED("agent_runtime.40004", "{0:message}"),
 
-    MCP_INVALID_PARAMS("agent_runtime.40014", "{0}"),
+    MCP_INVALID_PARAMS("agent_runtime.40014", "{0:message}"),
 
-    MCP_RPC_ERROR("agent_runtime.40015", "{0}"),
+    MCP_RPC_ERROR("agent_runtime.40015", "{0:message}"),
 
-    TOOL_TIMEOUT("agent_runtime.40016", "{0}"),
+    TOOL_TIMEOUT("agent_runtime.40016", "{0:message}"),
 
-    TOOL_UNREACHABLE("agent_runtime.40017", "{0}"),
+    TOOL_UNREACHABLE("agent_runtime.40017", "{0:message}"),
 
-    TOOL_IO_ERROR("agent_runtime.40018", "{0}"),
+    TOOL_IO_ERROR("agent_runtime.40018", "{0:message}"),
 
-    TOOL_NON_JSON("agent_runtime.40019", "{0}"),
+    TOOL_NON_JSON("agent_runtime.40019", "{0:message}"),
 
     /**
      * 调用层未知异常兜底（写工具记 UNKNOWN）。
      */
-    TOOL_ERROR("agent_runtime.40029", "{0}"),
+    TOOL_ERROR("agent_runtime.40029", "{0:message}"),
 
-    ARG_JSON_INVALID("agent_runtime.40020", "{0}"),
+    ARG_JSON_INVALID("agent_runtime.40020", "{0:message}"),
 
-    ARG_UNRESOLVED_REF("agent_runtime.40021", "{0}"),
+    ARG_REJECTED("agent_runtime.40032", "{0:message}"),
 
-    ARG_REJECTED("agent_runtime.40032", "{0}"),
+    PARAM_PROVENANCE_FAIL("agent_runtime.40022", "{0:message}"),
 
-    PARAM_PROVENANCE_FAIL("agent_runtime.40022", "{0}"),
+    PARAM_PROVENANCE_CALL_TOOL("agent_runtime.40023", "{0:message}"),
 
-    PARAM_PROVENANCE_CALL_TOOL("agent_runtime.40023", "{0}"),
+    PARAM_PROVENANCE_ASK_USER("agent_runtime.40024", "{0:message}"),
 
-    PARAM_PROVENANCE_ASK_USER("agent_runtime.40024", "{0}"),
+    PARAM_PROVENANCE_REJECTED("agent_runtime.40025", "{0:message}"),
 
-    PARAM_PROVENANCE_REJECTED("agent_runtime.40025", "{0}"),
+    FINGERPRINT_TRIP("agent_runtime.40026", "{0:message}"),
 
-    FINGERPRINT_TRIP("agent_runtime.40026", "{0}"),
-
-    CATALOG_DENIED("agent_runtime.40027", "{0}"),
+    CATALOG_DENIED("agent_runtime.40027", "{0:message}"),
 
     STATE_KEY_RESERVED("agent_runtime.40028", "禁止写入保留键：{0:key}"),
 
@@ -129,97 +127,99 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     ARGS_HASH_MISMATCH("agent_runtime.40913", "已批准参数与确认时不一致"),
 
-    INVALID_DEFAULT("agent_runtime.42201", "非法默认值：{0}"),
+    INVALID_DEFAULT("agent_runtime.42201", "非法默认值：{0:detail}"),
 
-    UNKNOWN_FIELD("agent_runtime.42202", "未知字段：{0}"),
+    UNKNOWN_FIELD("agent_runtime.42202", "未知字段：{0:detail}"),
 
-    MISSING_REFERENCE("agent_runtime.42203", "引用缺失：{0}"),
+    MISSING_REFERENCE("agent_runtime.42203", "引用缺失：{0:detail}"),
 
-    ILLEGAL_SOURCE("agent_runtime.42204", "非法来源：{0}"),
+    ILLEGAL_SOURCE("agent_runtime.42204", "非法来源：{0:detail}"),
 
-    INVALID_EXPRESSION("agent_runtime.42205", "非法表达式：{0}"),
+    INVALID_EXPRESSION("agent_runtime.42205", "非法表达式：{0:detail}"),
 
-    WRITE_CONTRACT_INCOMPLETE("agent_runtime.42206", "写工具契约不完整：{0}"),
+    WRITE_CONTRACT_INCOMPLETE("agent_runtime.42206", "写工具契约不完整：{0:detail}"),
 
-    VERIFY_NOT_READONLY("agent_runtime.42207", "verify 工具必须只读：{0}"),
+    VERIFY_NOT_READONLY("agent_runtime.42207", "verify 工具必须只读：{0:detail}"),
 
     SKILL_NOT_FOUND("agent_runtime.40411", "技能不存在：{0:skillKey}"),
 
-    TARGET_TOOL_INVALID("agent_runtime.42208", "目标工具非法：{0}"),
-
-    DONE_WHEN_INVALID("agent_runtime.42209", "doneWhen 非法：{0}"),
+    TARGET_TOOL_INVALID("agent_runtime.42208", "目标工具非法：{0:detail}"),
 
     TOOL_NOT_DECLARED("agent_runtime.42210", "工具未在契约中声明：{0:toolName}"),
 
-    MISSING_INPUT("agent_runtime.42211", "缺少输入：{0}"),
+    MISSING_INPUT("agent_runtime.42211", "缺少输入：{0:detail}"),
 
-    PROVIDER_UNAVAILABLE("agent_runtime.42212", "provider 不可用：{0}"),
+    PROVIDER_UNAVAILABLE("agent_runtime.42212", "provider 不可用：{0:detail}"),
 
-    OUTPUT_TYPE_INVALID("agent_runtime.42213", "输出类型非法：{0}"),
+    OUTPUT_TYPE_INVALID("agent_runtime.42213", "输出类型非法：{0:detail}"),
 
-    OUTPUT_FIELDS_INVALID("agent_runtime.42214", "输出字段非法：{0}"),
+    OUTPUT_FIELDS_INVALID("agent_runtime.42214", "输出字段非法：{0:detail}"),
 
-    OUTPUT_MIN_ITEMS("agent_runtime.42215", "输出条数不足：{0}"),
+    OUTPUT_MIN_ITEMS("agent_runtime.42215", "输出条数不足：{0:detail}"),
 
-    OUTPUT_REQUIRED_MISSING("agent_runtime.42216", "缺少必填输出：{0}"),
+    OUTPUT_REQUIRED_MISSING("agent_runtime.42216", "缺少必填输出：{0:detail}"),
 
-    SHARE_WRITE_FORBIDDEN("agent_runtime.42217", "禁止写入共享值：{0}"),
+    SHARE_WRITE_FORBIDDEN("agent_runtime.42217", "禁止写入共享值：{0:detail}"),
 
-    SENSITIVE_VALUE_REJECTED("agent_runtime.42218", "敏感值被拒绝：{0}"),
+    SENSITIVE_VALUE_REJECTED("agent_runtime.42218", "敏感值被拒绝：{0:detail}"),
 
-    ENTITY_SCHEMA_INVALID("agent_runtime.42219", "实体 schema 非法：{0}"),
+    ENTITY_SCHEMA_INVALID("agent_runtime.42219", "实体 schema 非法：{0:detail}"),
 
     ENTITY_ID_MISSING("agent_runtime.42220", "实体 id 缺失"),
 
-    APPROVAL_REQUIRED("agent_runtime.42221", "需要用户确认：{0}"),
+    APPROVAL_REQUIRED("agent_runtime.42221", "需要用户确认：{0:detail}"),
 
-    VERIFY_ARG_INVALID("agent_runtime.42222", "verify 参数非法：{0}"),
+    VERIFY_ARG_INVALID("agent_runtime.42222", "verify 参数非法：{0:detail}"),
 
-    SOURCE_REJECT("agent_runtime.42223", "来源校验失败：{0}"),
+    SOURCE_REJECT("agent_runtime.42223", "来源校验失败：{0:detail}"),
 
-    ARG_CONFLICT("agent_runtime.42224", "参数冲突：{0}"),
+    ARG_CONFLICT("agent_runtime.42224", "参数冲突：{0:detail}"),
 
-    ARG_CONDITION_NOT_MET("agent_runtime.42225", "参数条件不满足：{0}"),
+    ARG_CONDITION_NOT_MET("agent_runtime.42225", "参数条件不满足：{0:detail}"),
 
-    MISSING_REQUIRED_ARG("agent_runtime.42226", "缺少必填参数：{0}"),
+    MISSING_REQUIRED_ARG("agent_runtime.42226", "缺少必填参数：{0:detail}"),
 
-    ARG_ENUM_INVALID("agent_runtime.42227", "参数枚举非法：{0}"),
+    ARG_ENUM_INVALID("agent_runtime.42227", "参数枚举非法：{0:detail}"),
 
-    MISSING_TOOL("agent_runtime.42228", "补数工具缺失：{0}"),
+    MISSING_TOOL("agent_runtime.42228", "补数工具缺失：{0:detail}"),
 
     STALE_PRIOR_REJECTED("agent_runtime.42229", "过期前情被拒绝"),
 
-    BUSINESS_FAILURE("agent_runtime.42230", "业务失败：{0}"),
+    BUSINESS_FAILURE("agent_runtime.42230", "业务失败：{0:detail}"),
 
-    EXTRACT_PATH_INVALID("agent_runtime.42231", "extracts.path 非法：{0}"),
+    EXTRACT_PATH_INVALID("agent_runtime.42231", "extracts.path 非法：{0:detail}"),
 
-    DONE_WHEN_FALSE("agent_runtime.42232", "完成条件未满足：{0}"),
+    TARGET_NOT_SUCCEEDED("agent_runtime.42233", "目标工具未成功：{0:detail}"),
 
-    TARGET_NOT_SUCCEEDED("agent_runtime.42233", "目标工具未成功：{0}"),
+    SHARED_VALUE_MISSING("agent_runtime.42234", "共享值缺失：{0:detail}"),
 
-    SHARED_VALUE_MISSING("agent_runtime.42234", "共享值缺失：{0}"),
+    EVIDENCE_PATH_INVALID("agent_runtime.42235", "证据路径非法：{0:detail}"),
 
-    EVIDENCE_PATH_INVALID("agent_runtime.42235", "证据路径非法：{0}"),
+    PLATFORM_FIELD_FORBIDDEN("agent_runtime.42236", "禁止使用平台字段：{0:detail}"),
 
-    PLATFORM_FIELD_FORBIDDEN("agent_runtime.42236", "禁止使用平台字段：{0}"),
+    DELEGATE_FORBIDDEN("agent_runtime.42237", "禁止委派：{0:detail}"),
 
-    DELEGATE_FORBIDDEN("agent_runtime.42237", "禁止委派：{0}"),
+    DELEGATE_BROKEN("agent_runtime.42238", "委派链损坏：{0:detail}"),
 
-    DELEGATE_BROKEN("agent_runtime.42238", "委派链损坏：{0}"),
+    DELEGATE_REPEATED("agent_runtime.42239", "重复委派被拒绝：{0:detail}"),
 
-    DELEGATE_REPEATED("agent_runtime.42239", "重复委派被拒绝：{0}"),
+    ASK_USER("agent_runtime.42240", "需向用户追问：{0:detail}"),
 
-    ASK_USER("agent_runtime.42240", "需向用户追问：{0}"),
+    CALL_TOOL("agent_runtime.42241", "需先调用补数工具：{0:detail}"),
 
-    CALL_TOOL("agent_runtime.42241", "需先调用补数工具：{0}"),
-
-    FAIL("agent_runtime.42242", "缺参失败：{0}"),
+    FAIL("agent_runtime.42242", "缺参失败：{0:detail}"),
 
     OUTPUT_PATH_INVALID("agent_runtime.42243", "输出 path 非法：{0:path}"),
 
     OUTPUT_WRITE_FORBIDDEN("agent_runtime.42244", "禁止写入节点正式产出：{0:path}"),
 
-    APPROVAL_NOT_GATED("agent_runtime.42245", "须先调用写工具 [{0:toolName}]，被拦下后再申请确认");
+    APPROVAL_NOT_GATED("agent_runtime.42245", "没有被拦下待确认的写调用 [{0:toolName}]"),
+
+    APPROVAL_TOOL_MISMATCH("agent_runtime.42246", "待确认的写工具是 [{0:toolName}]，与申请的工具名不一致"),
+
+    FOLLOW_UP_ANSWERED("agent_runtime.42247", "用户已回答该追问：{0:answer}"),
+
+    FOLLOW_UP_UNGROUNDED("agent_runtime.42248", "追问没有依据：{0:detail}");
 
     /**
      * 错误码字符串（如 {@code agent_runtime.40401}）；由 {@link #code()} 读出供全局异常处理器消费。

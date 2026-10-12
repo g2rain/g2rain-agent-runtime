@@ -1,7 +1,7 @@
 /**
  * Policy（收口门槛）包：判断节点是否允许 finish。
  * <p>
- * {@link FinishPolicy} 供控流在落产出前调用；doneWhen 语法树在 {@code domain.hydrate} 装载期解析。
+ * {@link FinishPolicy} 供控流在落产出前调用；完成目标取节点 target。
  * </p>
  *
  * @author alpha

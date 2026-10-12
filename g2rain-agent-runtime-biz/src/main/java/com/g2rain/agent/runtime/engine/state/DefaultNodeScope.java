@@ -4,7 +4,7 @@ package com.g2rain.agent.runtime.engine.state;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
-import com.g2rain.agent.runtime.domain.state.task.RepairDirective;
+import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.common.utils.Collections;
 import org.jspecify.annotations.Nullable;
 
@@ -17,7 +17,7 @@ import java.util.Objects;
 /**
  * {@link NodeScope} 的默认可变实现。
  *
- * <p>对象保存单个节点的输入、输出、私有状态、修复义务、证据摘要和执行统计。访问器返回
+ * <p>对象保存单个节点的输入、输出、私有状态、证据摘要和执行统计。访问器返回
  * 快照，写入方法只修改当前轮内存视图，最终由状态门面统一刷新和持久化。</p>
  *
  * @author alpha
@@ -51,14 +51,14 @@ public final class DefaultNodeScope implements NodeScope {
     private final Map<String, Object> state;
 
     /**
-     * 补参义务；每个节点同一时刻最多一条。
-     */
-    private @Nullable RepairDirective repair;
-
-    /**
      * 本节点证据摘要。
      */
     private final List<EvidenceHead> evidence;
+
+    /**
+     * 无业务证据的动作，按发生顺序。
+     */
+    private final List<NodeAction> actions;
 
     /**
      * ReAct 轮次。
@@ -76,21 +76,22 @@ public final class DefaultNodeScope implements NodeScope {
      * @param inputs   已绑定 inputs
      * @param outputs  已有 outputs
      * @param state    私有便签
-     * @param repair   补参义务；可空
      * @param evidence 证据摘要
+     * @param actions  无业务证据的动作
      * @param rounds   已有轮次
      * @param tokens   已有 token
      */
     public DefaultNodeScope(DefaultTurnScope turn, String nodeId, Map<String, Sourced<?>> inputs,
                             Map<String, Sourced<?>> outputs, Map<String, Object> state,
-                            @Nullable RepairDirective repair, List<EvidenceHead> evidence, int rounds, long tokens) {
+                            List<EvidenceHead> evidence, List<NodeAction> actions,
+                            int rounds, long tokens) {
         this.turn = turn;
         this.nodeId = nodeId;
         this.inputs = new LinkedHashMap<>(inputs);
         this.outputs = new LinkedHashMap<>(outputs);
         this.state = new LinkedHashMap<>(state);
-        this.repair = repair;
         this.evidence = new ArrayList<>(evidence);
+        this.actions = new ArrayList<>(actions);
         this.rounds = rounds;
         this.tokens = tokens;
     }
@@ -164,16 +165,6 @@ public final class DefaultNodeScope implements NodeScope {
     }
 
     /**
-     * 返回当前修复义务。
-     *
-     * @return 尚未完成的修复指令；没有时为 {@code null}
-     */
-    @Override
-    public @Nullable RepairDirective repair() {
-        return repair;
-    }
-
-    /**
      * 返回证据摘要的不可变快照。
      *
      * @return 当前节点的工具证据摘要
@@ -194,6 +185,26 @@ public final class DefaultNodeScope implements NodeScope {
     public void addEvidence(EvidenceHead head) {
         evidence.removeIf(existing -> Objects.equals(existing.evidenceId(), head.evidenceId()));
         evidence.add(head);
+    }
+
+    /**
+     * @return 无业务证据的动作快照，按发生顺序
+     */
+    public List<NodeAction> actions() {
+        return List.copyOf(actions);
+    }
+
+    /**
+     * 追加一条无业务证据的动作；超过上限时丢弃最早的。
+     *
+     * @param action 动作
+     * @param limit  本节点保留条数上限；不大于 0 时不限
+     */
+    public void act(NodeAction action, int limit) {
+        actions.add(action);
+        while (limit > 0 && actions.size() > limit) {
+            actions.removeFirst();
+        }
     }
 
     /**
@@ -237,24 +248,6 @@ public final class DefaultNodeScope implements NodeScope {
         }
 
         state.put(key, value);
-    }
-
-    /**
-     * 设置当前节点的修复义务。
-     *
-     * @param directive 新的修复指令
-     */
-    @Override
-    public void repair(RepairDirective directive) {
-        this.repair = directive;
-    }
-
-    /**
-     * 清除当前节点已完成的修复义务。
-     */
-    @Override
-    public void clearRepair() {
-        this.repair = null;
     }
 
     /**

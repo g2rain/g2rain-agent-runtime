@@ -46,6 +46,17 @@ public class TaskNode {
     private @Nullable String skillKey;
 
     /**
+     * 完成目标：本节点要完成的写工具注册名；纯查询节点为空。
+     * <p>取值顺序：规划输出 → 技能契约默认 target → 执行中首个实际发起的写调用。finish 时须该工具成功。</p>
+     */
+    private @Nullable String target;
+
+    /**
+     * 完成目标是否由执行中首个写调用自动记录；为 {@code true} 时它可能只是前置写操作，GoalGate 须交模型核验。
+     */
+    private boolean targetClaimed;
+
+    /**
      * 当前生命周期状态；新建节点默认等待依赖检查。
      */
     private NodeStatus status = NodeStatus.PENDING;
@@ -54,6 +65,11 @@ public class TaskNode {
      * 依赖的上游节点 ID 列表；全部 unlocksDownstream 后本节点才可 READY。
      */
     private List<String> dependsOn = new ArrayList<>();
+
+    /**
+     * 节点完成时给用户的结论（finish 的 output）；未完成为空。
+     */
+    private @Nullable String result;
 
     /**
      * 失败码；成功为空。
@@ -71,6 +87,16 @@ public class TaskNode {
     private int delegateDepth;
 
     /**
+     * 首次进入运行的时间（毫秒）；挂起后续跑不改。
+     */
+    private @Nullable Long startedAt;
+
+    /**
+     * 进入终态（完成、失败、取消、跳过）的时间（毫秒）。
+     */
+    private @Nullable Long finishedAt;
+
+    /**
      * 从计划步骤创建节点的运行时表示。
      *
      * <p>无依赖的节点初始为 {@link NodeStatus#READY}，有依赖的节点初始为
@@ -78,7 +104,7 @@ public class TaskNode {
      * （由调用方另设或通过 {@code addNode} 建边）。</p>
      *
      * @param nodeId 分配给本节点的 ID
-     * @param step   计划步骤，提供 title / objective / skillKey / 是否有依赖
+     * @param step   计划步骤，提供 title / objective / skillKey / target / 是否有依赖
      * @return 填好基础字段的新节点
      */
     public static TaskNode from(String nodeId, PlanStep step) {
@@ -93,6 +119,7 @@ public class TaskNode {
         node.setTitle(step.title());
         node.setObjective(step.objective());
         node.setSkillKey(step.skillKey());
+        node.setTarget(step.target());
         node.setStatus(nodeStatus);
         return node;
     }

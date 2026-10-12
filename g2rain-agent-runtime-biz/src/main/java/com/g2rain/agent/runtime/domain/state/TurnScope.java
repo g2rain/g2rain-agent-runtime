@@ -3,8 +3,6 @@ package com.g2rain.agent.runtime.domain.state;
 
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
-import com.g2rain.agent.runtime.domain.platform.Platform;
-import com.g2rain.agent.runtime.domain.state.conversation.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
@@ -89,9 +87,19 @@ public interface TurnScope {
     TaskGraph graph();
 
     /**
-     * @return 当前断点；未挂起为空
+     * @return 当前断点（仍在等待用户）；未挂起或本轮已回应为空
      */
     Optional<TaskCheckpoint> checkpoint();
+
+    /**
+     * 本轮已被用户回应、已消费的断点。
+     *
+     * <p>节点被唤醒时断点即被消费：之后 {@link #checkpoint()} 为空，节点续跑用本方法读取待批写操作、
+     * 追问字段等现场。例：确认续跑时从这里取 {@code pendingAction} 派发写工具。</p>
+     *
+     * @return 本轮已回应的断点；本轮未恢复为空
+     */
+    Optional<TaskCheckpoint> resumed();
 
     /**
      * @return 任务级共享值
@@ -157,7 +165,9 @@ public interface TurnScope {
     void suspend(TaskCheckpoint checkpoint);
 
     /**
-     * 清断点并写恢复审计。
+     * 消费当前断点并写恢复审计；没有当前断点时只把任务置为运行中。
+     *
+     * <p>同一轮重复调用只在第一次记录恢复动作，消费后的断点经 {@link #resumed()} 读取。</p>
      *
      * @param action    用户恢复动作
      * @param messageId 触发恢复的消息 id

@@ -53,6 +53,11 @@ public class TaskMetadata {
     private @Nullable String goalSummary;
 
     /**
+     * 开任务时的用户原文；摘要会丢细节（如正文），节点执行以它为用户诉求。
+     */
+    private @Nullable String request;
+
+    /**
      * 终态对外文案（成功/失败收口时给用户看的一句话）。
      */
     private @Nullable String finalMessage;
@@ -71,4 +76,19 @@ public class TaskMetadata {
      * 最近一次进入挂起的时间；未挂起为空。审批恢复时可用它判断确认是否仍然有效。
      */
     private @Nullable Long suspendedAt;
+
+    /**
+     * 任务开启时间（毫秒）。
+     */
+    private @Nullable Long startedAt;
+
+    /**
+     * 开启任务那一轮的 traceId，用于把任务与日志链路、模型调用记录对上。
+     */
+    private @Nullable String traceId;
+
+    /**
+     * 触发开启任务的用户消息 id；纯按钮动作开启时为空。
+     */
+    private @Nullable String sourceMessageId;
 }

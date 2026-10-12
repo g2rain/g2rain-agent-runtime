@@ -24,12 +24,6 @@ public enum NodeNoteKey {
     DELEGATE_RESULT("delegateResult"),
 
     /**
-     * ReAct 进度。
-     * <p>当前节点推理-行动进度快照，供恢复或提示续写。</p>
-     */
-    PROGRESS("progress"),
-
-    /**
      * 产出实体候选。
      * <p>finish 时放下的 output 实体，persist 时并入会话记忆。</p>
      */

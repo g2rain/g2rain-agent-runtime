@@ -83,6 +83,7 @@ public record ValueRef(Bag bag, String path) {
         if (Strings.isBlank(trimmed)) {
             throw new BusinessException(RuntimeErrorCode.ILLEGAL_SOURCE, from);
         }
+
         // evidence 前缀单独处理：其余路径可能含点号，不能按第一段切
         if (trimmed.startsWith(Bag.EVIDENCE.wirePrefix() + ".")) {
             String rest = trimmed.substring(Bag.EVIDENCE.wirePrefix().length() + 1);
@@ -91,20 +92,24 @@ public record ValueRef(Bag bag, String path) {
             }
             return new ValueRef(Bag.EVIDENCE, rest);
         }
+
         for (Bag bag : Bag.values()) {
             // evidence 已在上方按完整 remainder 解析
             if (bag == Bag.EVIDENCE) {
                 continue;
             }
+
             String prefix = bag.wirePrefix() + ".";
             if (trimmed.startsWith(prefix)) {
                 String rest = trimmed.substring(prefix.length());
                 if (Strings.isBlank(rest)) {
                     throw new BusinessException(RuntimeErrorCode.ILLEGAL_SOURCE, from);
                 }
+
                 return new ValueRef(bag, rest);
             }
         }
+
         throw new BusinessException(RuntimeErrorCode.ILLEGAL_SOURCE, from);
     }
 
@@ -118,6 +123,7 @@ public record ValueRef(Bag bag, String path) {
         if (Strings.isBlank(from)) {
             return false;
         }
+
         try {
             parse(from);
             return true;

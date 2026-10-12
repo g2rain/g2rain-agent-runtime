@@ -1,7 +1,7 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
-import com.g2rain.agent.runtime.domain.platform.Platform;
+import com.g2rain.agent.runtime.domain.state.Platform;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -23,6 +23,9 @@ import java.util.Objects;
  */
 final class WorkingTree {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
@@ -52,6 +55,10 @@ final class WorkingTree {
 
     /**
      * 按 {@link ValueRef} 在 WorkingTree 上取值。
+     *
+     * @param working 取值树
+     * @param ref     值引用
+     * @return 取到的值；路径为空、引用证据或取不到时为 {@code null}
      */
     static @Nullable JsonNode lookup(JsonNode working, ValueRef ref) {
         if (Strings.isBlank(ref.path())) {
@@ -95,41 +102,46 @@ final class WorkingTree {
     /**
      * 任务前情实体转工作树 prior 袋。
      *
+     * <p>每个实体以索引键 {@code type:id} 收录，同时以类型名收录最新的一个，所以
+     * {@code prior.space:19607.id} 与 {@code prior.space.id}（最近的空间）都能取到值。</p>
+     *
      * @param ctx 执行上下文
      * @return prior 对象；无前情为空对象
      */
     private static JsonNode priorBag(ToolExecutionContext ctx) {
         ObjectNode node = (ObjectNode) JSON.str2node("{}");
         ctx.getFrame().turn().prior().ifPresent(prior -> prior.entities().forEach((key, entry) -> {
-            if (Strings.isBlank(key)) {
+            int colon = key.indexOf(':');
+            if (colon <= 0 || colon == key.length() - 1) {
                 return;
             }
 
-            JsonNode json = priorEntityNode(entry);
-            if (Objects.nonNull(json)) {
-                node.set(key, json);
-            }
+            JsonNode json = priorEntityNode(key.substring(colon + 1), entry);
+            node.set(key, json);
+            // 按插入顺序覆盖：类型名指向最新的同类实体
+            node.set(key.substring(0, colon), json);
         }));
         return node;
     }
 
     /**
-     * 任务前情实体转 JSON：展示名加扁平属性。
+     * 任务前情实体转 JSON：id、展示名加扁平属性。
      *
+     * @param id    实体 id（取自索引键）
      * @param entry 实体
-     * @return 对象节点；全空为 {@code null}
+     * @return 对象节点
      */
-    private static @Nullable JsonNode priorEntityNode(EntityEntry entry) {
+    private static JsonNode priorEntityNode(String id, EntityEntry entry) {
         ObjectNode node = (ObjectNode) JSON.str2node("{}");
-        if (Strings.isNotBlank(entry.displayName())) {
-            node.put("displayName", entry.displayName());
-        }
-
         JsonNode attrs = entry.attrs();
         if (JSON.hasValue(attrs) && attrs.isObject()) {
             attrs.properties().forEach(field -> node.set(field.getKey(), field.getValue()));
         }
 
-        return node.isEmpty() ? null : node;
+        node.put("id", id);
+        if (Strings.isNotBlank(entry.displayName())) {
+            node.put("displayName", entry.displayName());
+        }
+        return node;
     }
 }

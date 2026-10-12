@@ -76,6 +76,13 @@ public class ChatMessageDto extends BaseDto {
     private String channel;
 
     /**
+     * 本轮选用的模型名
+     */
+    @Size(max = 128)
+    @Schema(description = "本轮选用的模型名", maxLength = 128)
+    private String model;
+
+    /**
      * 角色[USER, AGENT]
      */
     @NotBlank(groups = CreateGroup.class)
@@ -84,11 +91,11 @@ public class ChatMessageDto extends BaseDto {
     private String role;
 
     /**
-     * 消息类型[USER_TEXT, AGENT_REPLY, CONFIRM_CARD]
+     * 消息类型[USER_TEXT, AGENT_REPLY]
      */
     @NotBlank(groups = CreateGroup.class)
     @Size(max = 32)
-    @Schema(description = "消息类型[USER_TEXT, AGENT_REPLY, CONFIRM_CARD]（新增必填）", maxLength = 32)
+    @Schema(description = "消息类型[USER_TEXT, AGENT_REPLY]（新增必填）", maxLength = 32)
     private String messageType;
 
     /**

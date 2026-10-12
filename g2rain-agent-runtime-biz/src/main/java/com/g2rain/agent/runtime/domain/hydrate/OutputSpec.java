@@ -98,9 +98,11 @@ public class OutputSpec {
         if (Objects.isNull(type) || type == SourceType.MODEL) {
             return false;
         }
+
         if (Collections.isEmpty(sources)) {
             return true;
         }
+
         return sources.contains(type);
     }
 

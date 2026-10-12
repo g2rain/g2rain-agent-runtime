@@ -1,21 +1,21 @@
 package com.g2rain.agent.runtime.domain.hydrate;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
  * Skill 的运行时契约。
  *
- * <p>契约把规划模式、输入绑定、输出约束、完成条件和工具用法集中描述。运行时通过默认
- * 访问方法解释可选字段，通过装载期字段 {@link #doneWhenExpr} 避免在每次节点执行时重复
- * 解析完成条件文本。</p>
+ * <p>契约把规划模式、输入绑定、输出约束、默认完成目标和工具用法集中描述。运行时通过默认
+ * 访问方法解释可选字段。</p>
  *
  * @author alpha
  * @since 2026/9/10
@@ -46,20 +46,10 @@ public class SkillContract {
     private Map<String, OutputSpec> outputs = new HashMap<>();
 
     /**
-     * 主业务工具的注册名称。
+     * 默认完成目标：本技能的一个写工具注册名；节点未由规划指定目标时采用。
+     * <p>只做一种写操作的技能配置；承担多种操作的技能留空，由规划按节点决定。</p>
      */
     private @Nullable String target;
-
-    /**
-     * 完成条件谓词原文。
-     */
-    private @Nullable String doneWhen;
-
-    /**
-     * 装载期由 {@link #doneWhen} 解析；不参与 JSON 序列化。
-     */
-    @JsonIgnore
-    private @Nullable DoneWhenExpr doneWhenExpr;
 
     /**
      * 工具注册名到工具用法的映射；只列出当前 Skill 实际允许调用的工具。
@@ -93,5 +83,29 @@ public class SkillContract {
         }
 
         return tools.get(toolName);
+    }
+
+    /**
+     * 声明为写操作的工具注册名，按名称排序。
+     *
+     * @return 写工具注册名；没有为空列表
+     */
+    public List<String> writeTools() {
+        return tools.entrySet().stream()
+            .filter(entry -> entry.getValue().sideEffectOrDefault() == SideEffect.WRITE)
+            .map(Map.Entry::getKey)
+            .sorted()
+            .toList();
+    }
+
+    /**
+     * 指定工具是否为本技能声明的写工具。
+     *
+     * @param toolName 工具注册名称；可空
+     * @return 是写工具时为 {@code true}
+     */
+    public boolean writes(@Nullable String toolName) {
+        ToolSpec spec = tool(toolName);
+        return Objects.nonNull(spec) && spec.sideEffectOrDefault() == SideEffect.WRITE;
     }
 }

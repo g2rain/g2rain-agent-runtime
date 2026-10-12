@@ -90,7 +90,12 @@ public class McpClientConfig {
     }
 
     /**
-     * 每次请求：LB 改写 URI + 主体头 + 追踪头
+     * 每次请求的定制：按负载均衡改写 URI，并写入主体头与追踪头。
+     *
+     * @param resolver   负载均衡地址解析
+     * @param tracer     追踪器
+     * @param propagator 追踪上下文传播器
+     * @return 请求定制器
      */
     private static McpSyncHttpClientRequestCustomizer requestCustomizer(OriginResolver resolver, Tracer tracer, Propagator propagator) {
         return (builder, _, uri, _, context) -> {
@@ -107,7 +112,10 @@ public class McpClientConfig {
     }
 
     /**
-     * 从传输上下文取出主体头并写入 HTTP
+     * 从传输上下文取出主体头并写入 HTTP 请求。
+     *
+     * @param builder HTTP 请求构造器
+     * @param context MCP 传输上下文
      */
     private static void applyPrincipalHeaders(HttpRequest.Builder builder, McpTransportContext context) {
         Object headers = context.get(PRINCIPAL_HEADERS_KEY);
@@ -128,7 +136,9 @@ public class McpClientConfig {
     }
 
     /**
-     * 当前线程主体 → MCP 传输上下文；无主体则 EMPTY
+     * 把当前线程主体放进 MCP 传输上下文。
+     *
+     * @return 带主体头的传输上下文；无主体时为 {@code EMPTY}
      */
     private static McpTransportContext currentPrincipalTransportContext() {
         PrincipalContext principal = PrincipalContextHolder.get();
@@ -143,7 +153,11 @@ public class McpClientConfig {
     }
 
     /**
-     * 把当前 span 上下文注入 HTTP 头
+     * 把当前 span 上下文注入 HTTP 请求头。
+     *
+     * @param builder    HTTP 请求构造器
+     * @param tracer     追踪器
+     * @param propagator 追踪上下文传播器
      */
     private static void applyTracingHeaders(HttpRequest.Builder builder, Tracer tracer, Propagator propagator) {
         Span span = tracer.currentSpan();

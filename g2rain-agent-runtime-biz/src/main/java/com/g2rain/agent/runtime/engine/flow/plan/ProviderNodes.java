@@ -170,7 +170,7 @@ public final class ProviderNodes {
         provider.setNodeId(RuntimeUtils.uuid());
         provider.setSkillKey(providerKey);
         Skill providerSkill = skills.get(providerKey);
-        String display = Objects.nonNull(providerSkill) ? Strings.blankToNull(providerSkill.semanticDesc()) : null;
+        String display = Objects.nonNull(providerSkill) ? providerSkill.title() : null;
         provider.setTitle(Objects.nonNull(display)
             ? RuntimeMessage.STEP_TITLE_PREPARE.text("name", display)
             : RuntimeMessage.STEP_TITLE_PREPARE.text("name", "所需信息"));

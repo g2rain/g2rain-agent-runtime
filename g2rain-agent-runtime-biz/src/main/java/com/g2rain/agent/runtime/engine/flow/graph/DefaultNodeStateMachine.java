@@ -39,11 +39,11 @@ public class DefaultNodeStateMachine implements NodeStateMachine {
             // 节点内循环正常完成：节点 DONE；可继续调度下游，不停图
             case LOOP_DONE -> new NodeTransition(from, NodeStatus.DONE, false);
 
-            // 节点内循环失败，或用户拒绝审批，或循环超时：节点 FAILED；应停图
-            case LOOP_FAILED, USER_REJECTED -> new NodeTransition(from, NodeStatus.FAILED, true);
+            // 节点内循环失败或循环超时：节点 FAILED；应停图
+            case LOOP_FAILED -> new NodeTransition(from, NodeStatus.FAILED, true);
 
-            // 节点内循环取消，或用户取消挂起：CANCELLED；应停图
-            case LOOP_CANCELLED, USER_CANCELLED -> new NodeTransition(from, NodeStatus.CANCELLED, true);
+            // 节点内循环取消、用户取消挂起或拒绝审批：CANCELLED；应停图
+            case LOOP_CANCELLED, USER_CANCELLED, USER_REJECTED -> new NodeTransition(from, NodeStatus.CANCELLED, true);
         };
     }
 }

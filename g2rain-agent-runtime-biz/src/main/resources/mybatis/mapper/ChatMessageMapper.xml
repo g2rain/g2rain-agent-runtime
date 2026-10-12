@@ -18,6 +18,7 @@
         <result column="round" property="round" jdbcType="INTEGER"/>
         <result column="message_id" property="messageId" jdbcType="VARCHAR"/>
         <result column="channel" property="channel" jdbcType="VARCHAR"/>
+        <result column="model" property="model" jdbcType="VARCHAR"/>
         <result column="role" property="role" jdbcType="VARCHAR"/>
         <result column="message_type" property="messageType" jdbcType="VARCHAR"/>
         <result column="trace_id" property="traceId" jdbcType="VARCHAR"/>
@@ -82,6 +83,10 @@
                         channel
                         <include refid="directionClause"/>
                     </when>
+                    <when test="item.column == 'model'">
+                        model
+                        <include refid="directionClause"/>
+                    </when>
                     <when test="item.column == 'role'">
                         role
                         <include refid="directionClause"/>
@@ -115,7 +120,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -126,7 +131,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{content, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{model, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{content, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -164,6 +169,9 @@
             <if test="channel != null">
                 channel = #{channel, jdbcType=VARCHAR},
             </if>
+            <if test="model != null">
+                model = #{model, jdbcType=VARCHAR},
+            </if>
             <if test="role != null">
                 role = #{role, jdbcType=VARCHAR},
             </if>
@@ -193,7 +201,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -212,7 +220,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -276,6 +284,9 @@
             <if test="channel != null">
                 AND channel = #{channel, jdbcType=VARCHAR}
             </if>
+            <if test="model != null">
+                AND model = #{model, jdbcType=VARCHAR}
+            </if>
             <if test="role != null">
                 AND role = #{role, jdbcType=VARCHAR}
             </if>
@@ -310,7 +321,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -323,7 +334,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.content, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.model, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.content, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -366,6 +377,9 @@
             </if>
             <if test="channel != null">
                 channel = #{channel, jdbcType=VARCHAR},
+            </if>
+            <if test="model != null">
+                model = #{model, jdbcType=VARCHAR},
             </if>
             <if test="role != null">
                 role = #{role, jdbcType=VARCHAR},

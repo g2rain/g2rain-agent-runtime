@@ -44,4 +44,9 @@ public interface ChatMessageConverter {
     @Mapping(target = "createTime", source = "createTime", qualifiedByName = "stringToLocalDateTime")
     @Mapping(target = "updateTime", source = "updateTime", qualifiedByName = "stringToLocalDateTime")
     ChatMessagePo dto2po(ChatMessageDto dto);
+
+    /**
+     * Vo -> Dto（更新前从已有行带出字段，再由调用方补增量）
+     */
+    ChatMessageDto vo2dto(ChatMessageVo vo);
 }

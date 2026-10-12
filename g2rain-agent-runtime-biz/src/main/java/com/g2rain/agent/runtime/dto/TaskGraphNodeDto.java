@@ -71,11 +71,17 @@ public class TaskGraphNodeDto extends BaseDto {
     private String skillKey;
 
     /**
-     * 所属 stage
+     * 完成目标：节点要完成的写工具注册名
      */
-    @Size(max = 64)
-    @Schema(description = "所属 stage", maxLength = 64)
-    private String stage;
+    @Size(max = 128)
+    @Schema(description = "完成目标：节点要完成的写工具注册名", maxLength = 128)
+    private String target;
+
+    /**
+     * 完成目标是否由首个写调用自动记录
+     */
+    @Schema(description = "完成目标是否由首个写调用自动记录")
+    private Boolean targetClaimed;
 
     /**
      * 委派深度
@@ -93,18 +99,11 @@ public class TaskGraphNodeDto extends BaseDto {
     private String status;
 
     /**
-     * 输入摘要
+     * 节点结论：完成时给用户的结论
      */
-    @Size(max = 1000)
-    @Schema(description = "输入摘要", maxLength = 1000)
-    private String inputSummary;
-
-    /**
-     * 输出摘要
-     */
-    @Size(max = 1000)
-    @Schema(description = "输出摘要", maxLength = 1000)
-    private String outputSummary;
+    @Size(max = 2000)
+    @Schema(description = "节点结论：完成时给用户的结论", maxLength = 2000)
+    private String result;
 
     /**
      * 错误码
@@ -147,9 +146,9 @@ public class TaskGraphNodeDto extends BaseDto {
     private String outputs;
 
     /**
-     * 私有便签、补参义务、轮次
+     * 节点空间（便签、轮次、动作）
      */
     @Size(max = 1073741824)
-    @Schema(description = "私有便签、补参义务、轮次", maxLength = 1073741824)
+    @Schema(description = "节点空间（便签、轮次、动作）", maxLength = 1073741824)
     private String state;
 }

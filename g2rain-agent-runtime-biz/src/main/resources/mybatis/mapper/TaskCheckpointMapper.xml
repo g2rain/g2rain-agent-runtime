@@ -18,7 +18,6 @@
         <result column="type" property="type" jdbcType="VARCHAR"/>
         <result column="question" property="question" jdbcType="VARCHAR"/>
         <result column="expected_fields" property="expectedFields" jdbcType="LONGVARCHAR"/>
-        <result column="choices" property="choices" jdbcType="LONGVARCHAR"/>
         <result column="allowed_actions" property="allowedActions" jdbcType="LONGVARCHAR"/>
         <result column="suggestions" property="suggestions" jdbcType="LONGVARCHAR"/>
         <result column="pending_action" property="pendingAction" jdbcType="LONGVARCHAR"/>
@@ -81,10 +80,6 @@
                         expected_fields
                         <include refid="directionClause"/>
                     </when>
-                    <when test="item.column == 'choices'">
-                        choices
-                        <include refid="directionClause"/>
-                    </when>
                     <when test="item.column == 'allowedActions'">
                         allowed_actions
                         <include refid="directionClause"/>
@@ -110,7 +105,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, choices, allowed_actions, suggestions, pending_action,
+        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, allowed_actions, suggestions, pending_action,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -121,7 +116,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{type, jdbcType=VARCHAR}, #{question, jdbcType=VARCHAR}, #{expectedFields, jdbcType=LONGVARCHAR}, #{choices, jdbcType=LONGVARCHAR}, #{allowedActions, jdbcType=LONGVARCHAR}, #{suggestions, jdbcType=LONGVARCHAR}, #{pendingAction, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{type, jdbcType=VARCHAR}, #{question, jdbcType=VARCHAR}, #{expectedFields, jdbcType=LONGVARCHAR}, #{allowedActions, jdbcType=LONGVARCHAR}, #{suggestions, jdbcType=LONGVARCHAR}, #{pendingAction, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -159,9 +154,6 @@
             <if test="expectedFields != null">
                 expected_fields = #{expectedFields, jdbcType=LONGVARCHAR},
             </if>
-            <if test="choices != null">
-                choices = #{choices, jdbcType=LONGVARCHAR},
-            </if>
             <if test="allowedActions != null">
                 allowed_actions = #{allowedActions, jdbcType=LONGVARCHAR},
             </if>
@@ -185,7 +177,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, choices, allowed_actions, suggestions, pending_action,
+        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, allowed_actions, suggestions, pending_action,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -204,7 +196,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, choices, allowed_actions, suggestions, pending_action,
+        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, allowed_actions, suggestions, pending_action,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -268,9 +260,6 @@
             <if test="expectedFields != null">
                 AND expected_fields = #{expectedFields, jdbcType=LONGVARCHAR}
             </if>
-            <if test="choices != null">
-                AND choices = #{choices, jdbcType=LONGVARCHAR}
-            </if>
             <if test="allowedActions != null">
                 AND allowed_actions = #{allowedActions, jdbcType=LONGVARCHAR}
             </if>
@@ -299,7 +288,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, choices, allowed_actions, suggestions, pending_action,
+        organ_id, task_id, node_id, checkpoint_id, type, question, expected_fields, allowed_actions, suggestions, pending_action,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -312,7 +301,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.type, jdbcType=VARCHAR}, #{item.question, jdbcType=VARCHAR}, #{item.expectedFields, jdbcType=LONGVARCHAR}, #{item.choices, jdbcType=LONGVARCHAR}, #{item.allowedActions, jdbcType=LONGVARCHAR}, #{item.suggestions, jdbcType=LONGVARCHAR}, #{item.pendingAction, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.type, jdbcType=VARCHAR}, #{item.question, jdbcType=VARCHAR}, #{item.expectedFields, jdbcType=LONGVARCHAR}, #{item.allowedActions, jdbcType=LONGVARCHAR}, #{item.suggestions, jdbcType=LONGVARCHAR}, #{item.pendingAction, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -355,9 +344,6 @@
             </if>
             <if test="expectedFields != null">
                 expected_fields = #{expectedFields, jdbcType=LONGVARCHAR},
-            </if>
-            <if test="choices != null">
-                choices = #{choices, jdbcType=LONGVARCHAR},
             </if>
             <if test="allowedActions != null">
                 allowed_actions = #{allowedActions, jdbcType=LONGVARCHAR},

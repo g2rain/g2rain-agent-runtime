@@ -64,16 +64,6 @@ public record SessionKeys(String organId, String conversationId) {
     }
 
     /**
-     * 敏感值明文。
-     *
-     * @param handle secret handle
-     * @return 保存对应敏感值的 key
-     */
-    public String secret(String handle) {
-        return RedisKeys.SECRET.format(organId, conversationId, handle);
-    }
-
-    /**
      * @param taskId 任务 id
      * @return 任务哨兵 Hash
      */

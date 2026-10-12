@@ -10,9 +10,10 @@ import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.flow.graph.EffectHandler;
 import com.g2rain.agent.runtime.engine.flow.graph.GraphKernel;
 import com.g2rain.agent.runtime.engine.flow.graph.GraphTransitionReducer;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
@@ -25,7 +26,6 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultTaskGraphExecutor implements TaskGraphExecutor {
@@ -54,7 +54,7 @@ public class DefaultTaskGraphExecutor implements TaskGraphExecutor {
     public void execute(TurnContext context) {
         TurnScope turn = context.getTurn();
         if (turn.task().isEmpty()) {
-            log.info("[TaskGraphExecutor] fail missing task");
+            Trace.at(TraceStage.GRAPH, "task_missing").error();
             context.setFailed(true);
             return;
         }

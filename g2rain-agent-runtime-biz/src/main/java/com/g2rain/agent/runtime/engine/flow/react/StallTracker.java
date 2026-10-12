@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 
 /**
- * StallTracker（停滞跟踪）：统计连续无进展轮数，用于触发纠偏或失败收口。
+ * StallTracker（停滞跟踪）：统计连续无进展轮数，用于失败收口。
  *
  * <p>有进展时清零；无进展时加一。本对象只活在单次节点循环内。</p>
  *

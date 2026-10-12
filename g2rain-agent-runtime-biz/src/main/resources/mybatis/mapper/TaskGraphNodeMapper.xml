@@ -17,11 +17,11 @@
         <result column="title" property="title" jdbcType="VARCHAR"/>
         <result column="objective" property="objective" jdbcType="VARCHAR"/>
         <result column="skill_key" property="skillKey" jdbcType="VARCHAR"/>
-        <result column="stage" property="stage" jdbcType="VARCHAR"/>
+        <result column="target" property="target" jdbcType="VARCHAR"/>
+        <result column="target_claimed" property="targetClaimed" jdbcType="TINYINT"/>
         <result column="delegate_depth" property="delegateDepth" jdbcType="INTEGER"/>
         <result column="status" property="status" jdbcType="VARCHAR"/>
-        <result column="input_summary" property="inputSummary" jdbcType="VARCHAR"/>
-        <result column="output_summary" property="outputSummary" jdbcType="VARCHAR"/>
+        <result column="result" property="result" jdbcType="VARCHAR"/>
         <result column="error_code" property="errorCode" jdbcType="VARCHAR"/>
         <result column="error_message" property="errorMessage" jdbcType="VARCHAR"/>
         <result column="started_time" property="startedTime" jdbcType="TIMESTAMP"/>
@@ -84,8 +84,8 @@
                         skill_key
                         <include refid="directionClause"/>
                     </when>
-                    <when test="item.column == 'stage'">
-                        stage
+                    <when test="item.column == 'target'">
+                        target
                         <include refid="directionClause"/>
                     </when>
                     <when test="item.column == 'delegateDepth'">
@@ -94,14 +94,6 @@
                     </when>
                     <when test="item.column == 'status'">
                         status
-                        <include refid="directionClause"/>
-                    </when>
-                    <when test="item.column == 'inputSummary'">
-                        input_summary
-                        <include refid="directionClause"/>
-                    </when>
-                    <when test="item.column == 'outputSummary'">
-                        output_summary
                         <include refid="directionClause"/>
                     </when>
                     <when test="item.column == 'errorCode'">
@@ -145,7 +137,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, stage, delegate_depth, status, input_summary, output_summary, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -156,7 +148,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{stage, jdbcType=VARCHAR}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{inputSummary, jdbcType=VARCHAR}, #{outputSummary, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{inputs, jdbcType=LONGVARCHAR}, #{outputs, jdbcType=LONGVARCHAR}, #{state, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{target, jdbcType=VARCHAR}, #{targetClaimed, jdbcType=TINYINT}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{result, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{inputs, jdbcType=LONGVARCHAR}, #{outputs, jdbcType=LONGVARCHAR}, #{state, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -191,8 +183,11 @@
             <if test="skillKey != null">
                 skill_key = #{skillKey, jdbcType=VARCHAR},
             </if>
-            <if test="stage != null">
-                stage = #{stage, jdbcType=VARCHAR},
+            <if test="target != null">
+                target = #{target, jdbcType=VARCHAR},
+            </if>
+            <if test="targetClaimed != null">
+                target_claimed = #{targetClaimed, jdbcType=TINYINT},
             </if>
             <if test="delegateDepth != null">
                 delegate_depth = #{delegateDepth, jdbcType=INTEGER},
@@ -200,11 +195,8 @@
             <if test="status != null">
                 status = #{status, jdbcType=VARCHAR},
             </if>
-            <if test="inputSummary != null">
-                input_summary = #{inputSummary, jdbcType=VARCHAR},
-            </if>
-            <if test="outputSummary != null">
-                output_summary = #{outputSummary, jdbcType=VARCHAR},
+            <if test="result != null">
+                result = #{result, jdbcType=VARCHAR},
             </if>
             <if test="errorCode != null">
                 error_code = #{errorCode, jdbcType=VARCHAR},
@@ -241,7 +233,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, stage, delegate_depth, status, input_summary, output_summary, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -260,7 +252,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, stage, delegate_depth, status, input_summary, output_summary, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -321,20 +313,14 @@
             <if test="skillKey != null">
                 AND skill_key = #{skillKey, jdbcType=VARCHAR}
             </if>
-            <if test="stage != null">
-                AND stage = #{stage, jdbcType=VARCHAR}
+            <if test="target != null">
+                AND target = #{target, jdbcType=VARCHAR}
             </if>
             <if test="delegateDepth != null">
                 AND delegate_depth = #{delegateDepth, jdbcType=INTEGER}
             </if>
             <if test="status != null">
                 AND status = #{status, jdbcType=VARCHAR}
-            </if>
-            <if test="inputSummary != null">
-                AND input_summary = #{inputSummary, jdbcType=VARCHAR}
-            </if>
-            <if test="outputSummary != null">
-                AND output_summary = #{outputSummary, jdbcType=VARCHAR}
             </if>
             <if test="errorCode != null">
                 AND error_code = #{errorCode, jdbcType=VARCHAR}
@@ -376,7 +362,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, stage, delegate_depth, status, input_summary, output_summary, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -389,7 +375,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.stage, jdbcType=VARCHAR}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.inputSummary, jdbcType=VARCHAR}, #{item.outputSummary, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.inputs, jdbcType=LONGVARCHAR}, #{item.outputs, jdbcType=LONGVARCHAR}, #{item.state, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.target, jdbcType=VARCHAR}, #{item.targetClaimed, jdbcType=TINYINT}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.result, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.inputs, jdbcType=LONGVARCHAR}, #{item.outputs, jdbcType=LONGVARCHAR}, #{item.state, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -430,8 +416,11 @@
             <if test="skillKey != null">
                 skill_key = #{skillKey, jdbcType=VARCHAR},
             </if>
-            <if test="stage != null">
-                stage = #{stage, jdbcType=VARCHAR},
+            <if test="target != null">
+                target = #{target, jdbcType=VARCHAR},
+            </if>
+            <if test="targetClaimed != null">
+                target_claimed = #{targetClaimed, jdbcType=TINYINT},
             </if>
             <if test="delegateDepth != null">
                 delegate_depth = #{delegateDepth, jdbcType=INTEGER},
@@ -439,11 +428,8 @@
             <if test="status != null">
                 status = #{status, jdbcType=VARCHAR},
             </if>
-            <if test="inputSummary != null">
-                input_summary = #{inputSummary, jdbcType=VARCHAR},
-            </if>
-            <if test="outputSummary != null">
-                output_summary = #{outputSummary, jdbcType=VARCHAR},
+            <if test="result != null">
+                result = #{result, jdbcType=VARCHAR},
             </if>
             <if test="errorCode != null">
                 error_code = #{errorCode, jdbcType=VARCHAR},

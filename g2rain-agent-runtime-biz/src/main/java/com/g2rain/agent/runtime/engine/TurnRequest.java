@@ -46,6 +46,13 @@ public final class TurnRequest {
     private Long agentId;
 
     /**
+     * 本轮选用的模型名；为空时由模型服务按默认路由。
+     */
+    @Nullable
+    @Schema(description = "本轮选用的模型名；为空时由模型服务按默认路由", example = "qwen3-32b")
+    private String model;
+
+    /**
      * 会话 ID。
      * <p>为空表示新会话，服务端会生成并落会话骨架；续聊/恢复时传入已有 id。</p>
      */

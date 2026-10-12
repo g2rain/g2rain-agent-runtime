@@ -25,7 +25,7 @@
 |---|---|---|---|
 | **会话（Conversation）** | 跨多轮、跨多个任务 | 会话栅栏、对话消息、已结束任务的记录、实体索引、会话级共享值 | `TurnScope`（`DefaultTurnScope`） |
 | **任务（Task）** | 从开任务到终态 | 任务元数据、任务图、断点、任务级共享值、前情、写证据索引 | `TurnScope` 上的 task / graph / checkpoint |
-| **节点（Node）** | 图中一个节点的执行 | 输入、产出、便签、补参义务、工具证据、工具原始报文 | `NodeScope`（`DefaultNodeScope`） |
+| **节点（Node）** | 图中一个节点的执行 | 输入、产出、便签、工具证据、工具原始报文 | `NodeScope`（`DefaultNodeScope`） |
 
 一轮请求称为 **Turn**，用 `traceId` 标识。`TurnScope` 是本轮内存中的状态视图，轮末统一写回存储。
 
@@ -60,7 +60,6 @@
 | 证据（evidence） | 一次业务工具调用的记录：状态、是否业务成功、是否空结果、摘要等 |
 | 写证据索引（writes） | 按"工具名 + 幂等键"索引写操作的证据，用于防止重复写 |
 | 发起节点 / 前置节点 | 委派关系中，调用 `builtin_node_delegate` 的节点是发起节点，被插入的子节点是前置节点 |
-| 补参义务（repair） | 工具调用因参数不满足被拦下后，节点上挂的一条约束：接下来必须追问、先调指定工具或失败 |
 | 前情（prior） | 开新任务时，从已结束任务中带过来的摘要和实体 |
 
 ---
@@ -85,7 +84,7 @@
 
 | Key | 类型 | 内容 |
 |---|---|---|
-| `g2rain:rt:{c}:task:<tid>:metadata` | Hash | 任务元数据（`status`、`currentNodeId`、`agentId`、`goalSummary`、`finalMessage`、`suspendedAt`）。同时作为任务组的"哨兵" |
+| `g2rain:rt:{c}:task:<tid>:metadata` | Hash | 任务元数据（`status`、`currentNodeId`、`agentId`、`goalSummary`、`request`、`finalMessage`、`suspendedAt`）。同时作为任务组的"哨兵" |
 | `g2rain:rt:{c}:task:<tid>:graph` | Hash | 任务图：field 为 nodeId，value 为 `TaskNode` JSON；另有 field `_edges` 保存全部边 |
 | `g2rain:rt:{c}:task:<tid>:checkpoint` | String | 当前断点 `TaskCheckpoint` JSON；没有断点时删除 |
 | `g2rain:rt:{c}:task:<tid>:shared` | Hash | 任务级共享值：键名 → `Sourced` JSON |
@@ -96,7 +95,7 @@
 
 | Key | 类型 | 内容 |
 |---|---|---|
-| `g2rain:rt:{c}:task:<tid>:node:<nid>:space` | Hash | 节点空间：`inputs`、`outputs`、`state`、`repair`、`rounds`、`tokens`。单个字段过大时换成溢出占位（见 5.10） |
+| `g2rain:rt:{c}:task:<tid>:node:<nid>:space` | Hash | 节点空间：`inputs`、`outputs`、`state`、`rounds`、`tokens`、`actions`。单个字段过大时换成溢出占位（见 5.10） |
 | `g2rain:rt:{c}:task:<tid>:node:<nid>:evidence` | Hash | 证据头：field 为 evidenceId，value 为 `EvidenceHead` JSON |
 | `g2rain:rt:{c}:task:<tid>:payload:<eid>` | String | 工具原始报文 JSON |
 
@@ -107,7 +106,7 @@
 | 任务进行中 | `state.task-ttl-running`（默认 24 小时） |
 | 任务挂起（SUSPENDED） | `state.task-ttl-suspended`（默认 2 小时） |
 | `metadata`（哨兵）在续期时 | 任务 TTL 减去 `state.sentinel-gap`（默认 10 分钟） |
-| 节点 DONE 后的 `payload` | `state.payload-done-ttl`（默认 1 小时；配置为 0 表示立即删除）。委派中仍被发起节点等待的前置节点报文除外 |
+| 节点 DONE 后的 `payload` | `state.payload-done-ttl`（默认 1 小时；配置为 0 表示立即删除）。仍有下游节点未结束的上游节点报文除外（下游会直接读上游证据） |
 
 **其他 key**
 
@@ -172,12 +171,12 @@
 |---|---|---|---|
 | `chat_conversation` | 会话：`conversation_id`、`user_id`、`title`、`active_task_id`、`session_shared`、`state_version`、`last_message_time` | 首轮建行；轮末按 `state_version` CAS 更新 | Redis `state` 缺失时回灌栅栏、活动任务和会话共享 |
 | `chat_message` | 对话消息：`message_id`、`role`、`message_type`、`content`、`task_id`、`node_id`、`round`、`trace_id`、`created_at_ms` | 用户消息在 S1 写；其他消息在轮末写 | Redis `dialogue` 为空时回灌；历史消息接口读取 |
-| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`、`suspended_time`、`finished_time` | 轮末写；已存在时按 `state_version` CAS 更新 | 任务组 key 缺失时回灌；`record` 用于回灌 records |
-| `task_graph_node` | 节点：`node_id`、`title`、`objective`、`skill_key`、`delegate_depth`、`status`、`inputs`、`outputs`、`state`（完整节点空间 JSON）、`error_code`、`error_message` | 轮末写 | 任务图、节点空间回灌 |
+| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`request`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`（任务开启时刻）、`suspended_time`、`finished_time`、`trace_id`（开启任务那一轮）、`source_message_id`（触发开启的用户消息，入库后回填该消息的 `task_id`） | 轮末写；已存在时按 `state_version` CAS 更新 | 任务组 key 缺失时回灌；`record` 用于回灌 records |
+| `task_graph_node` | 节点：`node_id`、`title`、`objective`、`skill_key`、`target`（完成目标）、`target_claimed`、`delegate_depth`、`status`、`result`（节点结论）、`inputs`、`outputs`、`state`（完整节点空间 JSON）、`error_code`、`error_message`、`started_time`（首次运行）、`finished_time`（进入终态） | 轮末写 | 任务图、节点空间回灌 |
 | `task_graph_edge` | 边：`from_node_id`、`to_node_id`、`edge_type` | 轮末追加新边 | 任务图回灌 |
 | `task_checkpoint` | 断点：`checkpoint_id`、`node_id`、`type`、`question`、`expected_fields`、`allowed_actions`、`suggestions`、`pending_action` | 轮末写；断点被消费时逻辑删除（`delete_flag=1`） | 断点回灌 |
 | `task_resume_record` | 断点恢复记录：`resume_id`、`checkpoint_id`、`message_id`、`resume_action`、`acted_at` | 断点被消费时插入 | 审计用 |
-| `tool_call_record` | 工具调用：`call_id`（即 evidenceId）、`tool_name`、`side_effect`、`request`、`args_hash`、`idempotency_key`、`round`、`response`、`result_summary`、`entities`、`payload_id`、`call_status`、`business_ok`、`empty_result`、`failure_kind`、`error_code` | 写工具在 S2 插入、S3 更新；读工具在结算时插入；轮末补写证据状态 | 证据回灌、写操作去重 |
+| `tool_call_record` | 工具调用：`call_id`（即 evidenceId）、`tool_name`、`side_effect`、`request`、`args_hash`、`idempotency_key`、`round`、`response`、`result_summary`、`entities`、`payload_id`、`call_status`、`business_ok`、`empty_result`、`failure_kind`、`error_code`、`error_message`、`duration_ms` | 写工具在 S2 插入、S3 更新；读工具在结算时插入；轮末补写证据状态 | 证据回灌、写操作去重 |
 | `task_node_payload` | 大对象：`payload_id`、`payload_type`（`ARTIFACT` 报文 / `OUTPUT` 节点空间字段）、`payload_data` | 报文或节点空间字段超过阈值时写 | 读取超大报文或溢出字段 |
 
 ---
@@ -220,7 +219,6 @@
 |---|---|
 | `USER_TEXT` | 用户文本 |
 | `AGENT_REPLY` | 数字员工的回复，或节点内的中间文字 |
-| `CONFIRM_CARD` | 旧版审批卡片，仅用于读取历史数据，新消息不再产生 |
 
 对话窗口的规则：
 
@@ -286,6 +284,7 @@
 | `currentNodeId` | String? | 当前焦点节点 |
 | `agentId` | Long? | 执行的数字员工 |
 | `goalSummary` | String? | 任务目标摘要 |
+| `request` | String? | 开任务时的用户原文；节点提示词的 `userGoal` 取它，摘要会丢细节 |
 | `finalMessage` | String? | 终态文案 |
 | `suspendedAt` | Long? | 挂起时间 |
 
@@ -305,6 +304,9 @@
 | `title` | String? | 节点标题，用作过程提示 |
 | `objective` | String? | 节点目标 |
 | `skillKey` | String? | 执行的技能 |
+| `target` | String? | 完成目标：要完成的写工具；取值顺序为规划输出 → 契约 `target` → 首个实际写调用，见契约规范第 10 节 |
+| `targetClaimed` | boolean | 完成目标是否由首个写调用自动记录；为 true 时 GoalGate 不直接采用节点结论，交模型核验 |
+| `result` | String? | 节点结论：完成时 finish 的 output，GoalGate 据此核验目标并合成答复 |
 | `status` | NodeStatus | 节点状态，默认 `PENDING` |
 | `dependsOn` | List<String> | 依赖的节点 |
 | `errorCode` / `errorMessage` | String? | 失败信息 |
@@ -384,34 +386,25 @@
 | `inputs` | Map | 节点输入，开始执行时按契约 `inputs` 绑定，只补不覆盖 |
 | `outputs` | Map | 节点正式产出，通过 `builtin_output_set` 写入 |
 | `state` | Map | 节点便签，包含系统保留键（见下）和 `builtin_state_set` 写入的私有键 |
-| `repair` | RepairDirective? | 当前补参义务，同一时刻最多一条 |
 | `rounds` | int | 已执行的 ReAct 轮数 |
 | `tokens` | long | token 累计（当前未统计，为 0） |
+| `actions` | List<NodeAction> | 没有业务证据的动作：模型调用内置工具、调用执行前被拒或推迟、用户确认或拒绝挂起。保留最近 `state.node-actions-max` 条，说明按 `state.node-action-max-chars` 截断 |
+
+**节点历史的跨轮重建**（`RuntimeStateFacade.history`）：按轮次合并三类来源，每轮依次为"用户的话与用户动作 → 模型的文字与工具调用 → 调用返回"。
+
+| 来源 | 内容 |
+|---|---|
+| 对话消息（带本节点 `nodeId`） | 用户的话、模型的文字 |
+| 证据头 | 业务工具调用；返回内容未成功时取 `detail`，成功时取完整报文，都没有才用 `resultBrief` |
+| `actions` | 内置工具、被拒或推迟的调用及其返回；用户确认或拒绝 |
+
+用户确认执行待批写操作、确认核实结果时，回应单独成一轮，排在派发结果与之后的模型调用之前。
 
 | 保留便签键（NodeNoteKey） | 含义 |
 |---|---|
 | `awaiting` | 发起节点正在等待的前置节点 ID |
 | `delegateResult` | 前置节点未成功时回给发起节点的结果，投影给模型一次后清除 |
-| `progress` | ReAct 进度快照（证据数、是否已有产出），用于判断"无进展" |
 | `entityOutputs` | 节点完成时产出中的实体候选 |
-
-#### RepairDirective（补参义务）
-
-| 字段 | 说明 |
-|---|---|
-| `type` | 义务类型 |
-| `expectedFields` | 需要补齐的参数 |
-| `toolName` | 需要先调用的工具（`CALL_TOOL_REQUIRED` 时） |
-| `message` | 给模型的提示 |
-| `startRound` | 产生时的轮次 |
-| `errorCode` | 关联错误码 |
-
-| RepairDirectiveType | 含义 | 期间允许调用 |
-|---|---|---|
-| `ASK_USER_REQUIRED` | 必须追问用户 | 追问、写产出/便签、失败 |
-| `CALL_TOOL_REQUIRED` | 必须先调用指定工具 | 指定工具、追问、写产出/便签、失败 |
-| `PLATFORM_CONTEXT_MISSING` | 平台上下文缺失，无法继续 | 只允许失败 |
-| `PROVENANCE_REJECT` | 参数来源不可信 | 追问、写产出/便签、失败 |
 
 #### EvidenceHead（证据头）
 
@@ -433,6 +426,7 @@
 | `payloadId` | String? | 超大报文的存储指针 |
 | `round` | int | 所在轮次 |
 | `traceId` | String | 所在 Turn |
+| `detail` | String? | 未成功（执行失败或业务失败）时返回给模型的完整说明"原因。下一步：…"，按 `react.observation-error-max-chars` 截断；落库到 `tool_call_record.error_message` |
 
 | EvidenceStatus | 含义 |
 |---|---|
@@ -607,12 +601,12 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|---|
 | FOLLOW_UP | REPLY | 唤醒节点；用户回答作为该节点的历史消息交给模型 |
 | APPROVAL | CONFIRM | 校验参数摘要后执行待批写操作，再继续该节点 |
-| APPROVAL | REJECT | 节点 `FAILED`，任务结束 |
+| APPROVAL | REJECT | 不执行待批写操作；节点 `CANCELLED`，任务 `CANCELED`，回复"已取消，未执行：{审批摘要}。如需换个做法，直接告诉我。" |
 | VERIFY | CONFIRM | 不确定的证据改为 `SUCCESS`，不重复执行 |
 | VERIFY | REJECT | 不确定的证据改为 `FAILED`，模型可以重新发起 |
 | 任意 | CANCEL | 节点 `CANCELLED`，任务 `CANCELED` |
 
-**消费**：断点被恢复后，persist 时写一条 `task_resume_record`，并把 `task_checkpoint` 逻辑删除，避免 Redis 失效后被重新读回。
+**消费**：节点被唤醒（或用户拒绝、取消而关闭挂起）时，断点即被消费：`turn.checkpoint()` 置空、任务回到 `RUNNING`，同时记下恢复动作。消费后的断点经 `turn.resumed()` 读取，确认续跑据此派发待批写操作，核实续跑据此改证据状态，追问回答据此认定参数。续跑中给模型的投影不再展示该断点。节点续跑后再次挂起时，新断点照常写入。persist 时先写一条 `task_resume_record` 并把旧 `task_checkpoint` 逻辑删除，再写入新断点（如有），避免 Redis 失效后被重新读回，也保证每次恢复都有记录。
 
 ### 5.4 证据与写操作去重
 
@@ -673,15 +667,14 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 恢复 | 前置节点到达任意终态后，发起节点回到 `READY` |
 | 回填 | 发起节点再次打开时：前置节点 `DONE` → 正常继续；前置节点失败或取消 → 写入 `delegateResult`，投影给模型一次 |
 | 失败隔离 | 前置节点失败不会让任务失败，由发起节点决定后续处理 |
-| 数据传递 | 发起节点可以通过 `evidence.*` 读取前置节点的证据，`TOOL succeeded` 条件也会认可前置节点的成功证据 |
+| 数据传递 | 发起节点可以通过 `evidence.*` 读取前置节点的证据，节点完成目标（target）也认可前置节点的成功证据 |
 
-### 5.7 补参义务
+### 5.7 参数被拒后的处理
 
-工具调用被参数校验拦下时，节点挂上一条补参义务：
+工具调用被参数校验拦下时，拦截器只返回观测"原因。下一步：…"（追问、先调指定工具或失败），不在节点上挂额外约束：
 
-- 义务存在期间，只允许调用与义务相符的工具（见 3.3 表），节点不能完成。
-- 义务被满足后清除。
-- 义务存活超过 `react.repair-max-rounds` 轮仍未满足，所有调用都会被拒，节点最终因"连续无进展"失败。
+- 模型按"下一步"处理后正常继续；
+- 模型无视提示再次以不合规参数调用，会被同一拦截器再次拒绝，并计入无进展次数，超过 `react.max-no-progress-rounds` 后节点失败。
 
 ### 5.8 任务收口、记录与实体
 
@@ -733,8 +726,8 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | `LOOP_DONE` | `DONE` | 否 |
 | `LOOP_SUSPENDED` | `SUSPENDED` | 是 |
 | `LOOP_WAITING_DELEGATE` | `WAITING_DELEGATE` | 否 |
-| `LOOP_FAILED` / `USER_REJECTED` | `FAILED` | 是（委派前置节点除外） |
-| `LOOP_CANCELLED` / `USER_CANCELLED` | `CANCELLED` | 是（委派前置节点除外） |
+| `LOOP_FAILED` | `FAILED` | 是（委派前置节点除外） |
+| `LOOP_CANCELLED` / `USER_CANCELLED` / `USER_REJECTED` | `CANCELLED` | 是（委派前置节点除外） |
 
 状态机之外的迁移：
 
@@ -786,7 +779,6 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|---|
 | `react.max-rounds` | 32 | 单节点最大轮数 |
 | `react.max-no-progress-rounds` | 3 | 连续无进展上限 |
-| `react.repair-max-rounds` | 8 | 补参义务最多存活的轮数 |
 | `react.brief-max-chars` | 200 | 参数、结果摘要长度 |
 
 ---

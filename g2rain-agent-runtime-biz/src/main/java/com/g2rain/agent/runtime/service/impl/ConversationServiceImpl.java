@@ -15,6 +15,7 @@ import com.g2rain.agent.runtime.event.TurnEvents;
 import com.g2rain.agent.runtime.service.ConversationService;
 import com.g2rain.agent.runtime.support.RedisKeys;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
+import com.g2rain.agent.runtime.support.trace.TraceScope;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.data.redis.DistributedLock;
 import lombok.RequiredArgsConstructor;
@@ -73,43 +74,61 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         String lockKey = RedisKeys.LOCK.format(request.getConversationId());
-        return distributedLock.waitLockWithWatchdog(lockKey, Boolean.FALSE, () -> {
-            // begin 负责回灌 State、推进栅栏并写入本轮用户消息。
-            TurnScope turn = runtimeStateFacade.begin(request);
-            // 锁内先发一条过程提示，客户端从首帧即可拿到会话 ID
-            eventPublisher.publish(TurnEvents.progress(turn, RuntimeMessage.STATUS_WORKING.text()));
-            TurnResult result;
-            try {
-                // 流水线只处理业务编排；结果收口和 State 持久化仍由当前锁内流程负责。
-                result = turnPipeline.run(new TurnContext(request, turn));
-                result.setTraceId(RuntimeUtils.requireTraceId());
-            } catch (RuntimeException ex) {
-                log.error("[ConversationService] turn failed conversationId={}",
-                    turn.conversation().conversationId(), ex);
-                String errorContent = RuntimeMessage.ERROR_GENERIC.text();
-                // 先把本轮标失败：节点与任务落为 FAILED，并追加失败回复
-                turn.fail(errorContent, RuntimeUtils.businessCode(ex));
-                result = TurnResult.fail(
-                    turn.conversation().conversationId(),
-                    turn.task().map(TaskMetadata::getTaskId).orElse(null),
-                    errorContent
-                );
-                result.setTraceId(RuntimeUtils.requireTraceId());
-            }
-            TurnEvent resultEvent = TurnEvents.result(turn, result.getStatus(), result.getContent(),
-                result.getAllowedActions(), result.getSuggestions());
-            try {
-                // 先把本轮改动刷新到 Redis，再以 Redis 当前状态为准落 MySQL。
-                runtimeStateFacade.flush(turn);
-                runtimeStateFacade.persist(turn);
-            } catch (RuntimeException ex) {
-                log.error("[ConversationService] persist failed conversationId={}",
-                    turn.conversation().conversationId(), ex);
-                // 落库失败只记日志，result 和已构造的结果帧仍按内存状态下发
-            }
-            // persist 失败仍发已构造的结果帧，避免客户端一直等收口
-            eventPublisher.publish(resultEvent);
-            return result;
-        });
+        // 轨迹作用域覆盖加锁、编排与落盘，本轮所有日志都带会话与任务 ID
+        try (TraceScope ignored = TraceScope.turn(request.getConversationId())) {
+            return distributedLock.waitLockWithWatchdog(lockKey, Boolean.FALSE, () ->
+                runLocked(request)
+            );
+        }
+    }
+
+    /**
+     * 锁内跑一整轮：begin → 首条过程提示 → 流水线 → flush/persist → 结果帧。
+     *
+     * @param request 本轮请求；会话标识已确定
+     * @return 本轮结果（已带 traceId）
+     */
+    private TurnResult runLocked(TurnRequest request) {
+        // begin 负责回灌 State、推进栅栏并写入本轮用户消息。
+        TurnScope turn = runtimeStateFacade.begin(request);
+        TraceScope.bindTask(turn.conversation().activeTaskId());
+        // 锁内先发一条过程提示，客户端从首帧即可拿到会话 ID
+        eventPublisher.publish(TurnEvents.progress(turn, RuntimeMessage.STATUS_WORKING.text()));
+
+        TurnResult result;
+        try {
+            // 流水线只处理业务编排；结果收口和 State 持久化仍由当前锁内流程负责。
+            result = turnPipeline.run(new TurnContext(request, turn));
+            result.setTraceId(RuntimeUtils.requireTraceId());
+        } catch (RuntimeException ex) {
+            log.error("[ConversationService] turn failed conversationId={}",
+                turn.conversation().conversationId(), ex);
+            String errorContent = RuntimeMessage.ERROR_GENERIC.text();
+            // 先把本轮标失败：节点与任务落为 FAILED，并追加失败回复
+            turn.fail(errorContent, RuntimeUtils.businessCode(ex));
+            result = TurnResult.fail(
+                turn.conversation().conversationId(),
+                turn.task().map(TaskMetadata::getTaskId).orElse(null),
+                errorContent
+            );
+            result.setTraceId(RuntimeUtils.requireTraceId());
+        }
+
+        TurnEvent resultEvent = TurnEvents.result(turn, result.getStatus(), result.getContent(),
+            result.getAllowedActions(), result.getSuggestions());
+
+        try {
+            // 先把本轮改动刷新到 Redis，再以 Redis 当前状态为准落 MySQL。
+            runtimeStateFacade.flush(turn);
+            runtimeStateFacade.persist(turn);
+        } catch (RuntimeException ex) {
+            log.error("[ConversationService] persist failed conversationId={}",
+                turn.conversation().conversationId(), ex);
+            // 落库失败只记日志，result 和已构造的结果帧仍按内存状态下发
+        }
+
+        // persist 失败仍发已构造的结果帧，避免客户端一直等收口
+        eventPublisher.publish(resultEvent);
+        return result;
     }
 }

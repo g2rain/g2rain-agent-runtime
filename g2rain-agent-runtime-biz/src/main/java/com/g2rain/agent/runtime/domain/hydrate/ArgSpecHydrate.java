@@ -22,15 +22,13 @@ public final class ArgSpecHydrate {
     }
 
     /**
-     * 为契约中的完成条件和参数来源建立运行期对象。
+     * 为契约中的参数来源建立运行期对象。
      *
      * @param contract 已装载的技能契约
      * @apiNote {@code ArgSpecHydrate.hydrate(skillContract)} 通常在发布校验通过后调用；
      * 之后参数绑定直接使用 {@link ValueRef}，无需重复解析路径文本。
      */
     public static void hydrate(SkillContract contract) {
-        // 完成条件只解析一次，执行期读树不读原文
-        contract.setDoneWhenExpr(DoneWhenParser.parseExpression(contract.getDoneWhen()));
         contract.getTools().values().forEach(tool ->
             tool.getArgs().values().forEach(ArgSpecHydrate::hydrateOne)
         );

@@ -95,9 +95,9 @@ public sealed interface GraphEffect {
     }
 
     /**
-     * 清除任务级挂起检查点。
+     * 消费任务级挂起检查点：节点被唤醒，或用户拒绝、取消而关闭挂起时产生。
      *
-     * @param nodeId 节点 ID（语义保留；清检查点按 task）
+     * @param nodeId 被唤醒或关闭的节点 ID（消费检查点按 task）
      */
     record ClearSuspend(String nodeId) implements GraphEffect {
 

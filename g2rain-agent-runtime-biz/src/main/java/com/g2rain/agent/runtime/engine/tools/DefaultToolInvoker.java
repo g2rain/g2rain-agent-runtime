@@ -1,14 +1,19 @@
 package com.g2rain.agent.runtime.engine.tools;
 
 
+import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.tool.Observation;
+import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceEvent;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
-import com.g2rain.common.utils.Strings;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +21,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ClassUtils;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.StringNode;
 
@@ -50,6 +57,11 @@ public class DefaultToolInvoker implements ToolInvoker {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
+     * 轨迹中工具入参摘要的字符数上限。
+     */
+    private static final int ARGS_BRIEF_MAX_CHARS = 200;
+
+    /**
      * 按执行顺序排列的调用前后拦截器；构造时完成排序，调用期间只读。
      */
     private final List<ToolInterceptor> interceptors;
@@ -77,32 +89,90 @@ public class DefaultToolInvoker implements ToolInvoker {
     /**
      * 执行一次工具调用并返回标准化观测结果。
      *
-     * <p>调用前拦截器按正序执行，首个阻断结果会立即返回；只有全部通过时才会发布
-     * 过程提示并调用工具。工具返回后，after 拦截器按逆序处理结果。</p>
+     * <p>节点尚无完成目标时，先把本次写调用记为目标。调用前拦截器按正序执行，首个阻断结果会立即返回；
+     * 只有全部通过时才会发布过程提示并调用工具。工具返回后，after 拦截器按逆序处理结果。</p>
      *
      * @param request 工具名称、参数、上下文和契约信息
      * @return 工具成功或失败的统一观测结果
      */
     @Override
     public Observation invoke(ToolInvokeRequest request) {
+        long start = System.nanoTime();
+        // 节点尚无完成目标时，首个实际发起的写调用（无论后续是否被拦下）成为目标
+        if (request.context().claimTarget(request.toolName())) {
+            Trace.at(TraceStage.NODE, "target_claimed")
+                .kv("nodeId", request.context().getNodeId())
+                .kv("target", request.toolName())
+                .info();
+        }
+
         // 正序 before：任一拦截器给出观测即短路，工具不会被调用，也不会发提示
         for (ToolInterceptor interceptor : interceptors) {
             Optional<Observation> blocked = interceptor.before(request);
             if (blocked.isPresent()) {
+                trace(request, blocked.get(), interceptor, start);
                 return blocked.get();
             }
         }
 
         toolEvents.started(request);
         // 实际回调只发生在全部 before 通过之后；异常在 doInvoke 内收成 Observation
+        long callStart = System.nanoTime();
         Observation obs = doInvoke(request);
+        request.durationMs((System.nanoTime() - callStart) / 1_000_000L);
 
         // 逆序 after：外层拦截器后处理内层结果，可改写观测但不能撤销已发生的工具副作用
         for (int i = interceptors.size() - 1; i >= 0; i--) {
             obs = interceptors.get(i).after(request, obs);
         }
 
+        trace(request, obs, null, start);
         return obs;
+    }
+
+    /**
+     * 输出 {@code [Trace][TOOL] invoked}：结论类型、错误码、拦下调用的拦截器，参数只输出脱敏摘要；
+     * 工具实际执行失败（{@link Outcome#FAILED}）时以 WARN 输出。
+     *
+     * @param request    工具调用请求
+     * @param obs        最终观测
+     * @param blocker    拦下调用的拦截器；实际调用了工具时为 {@code null}
+     * @param startNanos 起点（{@link System#nanoTime()}）
+     */
+    private static void trace(ToolInvokeRequest request, Observation obs, @Nullable ToolInterceptor blocker, long startNanos) {
+        if (!Trace.enabled(TraceStage.TOOL)) {
+            return;
+        }
+
+        TraceEvent event = Trace.at(TraceStage.TOOL, "invoked")
+            .kv("tool", request.toolName())
+            .kv("outcome", obs.outcome())
+            .kv("errorCode", obs.errorCode())
+            .kv("blockedBy", Objects.isNull(blocker) ? null : ClassUtils.getUserClass(blocker).getSimpleName())
+            .kv("durationMs", (System.nanoTime() - startNanos) / 1_000_000L)
+            .kv("args", argsBrief(request));
+        if (obs.outcome() == Outcome.FAILED) {
+            event.warn();
+            return;
+        }
+
+        event.info();
+    }
+
+    /**
+     * 工具入参的脱敏摘要；入参不是合法 JSON 时为 {@code null}。
+     *
+     * @param request 工具调用请求
+     * @return 脱敏摘要
+     */
+    private static @Nullable String argsBrief(ToolInvokeRequest request) {
+        try {
+            JsonNode args = JSON.str2node(request.arguments());
+            ToolSpec contract = request.contract();
+            return ArgsBrief.of(args, contract, ARGS_BRIEF_MAX_CHARS);
+        } catch (RuntimeException _) {
+            return null;
+        }
     }
 
     /**
@@ -110,7 +180,7 @@ public class DefaultToolInvoker implements ToolInvoker {
      *
      * <p>这是外部工具回调的唯一调用点。上下文先转换为 Spring AI 所需类型，
      * 工具返回文本则交给 {@link #successOf(String)} 解析；任何运行时异常都交给
-     * {@link #failureOf(ToolInvokeRequest, RuntimeException)} 分类。</p>
+     * {@link #observationOf(ToolInvokeRequest, RuntimeException)} 分类。</p>
      *
      * @param request 当前工具调用请求
      * @return 成功观测或包含统一错误码的失败观测
@@ -124,7 +194,7 @@ public class DefaultToolInvoker implements ToolInvoker {
             return successOf(result);
         } catch (RuntimeException ex) {
             // 不把原始异常抛出编排层，按原因收成失败观测
-            return failureOf(request, ex);
+            return observationOf(request, ex);
         }
     }
 
@@ -149,25 +219,25 @@ public class DefaultToolInvoker implements ToolInvoker {
     }
 
     /**
-     * 将工具异常按原因转换为稳定的运行时错误码。
+     * 将工具异常按原因转换为观测。
      *
-     * <p>先沿异常链识别超时、连接失败和 MCP RPC 错误，再处理受信任的业务错误码、
-     * IO 错误和兜底工具错误。分类只影响观测结果，不在此处重试工具调用。</p>
+     * <p>先沿异常链识别超时、连接失败和 MCP RPC 错误（执行失败）；再看业务异常：内置工具抛出的
+     * {@link ToolRejectedException} 视为调用不合规（拒绝，带其下一步），MCP 工具业务错误与其它业务异常视为执行失败；
+     * 最后是 IO 错误和兜底工具错误。执行失败的下一步取自 {@link ToolErrors}。分类只影响观测结果，不在此处重试工具调用。</p>
      *
-     * @param request 当前工具请求，用于判断内置工具和 MCP 工具错误是否可透传
+     * @param request 当前工具请求，用于判断是否内置工具
      * @param ex      工具调用抛出的异常
-     * @return 携带用户可读消息和稳定错误码的失败观测
+     * @return 执行失败或拒绝观测
      */
-    private Observation failureOf(ToolInvokeRequest request, RuntimeException ex) {
+    private Observation observationOf(ToolInvokeRequest request, RuntimeException ex) {
         Throwable cause = ex;
         while (Objects.nonNull(cause)) {
             if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
-                return Observation.failure(messageOf(ex), RuntimeErrorCode.TOOL_TIMEOUT.code());
+                return ToolErrors.TOOL_TIMEOUT.observe(messageOf(ex));
             }
 
             if (cause instanceof ConnectException) {
-                String code = RuntimeErrorCode.TOOL_UNREACHABLE.code();
-                return Observation.failure(messageOf(ex), code);
+                return ToolErrors.TOOL_UNREACHABLE.observe(messageOf(ex));
             }
 
             if (cause instanceof McpError mcpError) {
@@ -178,60 +248,52 @@ public class DefaultToolInvoker implements ToolInvoker {
             cause = cause.getCause();
         }
 
-        if (ex instanceof BusinessException business) {
-            String code = business.getErrorCode();
-            if (listedRuntimeCode(code)
-                && (ToolCallbacks.isBuiltin(request.toolCallback()) || isMcpToolError(code))) {
-                return Observation.failure(messageOf(ex), code);
+        BusinessException business = businessOf(ex);
+        if (business instanceof ToolRejectedException r && ToolCallbacks.isBuiltin(request.toolCallback())) {
+            return Observation.rejected(r.error(), messageOf(r), r.next());
+        }
+
+        if (Objects.nonNull(business)) {
+            if (Objects.equals(business.getErrorCode(), RuntimeErrorCode.MCP_TOOL_ERROR.code())) {
+                return ToolErrors.MCP_TOOL_ERROR.observe(messageOf(business));
             }
-            return Observation.failure(messageOf(ex), RuntimeErrorCode.TOOL_ERROR.code());
+
+            return ToolErrors.TOOL_ERROR.observe(messageOf(business));
         }
 
         cause = ex;
         while (Objects.nonNull(cause)) {
             if (cause instanceof IOException) {
-                return Observation.failure(messageOf(ex), RuntimeErrorCode.TOOL_IO_ERROR.code());
+                return ToolErrors.TOOL_IO_ERROR.observe(messageOf(ex));
             }
 
             cause = cause.getCause();
         }
 
-        return Observation.failure(messageOf(ex), RuntimeErrorCode.TOOL_ERROR.code());
+        return ToolErrors.TOOL_ERROR.observe(messageOf(ex));
     }
 
     /**
-     * 判断错误码是否属于 MCP 工具错误。
+     * 沿异常链查找业务异常；工具框架可能把工具抛出的业务异常包装在内层。
      *
-     * @param code 待判断的错误码
-     * @return 是否为 MCP_TOOL_ERROR 的 code 或枚举名
+     * @param ex 工具调用抛出的异常
+     * @return 最外层的业务异常；没有则为 {@code null}
      */
-    private static boolean isMcpToolError(String code) {
-        return Objects.equals(code, RuntimeErrorCode.MCP_TOOL_ERROR.code())
-            || Objects.equals(code, RuntimeErrorCode.MCP_TOOL_ERROR.name());
-    }
-
-    /**
-     * 判断字符串是否能匹配运行时错误码的 code 或枚举名。
-     *
-     * @param code 待判断的错误码
-     * @return 是否为已登记的运行时错误码
-     */
-    private static boolean listedRuntimeCode(@Nullable String code) {
-        if (Strings.isBlank(code)) {
-            return false;
-        }
-
-        for (RuntimeErrorCode item : RuntimeErrorCode.values()) {
-            if (Objects.equals(code, item.code()) || Objects.equals(code, item.name())) {
-                return true;
+    private static @Nullable BusinessException businessOf(Throwable ex) {
+        Throwable cause = ex;
+        while (Objects.nonNull(cause)) {
+            if (cause instanceof BusinessException business) {
+                return business;
             }
+
+            cause = cause.getCause();
         }
 
-        return false;
+        return null;
     }
 
     /**
-     * 将 MCP JSON-RPC 错误映射为 Runtime 错误码。
+     * 将 MCP JSON-RPC 错误映射为执行失败观测。
      *
      * @param mcpError MCP 返回的 RPC 错误
      * @param root     原始异常，用于保留用户可读消息
@@ -240,10 +302,10 @@ public class DefaultToolInvoker implements ToolInvoker {
     private static Observation mcpFailure(McpError mcpError, RuntimeException root) {
         var rpc = mcpError.getJsonRpcError();
         if (Objects.nonNull(rpc) && rpc.code() == McpSchema.ErrorCodes.INVALID_PARAMS) {
-            return Observation.failure(messageOf(root), RuntimeErrorCode.MCP_INVALID_PARAMS.code());
+            return ToolErrors.MCP_INVALID_PARAMS.observe(messageOf(root));
         }
 
-        return Observation.failure(messageOf(root), RuntimeErrorCode.MCP_RPC_ERROR.code());
+        return ToolErrors.MCP_RPC_ERROR.observe(messageOf(root));
     }
 
     /**

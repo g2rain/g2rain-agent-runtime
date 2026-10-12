@@ -52,9 +52,14 @@ public class TaskGraphNodePo extends BasePo {
     private String skillKey;
 
     /**
-     * 所属 stage
+     * 完成目标：节点要完成的写工具注册名
      */
-    private String stage;
+    private String target;
+
+    /**
+     * 完成目标是否由首个写调用自动记录
+     */
+    private Boolean targetClaimed;
 
     /**
      * 委派深度
@@ -67,14 +72,9 @@ public class TaskGraphNodePo extends BasePo {
     private String status;
 
     /**
-     * 输入摘要
+     * 节点结论：完成时给用户的结论
      */
-    private String inputSummary;
-
-    /**
-     * 输出摘要
-     */
-    private String outputSummary;
+    private String result;
 
     /**
      * 错误码
@@ -107,7 +107,7 @@ public class TaskGraphNodePo extends BasePo {
     private String outputs;
 
     /**
-     * 私有便签、补参义务、轮次
+     * 节点空间（便签、轮次、动作）
      */
     private String state;
 

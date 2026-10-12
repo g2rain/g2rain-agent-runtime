@@ -2,8 +2,6 @@ package com.g2rain.agent.runtime.engine.tools.policy;
 
 
 import com.g2rain.agent.runtime.domain.graph.EdgeType;
-import com.g2rain.agent.runtime.domain.graph.TaskGraph;
-import com.g2rain.agent.runtime.domain.hydrate.DoneWhenExpr;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
@@ -22,18 +20,16 @@ import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * 根据产出、完成条件和证据状态判断节点是否可以结束。
+ * 根据产出、完成目标和证据状态判断节点是否可以结束。
  *
- * <p>顺序：产出非空 → 未收口证据 / 补参 → 必填 outputs 与来源 → doneWhen 或默认算法
- * （target / 必填 outputs）→ 无契约时的业务工具兜底。target 可读本节点与委派前置节点的成功证据。</p>
+ * <p>顺序：产出非空 → 未收口证据 → 必填 outputs 与来源 → 节点完成目标（target 工具须已完成）
+ * → 无目标且无产出声明时至少完成过一次业务调用。target 可读本节点与委派前置节点的证据。</p>
  *
  * @author alpha
  * @since 2026/8/21
@@ -75,31 +71,21 @@ public class DefaultFinishPolicy implements FinishPolicy {
             return FinishDecision.reject(ModelHint.FINISH_OPEN_EVIDENCE.text());
         }
 
-        NodeScope current = context.node();
-        if (Objects.nonNull(current) && Objects.nonNull(current.repair())) {
-            return FinishDecision.reject(ModelHint.FINISH_REPAIR_PENDING.text());
-        }
-
         FinishDecision outputs = requiredOutputs(context);
         if (!outputs.allowed()) {
             return outputs;
         }
 
-        DoneWhenExpr doneWhen = context.doneWhenExpr();
-        if (Objects.nonNull(doneWhen)) {
-            return evaluateExpression(context, doneWhen, context.targetToolName());
+        // 有完成目标：目标写工具须已成功
+        String target = context.target();
+        if (Objects.nonNull(target)) {
+            return targetDone(context, target)
+                ? FinishDecision.allow()
+                : FinishDecision.reject(ModelHint.FINISH_NEED_TARGET.text("tool", target));
         }
 
-        String targetTool = context.targetToolName();
-        if (Objects.nonNull(targetTool) && !toolSucceeded(context, targetTool)) {
-            return FinishDecision.reject(ModelHint.FINISH_NEED_TARGET.text("tool", targetTool));
-        }
-
-        if (Objects.isNull(targetTool) && lacksDeclaredOutputs(context.contract())
-            && Objects.nonNull(context.node())
-            && Strings.isNotBlank(context.nodeId())
-            && context.expectsBusinessTools()
-            && !anyBusinessSucceeded(context)) {
+        // 无完成目标、契约也没声明产出：至少完成过一次业务调用（空结果也算）
+        if (lacksDeclaredOutputs(context.contract()) && context.expectsBusinessTools() && !anyBusinessDone(context)) {
             return FinishDecision.reject(ModelHint.FINISH_NEED_BUSINESS.text());
         }
 
@@ -117,6 +103,7 @@ public class DefaultFinishPolicy implements FinishPolicy {
         if (Objects.isNull(contract)) {
             return FinishDecision.allow();
         }
+
         Map<String, OutputSpec> outputs = contract.getOutputs();
         if (Collections.isEmpty(outputs)) {
             return FinishDecision.allow();
@@ -128,6 +115,7 @@ public class DefaultFinishPolicy implements FinishPolicy {
         }
 
         ToolExecutionContext execution = context.execution();
+        // 只查必填产出：依次要求有值、来源类型合规、常量一致、来源可溯
         for (Map.Entry<String, OutputSpec> entry : outputs.entrySet()) {
             OutputSpec spec = entry.getValue();
             if (!spec.isRequired()) {
@@ -143,12 +131,14 @@ public class DefaultFinishPolicy implements FinishPolicy {
             if (!spec.allows(sourced.source().type())) {
                 return FinishDecision.reject(ModelHint.FINISH_OUTPUT_SOURCE_TYPE.text("key", key));
             }
+
             if (sourced.source().type() == SourceType.CONTRACT) {
                 if (Objects.isNull(spec.getConstant())
                     || !JSON.nodesEqual(spec.getConstant(), JSON.obj2node(sourced.value()))) {
                     return FinishDecision.reject(ModelHint.FINISH_OUTPUT_CONST.text("key", key));
                 }
             }
+
             if (Objects.nonNull(execution) && !sourceVerifier.verify(sourced, execution)) {
                 return FinishDecision.reject(ModelHint.FINISH_OUTPUT_SOURCE.text("key", key));
             }
@@ -168,226 +158,41 @@ public class DefaultFinishPolicy implements FinishPolicy {
     }
 
     /**
-     * 按装载期 AST 评估；OR 任一通过、AND 全过。
-     *
-     * @param context    结束判定现场
-     * @param expr       doneWhen 表达式
-     * @param targetTool 目标工具名；可空
-     * @return 允许结束或拒绝原因
-     */
-    private FinishDecision evaluateExpression(FinishContext context, DoneWhenExpr expr, @Nullable String targetTool) {
-        return switch (expr) {
-            case DoneWhenExpr.Or(var children) -> {
-                List<String> fails = new ArrayList<>();
-                for (DoneWhenExpr child : children) {
-                    FinishDecision decision = evaluateExpression(context, child, targetTool);
-                    if (decision.allowed()) {
-                        yield FinishDecision.allow();
-                    }
-                    String reason = decision.reason();
-                    if (Strings.isNotBlank(reason)) {
-                        fails.add(reason);
-                    }
-                }
-                yield FinishDecision.reject(ModelHint.FINISH_OR_FAILED.text("reasons", String.join("; ", fails)));
-            }
-            case DoneWhenExpr.And(var children) -> {
-                for (DoneWhenExpr child : children) {
-                    FinishDecision decision = evaluateExpression(context, child, targetTool);
-                    if (!decision.allowed()) {
-                        yield decision;
-                    }
-                }
-                yield FinishDecision.allow();
-            }
-            case DoneWhenExpr.Atom atom -> evaluateAtomic(context, atom, targetTool);
-        };
-    }
-
-    /**
-     * 评单条原子 doneWhen
-     *
-     * @param context    结束判定现场
-     * @param clause     原子条件
-     * @param targetTool 目标工具名；可空
-     * @return 允许结束或拒绝原因
-     */
-    private FinishDecision evaluateAtomic(FinishContext context, DoneWhenExpr.Atom clause, @Nullable String targetTool) {
-        return switch (clause.kind()) {
-            case TARGET_TOOL_SUCCEEDED -> {
-                if (Objects.isNull(targetTool)) {
-                    yield FinishDecision.reject(ModelHint.FINISH_DONE_WHEN_NEED_TARGET.text());
-                }
-
-                yield toolSucceeded(context, targetTool)
-                    ? FinishDecision.allow()
-                    : FinishDecision.reject(ModelHint.FINISH_NEED_TARGET.text("tool", targetTool));
-            }
-            case TOOL_SUCCEEDED, EVIDENCE_TOOL_SUCCEEDED -> {
-                String tool = clause.entity();
-                yield toolSucceeded(context, tool)
-                    ? FinishDecision.allow()
-                    : FinishDecision.reject(ModelHint.FINISH_EVIDENCE_TOOL.text("tool", tool));
-            }
-            case TOOL_EMPTY -> {
-                String tool = clause.entity();
-                yield toolEmpty(context, tool)
-                    ? FinishDecision.allow()
-                    : FinishDecision.reject(ModelHint.FINISH_TOOL_NOT_EMPTY.text("tool", tool));
-            }
-            case EVIDENCE_KEY_EXISTS -> evidenceKeyExists(context, clause.field());
-            case OUTPUT_FIELD_EXISTS -> outputExists(context, clause.field());
-            case OUTPUT_LENGTH_GTE -> outputLengthGte(context, clause.field(), clause.minLength());
-            case OUTPUT_ITEM_FIELD_EXISTS -> outputItemFieldExists(context, clause.entity(), clause.field());
-            case UNKNOWN -> FinishDecision.reject(ModelHint.FINISH_DONE_WHEN_UNKNOWN.text("raw", clause.raw()));
-        };
-    }
-
-    /**
-     * 本节点 output 键是否已写入
+     * 目标写工具是否已在本节点或其委派前置节点完成。
      *
      * @param context 结束判定现场
-     * @param field   output 键；可空
-     * @return 允许结束或拒绝原因
+     * @param target  目标工具注册名
+     * @return 已有完成证据
      */
-    private FinishDecision outputExists(FinishContext context, @Nullable String field) {
-        if (Strings.isBlank(field)) {
-            return FinishDecision.reject(ModelHint.FINISH_OUTPUT_FIELD_BLANK.text());
-        }
-
-        Object value = outputValue(context, field);
-        if (Objects.nonNull(value) && !Strings.isBlank(String.valueOf(value))) {
-            return FinishDecision.allow();
-        }
-
-        return FinishDecision.reject(ModelHint.FINISH_OUTPUT_MISSING.text("key", field));
-    }
-
-    /**
-     * 本节点集合 output 长度是否达标
-     *
-     * @param context    结束判定现场
-     * @param collection 集合 output 键；可空
-     * @param minLength  最短长度；可空则按 1
-     * @return 允许结束或拒绝原因
-     */
-    private FinishDecision outputLengthGte(FinishContext context, @Nullable String collection, @Nullable Integer minLength) {
-        if (Strings.isBlank(collection)) {
-            return FinishDecision.reject(ModelHint.FINISH_OUTPUT_COLLECTION_BLANK.text());
-        }
-
-        int required = Objects.nonNull(minLength) ? minLength : 1;
-        String reject = rejectIfCollectionLengthLt(outputValue(context, collection), collection, required);
-        return Objects.isNull(reject) ? FinishDecision.allow() : FinishDecision.reject(reject);
-    }
-
-    /**
-     * 本节点集合 output 每项是否都有指定字段
-     *
-     * @param context    结束判定现场
-     * @param collection 集合 output 键；可空
-     * @param field      项内字段；可空
-     * @return 允许结束或拒绝原因
-     */
-    private FinishDecision outputItemFieldExists(FinishContext context, @Nullable String collection, @Nullable String field) {
-        if (Strings.isBlank(collection) || Strings.isBlank(field)) {
-            return FinishDecision.reject(ModelHint.FINISH_OUTPUT_PREDICATE.text());
-        }
-
-        String reject = rejectIfAnyItemMissingField(outputValue(context, collection), collection, field);
-        return Objects.isNull(reject) ? FinishDecision.allow() : FinishDecision.reject(reject);
-    }
-
-    /**
-     * evidence 某键是否存在
-     *
-     * @param context 结束判定现场
-     * @param key     工具名或抽取键；可空
-     * @return 允许结束或拒绝原因
-     */
-    private FinishDecision evidenceKeyExists(FinishContext context, @Nullable String key) {
-        NodeScope node = context.node();
-        if (Strings.isBlank(key) || Objects.isNull(node)) {
-            return FinishDecision.reject(ModelHint.FINISH_EVIDENCE_MISSING.text("key", key));
-        }
-
-        boolean hit = node.evidence().stream().filter(DefaultFinishPolicy::isToolCallSuccess).anyMatch(o ->
-            Objects.equals(o.toolName(), key) || (Objects.nonNull(o.extractCounts()) && o.extractCounts().containsKey(key))
-        );
-
-        return hit ? FinishDecision.allow() : FinishDecision.reject(ModelHint.FINISH_EVIDENCE_MISSING.text("key", key));
-    }
-
-    /**
-     * 读取本节点已写入的 output 值。
-     *
-     * @param context 结束判定现场
-     * @param field   output 键；可空
-     * @return 产出值；节点或键缺失为 {@code null}
-     */
-    private static @Nullable Object outputValue(FinishContext context, @Nullable String field) {
-        NodeScope node = context.node();
-        if (Objects.isNull(node) || Strings.isBlank(field)) {
-            return null;
-        }
-
-        var sourced = node.outputs().get(field);
-        return Objects.isNull(sourced) ? null : sourced.value();
-    }
-
-    /**
-     * 指定工具是否在本节点或其委派前置节点已成功；空结果默认不算成功。
-     *
-     * @param context  结束判定现场
-     * @param toolName 工具名；可空
-     * @return 已有成功证据
-     */
-    private boolean toolSucceeded(FinishContext context, @Nullable String toolName) {
-        EvidenceHead local = latest(context.node(), toolName);
-        if (Objects.nonNull(local) && isToolCallSuccess(local)) {
+    private boolean targetDone(FinishContext context, String target) {
+        EvidenceHead local = latest(context.node(), target);
+        if (Objects.nonNull(local) && local.done()) {
             return true;
         }
 
         ToolExecutionContext execution = context.execution();
-        TaskGraph graph = Objects.isNull(execution) ? null : execution.getGraph();
         String nodeId = context.nodeId();
-        if (Objects.isNull(execution) || Strings.isBlank(nodeId) || Strings.isBlank(toolName)) {
+        if (Objects.isNull(execution) || Strings.isBlank(nodeId)) {
             return false;
         }
 
-        return graph.getEdges().stream()
+        return execution.getGraph().getEdges().stream()
             .filter(edge -> edge.getType() == EdgeType.DELEGATE && Objects.equals(nodeId, edge.getTo()))
             .map(edge -> stateFacade.evidenceOf(execution.getFrame().turn(), edge.getFrom()))
             .flatMap(List::stream)
-            .filter(head -> Objects.equals(toolName, head.toolName()))
-            .anyMatch(DefaultFinishPolicy::isToolCallSuccess);
+            .filter(head -> Objects.equals(target, head.toolName()))
+            .anyMatch(EvidenceHead::done);
     }
 
     /**
-     * 指定工具最近一次成功结果是否为空。
-     *
-     * @param context  结束判定现场
-     * @param toolName 工具名；可空
-     * @return 成功且 empty=true
-     */
-    private boolean toolEmpty(FinishContext context, @Nullable String toolName) {
-        EvidenceHead head = latest(context.node(), toolName);
-        return Objects.nonNull(head) && head.status() == EvidenceStatus.SUCCESS && Boolean.TRUE.equals(head.empty());
-    }
-
-    /**
-     * 本节点是否已有任意业务工具成功证据。
+     * 本节点是否已完成过任意业务调用。
      *
      * @param context 结束判定现场
-     * @return 存在成功证据
+     * @return 存在完成证据
      */
-    private boolean anyBusinessSucceeded(FinishContext context) {
+    private static boolean anyBusinessDone(FinishContext context) {
         NodeScope node = context.node();
-        if (Objects.isNull(node)) {
-            return false;
-        }
-
-        return node.evidence().stream().anyMatch(DefaultFinishPolicy::isToolCallSuccess);
+        return Objects.nonNull(node) && node.evidence().stream().anyMatch(EvidenceHead::done);
     }
 
     /**
@@ -428,89 +233,5 @@ public class DefaultFinishPolicy implements FinishPolicy {
                 || head.status() == EvidenceStatus.UNKNOWN
                 || head.status() == EvidenceStatus.UNKNOWN_PRE_CALL
         );
-    }
-
-    /**
-     * 证据是否算工具调用成功（SUCCESS 且非业务失败、非空结果）。
-     *
-     * @param head 证据头
-     * @return 是否算成功
-     */
-    private static boolean isToolCallSuccess(EvidenceHead head) {
-        if (head.status() != EvidenceStatus.SUCCESS) {
-            return false;
-        }
-
-        if (Objects.nonNull(head.businessOk()) && !head.businessOk()) {
-            return false;
-        }
-
-        return !Boolean.TRUE.equals(head.empty());
-    }
-
-    /**
-     * 集合长度不足时给出拒绝文案。
-     *
-     * @param collectionValue 集合值；可空
-     * @param collection      集合键；可空
-     * @param required        最短长度
-     * @return 拒绝文案；达标为 {@code null}
-     */
-    @Nullable
-    private static String rejectIfCollectionLengthLt(@Nullable Object collectionValue, @Nullable String collection, int required) {
-        if (Strings.isBlank(collection)) {
-            return ModelHint.FINISH_OUTPUT_COLLECTION_BLANK.text();
-        }
-
-        JsonNode arr = JSON.obj2node(collectionValue);
-        if (Objects.isNull(arr) || !arr.isArray()) {
-            return ModelHint.FINISH_OUTPUT_NOT_COLLECTION.text("key", collection);
-        }
-
-        if (arr.size() >= required) {
-            return null;
-        }
-
-        return ModelHint.FINISH_OUTPUT_LENGTH.text(
-            "key", collection, "size", String.valueOf(arr.size()), "required", String.valueOf(required)
-        );
-    }
-
-    /**
-     * 集合任一项缺字段时给出拒绝文案。
-     *
-     * @param collectionValue 集合值；可空
-     * @param collection      集合键；可空
-     * @param field           项内字段；可空
-     * @return 拒绝文案；全部具备为 {@code null}
-     */
-    @Nullable
-    private static String rejectIfAnyItemMissingField(@Nullable Object collectionValue, @Nullable String collection, @Nullable String field) {
-        if (Strings.isBlank(collection) || Strings.isBlank(field)) {
-            return ModelHint.FINISH_OUTPUT_PREDICATE.text();
-        }
-
-        JsonNode arr = JSON.obj2node(collectionValue);
-        if (Objects.isNull(arr) || !arr.isArray() || arr.isEmpty()) {
-            return ModelHint.FINISH_OUTPUT_EMPTY.text("key", collection);
-        }
-
-        for (int i = 0, j = arr.size(); i < j; i++) {
-            JsonNode item = arr.get(i);
-            if (!item.isObject()) {
-                return ModelHint.FINISH_OUTPUT_ITEM_NOT_OBJECT.text(
-                    "key", collection, "index", String.valueOf(i)
-                );
-            }
-
-            JsonNode value = JSON.lookupNode(item, field);
-            if (!JSON.hasValue(value) || Strings.isBlank(JSON.normalizeNode(value))) {
-                return ModelHint.FINISH_OUTPUT_ITEM_FIELD.text(
-                    "key", collection, "index", String.valueOf(i), "field", field
-                );
-            }
-        }
-
-        return null;
     }
 }

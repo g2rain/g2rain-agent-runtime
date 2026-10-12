@@ -47,6 +47,11 @@ public class TaskInstancePo extends BasePo {
     private String goalSummary;
 
     /**
+     * 开任务时的用户原文
+     */
+    private String request;
+
+    /**
      * 触发开任务的消息标识
      */
     private String sourceMessageId;

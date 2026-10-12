@@ -1,13 +1,13 @@
 package com.g2rain.agent.runtime.engine.flow.finalize;
 
 
+import com.g2rain.agent.runtime.engine.TurnContext;
 import org.jspecify.annotations.Nullable;
 
 /**
- * GoalGate（目标门）：把确定性草稿与证据收成给人看的最终答复。
- * <p>
- * 成功且开启时，可优先采纳长证据文案，必要时再调模型润色。
- * </p>
+ * GoalGate（目标门）：任务成功收口时核验用户目标是否达成，并合成给用户的最终答复。
+ *
+ * <p>任务未成功（失败、挂起、取消）时不核验，原样返回草稿。</p>
  *
  * @author alpha
  * @since 2026/8/21
@@ -15,12 +15,13 @@ import org.jspecify.annotations.Nullable;
 public interface GoalGate {
 
     /**
-     * 呈现本轮最终文案。
+     * 呈现本轮最终答复。
      *
-     * @param deterministic 确定性草稿（执行器/拣选结果）；可空
-     * @param evidence      本轮证据包；可空
-     * @param succeeded     任务是否终态成功
-     * @return 给人看的答复文案
+     * @param ctx       本轮上下文
+     * @param draft     执行器带回的文案（失败原因等）；可空
+     * @param succeeded 任务是否终态成功
+     * @return 给用户的答复；未成功且草稿为空时为 {@code null}
      */
-    String present(@Nullable String deterministic, @Nullable GoalEvidencePack evidence, boolean succeeded);
+    @Nullable
+    String present(TurnContext ctx, @Nullable String draft, boolean succeeded);
 }

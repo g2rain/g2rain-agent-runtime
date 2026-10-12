@@ -29,6 +29,9 @@ import java.util.Objects;
  */
 public final class IdempotencyKeyBuilder {
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**

@@ -16,6 +16,7 @@
         <result column="task_id" property="taskId" jdbcType="VARCHAR"/>
         <result column="agent_id" property="agentId" jdbcType="BIGINT"/>
         <result column="goal_summary" property="goalSummary" jdbcType="VARCHAR"/>
+        <result column="request" property="request" jdbcType="VARCHAR"/>
         <result column="source_message_id" property="sourceMessageId" jdbcType="VARCHAR"/>
         <result column="status" property="status" jdbcType="VARCHAR"/>
         <result column="current_node_id" property="currentNodeId" jdbcType="VARCHAR"/>
@@ -145,7 +146,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -156,7 +157,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{skillVersions, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{record, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{request, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{skillVersions, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{record, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -187,6 +188,9 @@
             </if>
             <if test="goalSummary != null">
                 goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            </if>
+            <if test="request != null">
+                request = #{request, jdbcType=VARCHAR},
             </if>
             <if test="sourceMessageId != null">
                 source_message_id = #{sourceMessageId, jdbcType=VARCHAR},
@@ -241,7 +245,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -260,7 +264,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -376,7 +380,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -389,7 +393,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.skillVersions, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.record, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.request, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.skillVersions, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.record, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -426,6 +430,9 @@
             </if>
             <if test="goalSummary != null">
                 goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            </if>
+            <if test="request != null">
+                request = #{request, jdbcType=VARCHAR},
             </if>
             <if test="sourceMessageId != null">
                 source_message_id = #{sourceMessageId, jdbcType=VARCHAR},
@@ -480,6 +487,7 @@
             conversation_id = #{conversationId, jdbcType=VARCHAR},
             agent_id = #{agentId, jdbcType=BIGINT},
             goal_summary = #{goalSummary, jdbcType=VARCHAR},
+            request = #{request, jdbcType=VARCHAR},
             status = #{status, jdbcType=VARCHAR},
             current_node_id = #{currentNodeId, jdbcType=VARCHAR},
             final_message = #{finalMessage, jdbcType=VARCHAR},

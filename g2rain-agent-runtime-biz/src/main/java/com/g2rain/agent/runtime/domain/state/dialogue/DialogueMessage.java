@@ -69,6 +69,11 @@ public class DialogueMessage {
     private long createdAt;
 
     /**
+     * 本轮选用的模型名；仅用户消息记录，供观测与排查。
+     */
+    private @Nullable String model;
+
+    /**
      * 用角色和正文创建一条交互历史消息，创建时间为当前毫秒。
      *
      * @param role 发言角色

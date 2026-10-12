@@ -1,11 +1,10 @@
 package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 
-import com.g2rain.agent.runtime.adapter.AgentProfiles;
+import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.domain.hydrate.ArgSpecHydrate;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.engine.hydrate.ContractValidator;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -59,13 +58,10 @@ public class DefaultBundleLoader implements BundleLoader {
     public @Nullable List<Skill> load(long agentId) {
         AgentBundleVo bundle = agentProfiles.loadCapabilityBundle(agentId);
         if (Objects.isNull(bundle)) {
-            log.info("[BundleLoader] empty bundle agentId={}", agentId);
             return null;
         }
 
-        List<Skill> skills = toSkills(bundle);
-        log.info("[BundleLoader] loaded agentId={} skillKeys={}", agentId, JSON.obj2str(skills));
-        return skills;
+        return toSkills(bundle);
     }
 
     /**
@@ -123,6 +119,7 @@ public class DefaultBundleLoader implements BundleLoader {
 
         return new Skill(
             skillKey,
+            Strings.blankToNull(brief.getSkillName()),
             toolNames,
             Strings.blankToNull(brief.getSemanticDesc()),
             brief.getSkillManual(),

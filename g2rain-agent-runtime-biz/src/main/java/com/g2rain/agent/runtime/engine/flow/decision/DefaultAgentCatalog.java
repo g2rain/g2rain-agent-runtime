@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.decision;
 
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.g2rain.agent.runtime.adapter.AgentProfiles;
+import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
 import com.g2rain.agent.studio.enums.ResourceStatus;
 import com.g2rain.agent.studio.vo.AgentCatalogItemVo;

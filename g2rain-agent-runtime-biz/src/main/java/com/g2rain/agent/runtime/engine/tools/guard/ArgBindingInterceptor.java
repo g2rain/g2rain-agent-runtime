@@ -45,8 +45,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ArgBindingInterceptor implements ToolInterceptor {
 
+    /**
+     * 证据读取：按 {@code from: evidence.*} 取历史调用结果。
+     */
     private final EvidenceReader evidenceReader;
 
+    /**
+     * JSON 编解码。
+     */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
@@ -75,6 +81,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
             return Optional.empty();
         }
 
+        // 逐参按契约注入：常量 → 数组模板 → from 取值，命中即改写并记来源
         JsonNode working = WorkingTree.of(ctx);
         boolean changed = false;
         for (Map.Entry<String, ArgSpec> entry : spec.getArgs().entrySet()) {
@@ -84,6 +91,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 continue;
             }
 
+            // 契约常量直接覆盖模型值
             if (Objects.nonNull(binding.getConstant())) {
                 if (JSON.upsertNode(args, param, binding.getConstant(), true)) {
                     changed = true;
@@ -98,6 +106,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 continue;
             }
 
+            // 数组模板：按来源数组逐行展开到目标数组
             if (isArrayTemplate(fromPath, param)) {
                 if (applyArrayTemplate(param, args, working, request, binding)) {
                     changed = true;
@@ -106,6 +115,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 continue;
             }
 
+            // 普通 from：取到值才覆盖，取不到保留模型原值
             BoundValue bound = readFrom(binding, binding.whenOrDefault(), working, ctx);
             if (Objects.nonNull(bound) && JSON.hasValue(bound.value())
                 && JSON.upsertNode(args, param, bound.value(), true)) {
@@ -116,9 +126,10 @@ public class ArgBindingInterceptor implements ToolInterceptor {
             }
         }
 
+        // 有改写才回写入参，并触发指纹重算
         if (changed) {
             request.replaceArguments(JSON.obj2str(args));
-            log.info("[ArgBinding] rewritten tool={}", request.toolName());
+            log.debug("[ArgBinding] rewritten tool={}", request.toolName());
         }
 
         return Optional.empty();
@@ -140,6 +151,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
         }
 
         return switch (ref.bag()) {
+            // 证据：UNIQUE 时要求命中唯一一条
             case EVIDENCE -> {
                 Optional<EvidenceReader.Hit> hit = evidenceReader.resolve(ctx, ref);
                 if (hit.isEmpty()) {
@@ -151,6 +163,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 }
                 yield new BoundValue(resolved.value(), resolved.source());
             }
+            // 平台快照：按键直取
             case PLATFORM -> {
                 String key = ref.path();
                 JsonNode value = ctx.getFrame().turn().platform().get(key).orElse(null);
@@ -159,6 +172,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 }
                 yield new BoundValue(value, new Source(SourceType.PLATFORM, key, key));
             }
+            // 工作树（输入/产出/共享/会话/前情）：UNIQUE 时先确认可唯一定位
             default -> {
                 if (when == BindingWhen.UNIQUE && !allowsWhen(working, ref)) {
                     yield null;
@@ -215,6 +229,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
                 request.argSource(to, new Source(sourceTypeOf(itemRef.bag()), refLeaf(itemRef.path()), itemRef.path()));
             }
         }
+
         return changed;
     }
 

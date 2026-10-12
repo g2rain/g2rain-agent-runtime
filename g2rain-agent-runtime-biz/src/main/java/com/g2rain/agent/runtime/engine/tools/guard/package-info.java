@@ -1,8 +1,8 @@
 /**
- * Guard（工具门禁）包：工具调用前后的拦截与契约校验，拦住非法入参、补参义务、指纹熔断、响应嗅探与证据落库。
+ * Guard（工具门禁）包：工具调用前后的拦截与契约校验，拦住非法入参、来源不可信的参数、指纹熔断、响应嗅探与证据落库。
  * <p>
  * 各 {@link com.g2rain.agent.runtime.engine.tools.ToolInterceptor} 按 {@code @Order} 串联；
- * sniff / repair 辅助类型供契约与补参链路复用。
+ * sniff 辅助类型供契约链路复用。
  * </p>
  *
  * @author alpha

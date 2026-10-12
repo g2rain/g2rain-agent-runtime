@@ -11,9 +11,11 @@ import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.engine.TurnResult;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceEvent;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +30,6 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public final class DefaultAgentResolver implements AgentResolver {
@@ -44,9 +45,7 @@ public final class DefaultAgentResolver implements AgentResolver {
      * <ol>
      *   <li>显式 agentId（含续跑）→ 须 ACTIVE，否则失败
      *   <li>续跑且无显式 id → 锁任务绑定 Agent
-     *   <li>意图无 agentId 且写了无法匹配回复 → 失败
-     *   <li>意图已带 agentId → 校验 ACTIVE 后绑定
-     *   <li>意图写了无法匹配的回复且无 agentId → 失败
+     *   <li>选人模式且意图带 agentId → 校验 ACTIVE 后绑定
      *   <li>回退：当前任务 Agent → 存活前情 Agent → 租户唯一启用 Agent
      *   <li>仍无来源 → 失败
      * </ol>
@@ -67,11 +66,11 @@ public final class DefaultAgentResolver implements AgentResolver {
         if (Objects.nonNull(explicitAgentId)) {
             AgentSelection explicit = agentCatalog.findActiveById(explicitAgentId);
             if (Objects.isNull(explicit)) {
-                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED);
+                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED, explicitAgentId);
                 return;
             }
 
-            bind(ctx, decision, explicit);
+            bind(ctx, decision, explicit, Source.EXPLICIT);
             return;
         }
 
@@ -79,47 +78,38 @@ public final class DefaultAgentResolver implements AgentResolver {
         if (decision.shouldContinue()) {
             AgentSelection fromTask = resolveTaskAgent(ctx.getTurn().task().orElse(null));
             if (Objects.isNull(fromTask)) {
-                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED);
+                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED, null);
                 return;
             }
 
-            bind(ctx, decision, fromTask);
+            bind(ctx, decision, fromTask, Source.CONTINUED_TASK);
             return;
         }
 
+        // 选人模式下采用意图选中的 agentId；须仍为启用画像
         IntentResult intent = ctx.getIntentResult();
-        boolean pickMode = Objects.nonNull(intent) && (intent.getMode() == TurnMode.START_FRESH
-            || intent.getMode() == TurnMode.START_WITH_CONTEXT
-            || intent.getMode() == TurnMode.SWITCH_AGENT);
-
-        // 意图已写无法匹配的回复且未给 agentId：直接失败，不再回退
-        if (pickMode && Objects.isNull(intent.getAgentId()) && Strings.isNotBlank(intent.getUserReply())) {
-            failNoMatch(ctx, intent.getUserReply());
-            return;
-        }
-
-        // 意图已回填 agentId：须仍为启用画像
-        if (Objects.nonNull(intent) && Objects.nonNull(intent.getAgentId())) {
-            AgentSelection byId = agentCatalog.findActiveById(intent.getAgentId());
+        Long picked = decision.mode().selectsAgent() && Objects.nonNull(intent) ? intent.getAgentId() : null;
+        if (Objects.nonNull(picked)) {
+            AgentSelection byId = agentCatalog.findActiveById(picked);
             if (Objects.isNull(byId)) {
-                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED);
+                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED, picked);
                 return;
             }
 
-            bind(ctx, decision, byId);
+            bind(ctx, decision, byId, Source.INTENT);
             return;
         }
 
         // 回退：当前任务 Agent → 存活任务前情 Agent → 租户唯一启用 Agent
         AgentSelection taskAgent = resolveTaskAgent(ctx.getTurn().task().orElse(null));
         if (Objects.nonNull(taskAgent)) {
-            bind(ctx, decision, taskAgent);
+            bind(ctx, decision, taskAgent, Source.CURRENT_TASK);
             return;
         }
 
         AgentSelection continuityAgent = resolveContinuityAgent(ctx.getTurn());
         if (Objects.nonNull(continuityAgent)) {
-            bind(ctx, decision, continuityAgent);
+            bind(ctx, decision, continuityAgent, Source.CONTINUITY);
             return;
         }
 
@@ -129,13 +119,13 @@ public final class DefaultAgentResolver implements AgentResolver {
             if (Objects.nonNull(sole.getAgentId())) {
                 AgentSelection selection = agentCatalog.findActiveById(sole.getAgentId());
                 if (Objects.nonNull(selection)) {
-                    bind(ctx, decision, selection);
+                    bind(ctx, decision, selection, Source.SOLE);
                     return;
                 }
             }
         }
 
-        failNoMatch(ctx, RuntimeMessage.AGENT_NONE, TurnStatus.DONE);
+        failNoMatch(ctx, RuntimeMessage.AGENT_NONE, TurnStatus.DONE, null);
     }
 
     /**
@@ -186,53 +176,81 @@ public final class DefaultAgentResolver implements AgentResolver {
     }
 
     /**
-     * 写回上下文上的 Agent 选人，并同步 decision 上的 agent 字段。
+     * 写回上下文上的 Agent 选人，同步 decision 上的 agent 字段，并输出绑定轨迹。
      *
      * @param ctx      本轮上下文
      * @param decision 尚未绑定或待覆盖 Agent 的决策
      * @param agent    已解析的启用画像
+     * @param source   人选来源
      */
-    private static void bind(TurnContext ctx, TurnDecision decision, AgentSelection agent) {
+    private static void bind(TurnContext ctx, TurnDecision decision, AgentSelection agent, Source source) {
         ctx.setAgentSelection(agent);
         ctx.setDecision(decision.withAgent(agent));
+        Trace.at(TraceStage.DECISION, "agent_bound")
+            .kv("agentId", agent.getAgentId())
+            .kv("source", source)
+            .info();
     }
 
     /**
-     * 标记本轮失败并写入拒答 {@link TurnResult}，状态默认为 FAILED。
-     *
-     * @param ctx     本轮上下文
-     * @param message 面向用户的失败说明
-     */
-    private static void failNoMatch(TurnContext ctx, String message) {
-        failNoMatch(ctx, message, TurnStatus.FAILED);
-    }
-
-    /**
-     * 按运行时文案标记本轮失败。
+     * 标记失败、写入回执，并把决策清空，阻止后续建任务或跑图；输出未绑定轨迹。
      *
      * @param ctx     本轮上下文
      * @param message 稳定文案枚举
      * @param status  回执状态
+     * @param agentId 未能绑定的 Agent 主键；无具体人选为 {@code null}
      */
-    private static void failNoMatch(TurnContext ctx, RuntimeMessage message, TurnStatus status) {
-        failNoMatch(ctx, message.text(), status);
-    }
-
-    /**
-     * 标记失败、写入回执，并把决策清空，阻止后续建任务或跑图。
-     *
-     * @param ctx     本轮上下文
-     * @param message 面向用户的失败说明
-     * @param status  回执状态
-     */
-    private static void failNoMatch(TurnContext ctx, String message, TurnStatus status) {
+    private static void failNoMatch(TurnContext ctx, RuntimeMessage message, TurnStatus status, @Nullable Long agentId) {
         ctx.setFailed(true);
         TurnResult result = new TurnResult();
         result.setConversationId(ctx.getRequest().getConversationId());
         result.setTaskId(ctx.getTurn().task().map(TaskMetadata::getTaskId).orElse(null));
-        result.setContent(message);
+        result.setContent(message.text());
         result.setStatus(status);
         ctx.setResult(result);
         ctx.setDecision(TurnDecision.empty());
+        TraceEvent event = Trace.at(TraceStage.DECISION, "agent_unbound").kv("reason", message).kv("agentId", agentId);
+        // 指定或选中的员工不可用是失败；没有合适的员工只是本轮无人承接
+        if (status == TurnStatus.FAILED) {
+            event.error();
+        } else {
+            event.warn();
+        }
+    }
+
+    /**
+     * 人选来源，与解析优先级一一对应。
+     */
+    private enum Source {
+
+        /**
+         * 请求显式指定
+         */
+        EXPLICIT,
+
+        /**
+         * 续跑时沿用任务绑定的 Agent
+         */
+        CONTINUED_TASK,
+
+        /**
+         * 意图分类选中
+         */
+        INTENT,
+
+        /**
+         * 回退到当前任务的 Agent
+         */
+        CURRENT_TASK,
+
+        /**
+         * 回退到任务前情的 Agent
+         */
+        CONTINUITY,
+
+        /**
+         * 回退到租户唯一启用的 Agent
+         */
+        SOLE
     }
 }

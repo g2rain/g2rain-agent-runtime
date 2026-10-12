@@ -81,7 +81,7 @@ Runtime 负责组织执行；Studio 提供能力定义；模型提供判断；�
 
 - [会话入口 ConversationController](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/controller/ConversationController.java)
 - [会话编排 ConversationServiceImpl](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/service/impl/ConversationServiceImpl.java)
-- [能力来源 AgentProfiles](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/adapter/AgentProfiles.java)
+- [能力来源 AgentProfiles](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/client/AgentProfiles.java)
 - [模型边界 ModelGateway](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/model/ModelGateway.java)
 - [MCP 装配 McpClientConfig](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/config/McpClientConfig.java)
 - [业务模块依赖](../g2rain-agent-runtime-biz/pom.xml)
@@ -345,7 +345,7 @@ flowchart LR
 - [带来源值 Sourced](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/state/Sourced.java)
 - [输入绑定 InputBinder](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/state/InputBinder.java)
 - [参数绑定 ArgBindingInterceptor](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/guard/ArgBindingInterceptor.java)
-- [上下文投影 ReactProjectionFactory](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/react/projection/ReactProjectionFactory.java)
+- [上下文投影 ReactProjectionFactory](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/react/ReactProjectionFactory.java)
 - [正式输出 NodeBuiltinTools](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/builtin/NodeBuiltinTools.java)
 - [来源校验 SourceVerifier](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/guard/SourceVerifier.java)
 - [共享与记忆 EntityExtractor](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/state/EntityExtractor.java)

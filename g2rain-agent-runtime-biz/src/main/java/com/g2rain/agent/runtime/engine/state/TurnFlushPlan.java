@@ -2,12 +2,10 @@ package com.g2rain.agent.runtime.engine.state;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.domain.graph.EdgeType;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
-import com.g2rain.agent.runtime.domain.graph.TaskEdge;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
-import com.g2rain.agent.runtime.domain.state.conversation.ConversationFence;
+import com.g2rain.agent.runtime.domain.state.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
 import com.g2rain.agent.runtime.domain.state.task.SideEffect;
@@ -107,10 +105,7 @@ public class TurnFlushPlan {
         }
         turn.markDialogueFlushed();
         turn.markPayloadsFlushed();
-        if (properties.getState().isStateSizeLogEnabled()) {
-            StateSizeProbe.record(turn.conversation().conversationId(),
-                turn.task().map(TaskMetadata::getTaskId).orElse(null), ops);
-        }
+        StateSizeProbe.record(ops);
     }
 
     /**
@@ -146,7 +141,8 @@ public class TurnFlushPlan {
         String taskId = task.getTaskId();
         Duration ttl = hydrate.taskTtl(task);
         long ttlMs = ttl.toMillis();
-        Set<String> protectedPayloadNodes = delegateProtectedNodes(turn);
+        Set<String> protectedPayloadNodes = upstreamProtectedNodes(turn);
+        // 任务级：元数据、图、断点（无则删）、任务共享、前情，并续期写索引
         writeHash(ops, keys.metadata(taskId), task, ttlMs, "conversationId", "taskId", "version");
         hsetAll(ops, keys.graph(taskId), HashCodec.graphHash(turn.graph()), ttlMs);
         if (turn.checkpoint().isPresent()) {
@@ -158,9 +154,10 @@ public class TurnFlushPlan {
             ops.add(FlushOp.hset(keys.shared(taskId), field, JSON.obj2str(value), ttlMs)));
         turn.prior().ifPresent(prior -> ops.add(FlushOp.set(keys.prior(taskId), JSON.obj2str(prior), ttlMs)));
         ops.add(FlushOp.expire(keys.writes(taskId), ttlMs));
+        // 节点级：空间字段、证据头与写索引；已完成节点在下游不再需要时收缩载荷
         turn.nodes().values().forEach(node -> {
-            NodeSpace space = new NodeSpace(node.inputs(), node.outputs(), node.state(), node.repair(),
-                node.rounds(), node.tokens());
+            NodeSpace space = new NodeSpace(node.inputs(), node.outputs(), node.state(),
+                node.rounds(), node.tokens(), node.actions());
             String spaceKey = keys.space(taskId, node.nodeId());
             hsetAll(ops, spaceKey, hydrate.encodeSpace(taskId, node.nodeId(), space), ttlMs);
             HashCodec.deletedFields(space).forEach(field -> ops.add(FlushOp.hdel(spaceKey, field)));
@@ -170,6 +167,7 @@ public class TurnFlushPlan {
             });
             shrinkDonePayloads(ops, keys, turn, taskId, node, protectedPayloadNodes, ttlMs);
         });
+        // 本轮新产生的证据载荷
         turn.payloads().forEach((id, payload) -> writePayload(ops, keys, turn, taskId, id, payload,
             protectedPayloadNodes, ttlMs));
     }
@@ -204,7 +202,7 @@ public class TurnFlushPlan {
      * @param taskId         任务 id
      * @param evidenceId     证据 id，同时是报文键后缀
      * @param payload        报文体；可空则写成 JSON null
-     * @param protectedNodes 委派保护中的前置节点
+     * @param protectedNodes 下游未结束的上游节点
      * @param taskTtlMs      任务组 TTL 毫秒
      */
     private void writePayload(List<FlushOp> ops, SessionKeys keys, DefaultTurnScope turn, String taskId,
@@ -227,7 +225,7 @@ public class TurnFlushPlan {
      * @param turn           本轮视图
      * @param taskId         任务 id
      * @param node           已打开的节点视图
-     * @param protectedNodes 委派保护中的前置节点
+     * @param protectedNodes 下游未结束的上游节点
      * @param taskTtlMs      任务组 TTL 毫秒
      */
     private void shrinkDonePayloads(List<FlushOp> ops, SessionKeys keys, DefaultTurnScope turn, String taskId,
@@ -255,7 +253,7 @@ public class TurnFlushPlan {
      *
      * @param turn           本轮视图
      * @param nodeId         报文所属节点；可空则按任务组 TTL
-     * @param protectedNodes 委派保护中的前置节点
+     * @param protectedNodes 下游未结束的上游节点
      * @param taskTtlMs      任务组 TTL 毫秒
      * @return 任务组 TTL、短 TTL；{@code null} 表示删除 Redis 副本
      */
@@ -284,20 +282,16 @@ public class TurnFlushPlan {
     }
 
     /**
-     * 发起节点仍 WAITING_DELEGATE 时，保护 DELEGATE 边前置节点的报文。
+     * 下游节点未结束时，保护其上游节点的报文热态（下游会直接读上游证据）。
      *
      * @param turn 本轮视图
-     * @return 被保护的前置节点 id；无等待委派时为空集合
+     * @return 被保护的上游节点 id；没有时为空集合
      */
-    private static Set<String> delegateProtectedNodes(DefaultTurnScope turn) {
+    private static Set<String> upstreamProtectedNodes(DefaultTurnScope turn) {
         Set<String> protectedIds = new HashSet<>();
-        for (TaskEdge edge : turn.graph().getEdges()) {
-            if (!Objects.equals(edge.getType(), EdgeType.DELEGATE)) {
-                continue;
-            }
-            TaskNode parent = turn.graph().find(edge.getTo());
-            if (Objects.nonNull(parent) && Objects.equals(parent.getStatus(), NodeStatus.WAITING_DELEGATE)) {
-                protectedIds.add(edge.getFrom());
+        for (TaskNode node : turn.graph().getNodes()) {
+            if (!node.getStatus().isTerminal()) {
+                protectedIds.addAll(turn.graph().upstream(node.getNodeId()));
             }
         }
         return protectedIds;

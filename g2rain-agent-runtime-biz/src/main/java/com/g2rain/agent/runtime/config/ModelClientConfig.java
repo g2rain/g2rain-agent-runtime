@@ -34,14 +34,14 @@ public class ModelClientConfig {
     @Bean
     @LoadBalanced
     RestClient.Builder modelRestClientBuilder(RestClientBuilderConfigurer configurer, RuntimeProperties properties) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         RuntimeProperties.Model cfg = properties.getModel();
         // 短连接超时：尽快失败并重试，躲开注册中心残留的僵尸节点
-        requestFactory.setConnectTimeout(Duration.ofMillis(cfg.getConnectTimeoutMs()));
+        factory.setConnectTimeout(Duration.ofMillis(cfg.getConnectTimeoutMs()));
         // 0 = 无限读超时（等模型返回）；>0 才启用有限读超时
-        requestFactory.setReadTimeout(cfg.getReadTimeoutMs());
+        factory.setReadTimeout(cfg.getReadTimeoutMs());
         // baseUrl 可以是 lb:// 服务名或 http(s) 直连
-        return configurer.configure(RestClient.builder()).requestFactory(requestFactory).baseUrl(cfg.getEndpoint());
+        return configurer.configure(RestClient.builder()).requestFactory(factory).baseUrl(cfg.getEndpoint());
     }
 
     /**

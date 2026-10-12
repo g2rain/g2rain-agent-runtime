@@ -7,10 +7,13 @@ import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
+import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
 import com.g2rain.agent.runtime.engine.TurnRequest;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.springframework.ai.tool.ToolCallback;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
@@ -57,6 +60,17 @@ public interface RuntimeStateFacade {
      * @return 预写结果；仅 {@link PrewriteResult.Proceed} 允许调写工具
      */
     PrewriteResult prewrite(NodeScope node, ToolCall call);
+
+    /**
+     * 查看任务内是否已有同一写操作的生效证据，不登记新证据。
+     *
+     * <p>复用其他节点的成功结果时，在本节点补记一条成功证据，本节点的完成判定与历史都能看到这次写操作。</p>
+     *
+     * @param node 当前节点
+     * @param call 写工具调用
+     * @return 复用或阻断结论；没有生效证据为空
+     */
+    Optional<PrewriteResult> existing(NodeScope node, ToolCall call);
 
     /**
      * 接收写工具返回值并完成对应证据结算。
@@ -108,30 +122,23 @@ public interface RuntimeStateFacade {
     Map<String, Sourced<?>> outputsOf(TurnScope turn, List<String> nodeIds);
 
     /**
-     * 重建节点跨轮历史。
+     * 重建节点跨轮历史：按轮次合并本节点对话消息、业务证据与无证据动作。
      *
-     * @param node 当前节点
+     * @param node  当前节点
+     * @param tools 本节点可见工具，用于识别追问调用
      * @return 历史轮次
      */
-    List<ChatTurn> history(NodeScope node);
+    List<ChatTurn> history(NodeScope node, List<ToolCallback> tools);
 
     /**
-     * 本轮未落库的 assistant/tool 消息，供同轮继续 ReAct。
+     * 记录节点内一次无业务证据的动作（内置工具调用、被拒或推迟的调用、用户确认或拒绝），供跨轮重建历史。
      *
-     * @param node 当前节点
-     * @return 本轮消息
-     */
-    List<ChatTurn> turnMessages(NodeScope node);
-
-    /**
-     * 将敏感值写入 secret key，返回短期 handle；不得进入 Scope 投影或 MySQL。
+     * <p>说明按 {@code state.node-action-max-chars} 裁剪，本节点超过 {@code state.node-actions-max} 条时丢弃最早的。</p>
      *
-     * @param turn      本轮视图
-     * @param value     明文
-     * @param expiresAt 过期时间（epoch 毫秒）
-     * @return secret handle
+     * @param node   当前节点
+     * @param action 动作
      */
-    String putSecret(TurnScope turn, Object value, long expiresAt);
+    void act(NodeScope node, NodeAction action);
 
     /**
      * 把本轮改动写入 Redis（Lua，校验栅栏）。

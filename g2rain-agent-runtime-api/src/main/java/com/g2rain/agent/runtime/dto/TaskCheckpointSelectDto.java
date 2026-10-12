@@ -7,7 +7,6 @@ import lombok.Setter;
 import com.g2rain.common.model.BaseSelectListDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-
 /**
  * 任务检查点表查询入参DTO
  * 用于TaskCheckpointDao.selectList方法的条件筛选
@@ -63,12 +62,6 @@ public class TaskCheckpointSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "追问期望补充的字段")
     private String expectedFields;
-
-    /**
-     * 候选项（来自证据）
-     */
-    @Schema(description = "候选项（来自证据）")
-    private String choices;
 
     /**
      * 恢复动作

@@ -100,12 +100,12 @@ public record TurnDecision(TurnMode mode, boolean shouldContinue, boolean create
     }
 
     /**
-     * 拿不准：不推进、不新建、不构图，只追问。
+     * 待用户确认：存在待确认写操作而用户只输入了文字时使用；不推进、不新建、不构图，只请用户确认。
      *
      * @return UNCERTAIN 决策
      */
     public static TurnDecision uncertain() {
-        // UNCERTAIN：只追问，不触碰任务生命周期
+        // UNCERTAIN：只请用户确认，不触碰任务生命周期
         return new TurnDecision(TurnMode.UNCERTAIN, false, false, false, false, false, false, null);
     }
 

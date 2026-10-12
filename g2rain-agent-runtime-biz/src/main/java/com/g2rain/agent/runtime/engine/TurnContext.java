@@ -2,10 +2,10 @@ package com.g2rain.agent.runtime.engine;
 
 
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
+import com.g2rain.agent.runtime.domain.decision.GoalEvaluation;
 import com.g2rain.agent.runtime.domain.decision.IntentResult;
 import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
-import com.g2rain.agent.runtime.domain.finalize.GoalEvaluation;
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
@@ -100,6 +100,6 @@ public final class TurnContext {
      * @return 图执行器使用的调度帧
      */
     public GraphFrame graphFrame() {
-        return new GraphFrame(turn, skills, request.getUserInput(), request.getAction(), entryResult, agentSelection);
+        return new GraphFrame(turn, skills, request.getUserInput(), request.getAction(), entryResult, agentSelection, request.getModel());
     }
 }

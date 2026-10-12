@@ -59,6 +59,11 @@ public final class ToolInvokeRequest {
     private @Nullable String evidenceId;
 
     /**
+     * 工具实际执行的耗时（毫秒）；被拦截器短路、未真正调用时为空。
+     */
+    private @Nullable Long durationMs;
+
+    /**
      * ArgBinding 写入的参数来源（paramPath → Source）。
      */
     private final Map<String, Source> argSources = new LinkedHashMap<>();
@@ -70,8 +75,8 @@ public final class ToolInvokeRequest {
      * {@link #replaceArguments(String)} 改写参数时会重新计算指纹。</p>
      *
      * @param context  执行上下文
-     * @param args     参数 JSON
      * @param callback 可用工具回调
+     * @param args     参数 JSON
      */
     public ToolInvokeRequest(ToolExecutionContext context, ToolCallback callback, String args) {
         this.context = context;
@@ -98,6 +103,22 @@ public final class ToolInvokeRequest {
      */
     public @Nullable String evidenceId() {
         return this.evidenceId;
+    }
+
+    /**
+     * 记录工具实际执行的耗时。
+     *
+     * @param durationMs 耗时毫秒
+     */
+    public void durationMs(long durationMs) {
+        this.durationMs = durationMs;
+    }
+
+    /**
+     * @return 工具实际执行的耗时（毫秒）；未真正调用为空
+     */
+    public @Nullable Long durationMs() {
+        return this.durationMs;
     }
 
     /**
