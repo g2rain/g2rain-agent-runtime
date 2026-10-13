@@ -14,7 +14,7 @@
 |---|---|
 | 现象 | Qwen3.8-27B 偶尔第一个 token 就是结束符（今天约 1.5%），分类结果为 null，返回"是否交给其他数字员工" |
 | 现状 | 空响应直接返回 null，由调度器按场景兜底。2026-10-12 去掉了空响应重试（F3）：重试解决不了根因 |
-| 方向 | 可选：通过 model-nexus 透传 `response_format: json_schema` 或 guided decoding，从解码层保证输出 JSON |
+| 方向 | 根因判断：model-nexus 固定关闭 thinking（`enable_thinking=false`），而决策类提示词要求"先写 reason 再给结论"，两者方向相反，抬高了首个 token 为结束符的概率。2026-10-13 已从 Intent、SkillCandidate、Plan、GoalGate 四个提示词中去掉 `reason`（代码从未读取该字段），待按 MODEL `abnormal=EMPTY` 统计空响应率，并观察 L19（漏选前置技能）是否回归 |
 
 ### Q10 没有回归测试【工程】
 

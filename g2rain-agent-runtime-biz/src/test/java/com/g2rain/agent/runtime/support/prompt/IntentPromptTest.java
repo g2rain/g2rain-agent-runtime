@@ -25,7 +25,7 @@ class IntentPromptTest {
 
         assertThat(user).contains("【当前场景】\nFRESH", "【本轮用户输入】\n帮我开张发票");
         assertThat(user.strip()).startsWith("请根据以下规则").endsWith("\"userReply\":<文本或 null>}")
-            .contains("{\"reason\":\"<简短判断依据>\",\"mode\"");
+            .contains("{\"mode\":\"<推进规则中箭头右侧的值>\"");
     }
 
     @Test

@@ -54,11 +54,6 @@ public final class IntentResult {
     private @Nullable String userReply;
 
     /**
-     * 用于日志或审计的判定理由；不作为业务状态机的唯一依据。
-     */
-    private @Nullable String reason;
-
-    /**
      * 规范化模型结论，使其可以安全地交给调度器校正。
      *
      * <p>清除文本首尾空白；任务前情开关由模式推导；只有选人模式保留 {@code agentId}，
@@ -72,7 +67,6 @@ public final class IntentResult {
         useContinuity = mode == TurnMode.START_WITH_CONTEXT;
         goalSummary = Strings.blankToNull(goalSummary);
         userReply = Strings.blankToNull(userReply);
-        reason = Strings.blankToNull(reason);
 
         boolean listed = Objects.nonNull(agentId) && Collections.isNotEmpty(candidates)
             && candidates.stream().anyMatch(candidate -> Objects.equals(agentId, candidate.getAgentId()));

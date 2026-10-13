@@ -66,8 +66,8 @@ public final class GoalGatePrompt {
             %s
 
             【输出】
-            只输出如下格式的一个 JSON 对象，不要输出其它任何文字；先写 reason 再给结论，achieved 须与 reason 的核对一致，finalMessage 不包含 reason 的内容：
-            {"reason":"<逐项对照 goal 与执行事实的核对结论>","achieved":true,"finalMessage":"<给用户的最终答复>"}
+            只输出如下格式的一个 JSON 对象，不要输出其它任何文字：
+            {"achieved":true,"finalMessage":"<给用户的最终答复>"}
             """;
 
     /**

@@ -73,8 +73,8 @@ public final class IntentPrompt {
             %s
 
             【输出】
-            请按当前场景的推进规则判断本轮用户输入，并按选人规则选择数字员工，只输出如下格式的一个 JSON 对象，不要输出其它任何文字；先写 reason 再给结论，其余字段须与 reason 的判断一致：
-            {"reason":"<简短判断依据>","mode":"<推进规则中箭头右侧的值>","agentId":<agentId 或 null>,"goalSummary":"<一句话概括用户目标>","userReply":<文本或 null>}
+            请按当前场景的推进规则判断本轮用户输入，并按选人规则选择数字员工，只输出如下格式的一个 JSON 对象，不要输出其它任何文字：
+            {"mode":"<推进规则中箭头右侧的值>","agentId":<agentId 或 null>,"goalSummary":"<一句话概括用户目标>","userReply":<文本或 null>}
             """;
 
     /**
