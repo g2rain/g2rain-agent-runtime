@@ -212,7 +212,7 @@ public final class IntentPrompt {
 
         【输出】
         请按当前场景的推进规则判断本轮用户输入，并按选人规则选择数字员工，只输出如下格式的一个 JSON 对象，不要输出其它任何文字：
-        {"reason":"<简短判断依据>","mode":"<当前场景可选的模式>","agentId":<agentId 或 null>,"goalSummary":"<一句话概括用户目标>","userReply":<文本或 null>}
+        {"mode":"<当前场景可选的模式>","agentId":<agentId 或 null>,"goalSummary":"<一句话概括用户目标>","userReply":<文本或 null>}
         """;
 
     private IntentPrompt() {

@@ -86,8 +86,8 @@ public final class PlanPrompt {
             %s
 
             【输出】
-            只输出如下格式的一个 JSON 对象，不要输出其它任何文字；先写 reason 再给 nodes，nodes 须与 reason 的分析一致；能完成目标时 nodes 至少包含一个节点，无法完成时 nodes 为空数组：
-            {"reason":"<目标拆成哪些业务动作、各用哪个技能、哪些动作依赖前一步的结果>","nodes":[{"nodeId":"n1","title":"<业务动作名称>","objective":"<可验收的业务目标>","skillKey":"<skillKey>","dependsOn":[],"target":"<写工具名，无写操作时省略>"}]}
+            只输出如下格式的一个 JSON 对象，不要输出其它任何文字；能完成目标时 nodes 至少包含一个节点，无法完成时 nodes 为空数组：
+            {"nodes":[{"nodeId":"n1","title":"<业务动作名称>","objective":"<可验收的业务目标>","skillKey":"<skillKey>","dependsOn":[],"target":"<写工具名，无写操作时省略>"}]}
             """;
 
     /**

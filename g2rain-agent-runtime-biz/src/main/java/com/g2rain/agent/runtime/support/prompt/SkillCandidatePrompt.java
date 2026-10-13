@@ -48,8 +48,8 @@ public final class SkillCandidatePrompt {
             %s
 
             【输出】
-            只输出如下格式的一个 JSON 对象，不要输出其它任何文字；先写 reason 再给结论，candidateSkillKeys 须与 reason 的分析一致：
-            {"reason":"<目标涉及哪些对象、各由哪个技能负责、需要哪些前置技能>","candidateSkillKeys":["<skillKey>"]}
+            只输出如下格式的一个 JSON 对象，不要输出其它任何文字：
+            {"candidateSkillKeys":["<skillKey>"]}
             """;
 
     /**
