@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,12 +36,18 @@ public class TaskInstanceController implements TaskInstanceApi {
 
     @Override
     public Result<List<TaskInstanceVo>> selectList(TaskInstanceSelectDto selectDto) {
-        return Result.success(taskInstanceService.selectList(selectDto));
+        return Result.success(taskInstanceService.selectSummaryList(selectDto));
     }
 
     @Override
     public Result<PageData<TaskInstanceVo>> selectPage(PageSelectListDto<TaskInstanceSelectDto> selectDto) {
-        return Result.successPage(taskInstanceService.selectPage(selectDto));
+        return Result.successPage(taskInstanceService.selectSummaryPage(selectDto));
+    }
+
+    @GetMapping("/by_task/{taskId}")
+    @Operation(summary = "按任务标识查完整任务", description = "含 request/shared/record 等大字段")
+    public Result<TaskInstanceVo> getByTaskId(@Parameter(description = "任务业务标识") @PathVariable String taskId) {
+        return Result.success(taskInstanceService.getByTaskId(taskId));
     }
 
     @PostMapping("/save")

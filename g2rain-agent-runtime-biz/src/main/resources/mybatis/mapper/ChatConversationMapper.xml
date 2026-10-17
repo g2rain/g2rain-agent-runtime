@@ -244,9 +244,6 @@
             <if test="lastMessageTime != null">
                 AND last_message_time = #{lastMessageTime, jdbcType=TIMESTAMP}
             </if>
-            <if test="sessionShared != null">
-                AND session_shared = #{sessionShared, jdbcType=LONGVARCHAR}
-            </if>
             <!-- 过滤已删除的记录 -->
             AND (delete_flag = 0 OR delete_flag IS NULL)
         </where>
@@ -386,4 +383,74 @@
     <select id="selectListWithoutIsolation" parameterType="com.g2rain.agent.runtime.dto.ChatConversationSelectDto" resultMap="BaseResultMap">
         <include refid="selectListBody"/>
     </select>
+
+    <!-- 控制台摘要列表：不含 session_shared -->
+    <select id="selectSummaryList" parameterType="com.g2rain.agent.runtime.dto.ChatConversationSelectDto" resultMap="BaseResultMap">
+        SELECT
+        id,
+        create_time, update_time,
+        organ_id, conversation_id, user_id, title, active_task_id, state_version, last_message_time,
+        delete_flag,
+        version
+        FROM chat_conversation
+        <where>
+            <if test="id != null">
+                AND id = #{id, jdbcType=BIGINT}
+            </if>
+            <if test="ids != null and ids.size() > 0">
+                AND id IN
+                <foreach collection="ids" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=BIGINT}
+                </foreach>
+            </if>
+            <if test="createTime != null">
+                <if test="createTime[0] != '' and (createTime.size() lt 2 or createTime[1] == '')">
+                    AND create_time >= #{createTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] == '' and createTime[1] != ''">
+                    AND create_time &lt;= #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] != '' and createTime[1] != ''">
+                    AND create_time BETWEEN #{createTime[0], jdbcType=TIMESTAMP}
+                    AND #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <if test="updateTime != null">
+                <if test="updateTime[0] != '' and (updateTime.size() lt 2 or updateTime[1] == '')">
+                    AND update_time >= #{updateTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] == '' and updateTime[1] != ''">
+                    AND update_time &lt;= #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] != '' and updateTime[1] != ''">
+                    AND update_time BETWEEN #{updateTime[0], jdbcType=TIMESTAMP}
+                    AND #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <if test="organId != null">
+                AND organ_id = #{organId, jdbcType=BIGINT}
+            </if>
+            <if test="conversationId != null">
+                AND conversation_id = #{conversationId, jdbcType=VARCHAR}
+            </if>
+            <if test="userId != null">
+                AND user_id = #{userId, jdbcType=BIGINT}
+            </if>
+            <if test="title != null">
+                AND title = #{title, jdbcType=VARCHAR}
+            </if>
+            <if test="activeTaskId != null">
+                AND active_task_id = #{activeTaskId, jdbcType=VARCHAR}
+            </if>
+            <if test="stateVersion != null">
+                AND state_version = #{stateVersion, jdbcType=BIGINT}
+            </if>
+            <if test="lastMessageTime != null">
+                AND last_message_time = #{lastMessageTime, jdbcType=TIMESTAMP}
+            </if>
+            AND (delete_flag = 0 OR delete_flag IS NULL)
+        </where>
+        <include refid="dynamicOrderBy"/>
+    </select>
+
 </mapper>

@@ -83,6 +83,14 @@ public interface TaskInstanceDao {
     List<TaskInstancePo> selectList(TaskInstanceSelectDto selectDto);
 
     /**
+     * 摘要列表（不含大字段）
+     *
+     * @param selectDto 查询条件
+     * @return 实体列表
+     */
+    List<TaskInstancePo> selectSummaryList(TaskInstanceSelectDto selectDto);
+
+    /**
      * 插入单条记录（忽略数据隔离）
      *
      * @param entity 实体对象

@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 任务实例表查询入参DTO
@@ -64,6 +65,24 @@ public class TaskInstanceSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "任务状态[RUNNING, SUSPENDED, SUCCEEDED, FAILED, CANCELED]")
     private String status;
+
+    /**
+     * 多状态筛选（IN）
+     */
+    @Schema(description = "多状态筛选")
+    private List<String> statuses;
+
+    /**
+     * 开始时间起（含）
+     */
+    @Schema(description = "开始时间起")
+    private LocalDateTime startedFrom;
+
+    /**
+     * 开始时间止（不含）
+     */
+    @Schema(description = "开始时间止")
+    private LocalDateTime startedTo;
 
     /**
      * 当前节点

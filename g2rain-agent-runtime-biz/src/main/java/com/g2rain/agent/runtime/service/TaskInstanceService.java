@@ -33,6 +33,30 @@ public interface TaskInstanceService {
     PageData<TaskInstanceVo> selectPage(PageSelectListDto<TaskInstanceSelectDto> selectDto);
 
     /**
+     * 控制台摘要列表（不含大字段）
+     *
+     * @param selectDto 查询条件
+     * @return VO 列表
+     */
+    List<TaskInstanceVo> selectSummaryList(TaskInstanceSelectDto selectDto);
+
+    /**
+     * 控制台摘要分页
+     *
+     * @param selectDto 分页查询
+     * @return 分页 VO
+     */
+    PageData<TaskInstanceVo> selectSummaryPage(PageSelectListDto<TaskInstanceSelectDto> selectDto);
+
+    /**
+     * 按业务键取完整任务（含大字段）
+     *
+     * @param taskId 任务业务标识
+     * @return VO；不存在为 null
+     */
+    TaskInstanceVo getByTaskId(String taskId);
+
+    /**
      * 新增或更新数据
      *
      * @param dto 数据传输对象

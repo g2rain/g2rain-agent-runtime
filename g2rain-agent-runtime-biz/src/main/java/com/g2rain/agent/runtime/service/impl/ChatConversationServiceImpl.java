@@ -56,8 +56,21 @@ public class ChatConversationServiceImpl implements ChatConversationService {
 
     @Override
     public PageData<ChatConversationVo> selectPage(PageSelectListDto<ChatConversationSelectDto> selectDto) {
+        return selectSummaryPage(selectDto);
+    }
+
+    @Override
+    public List<ChatConversationVo> selectSummaryList(ChatConversationSelectDto selectDto) {
+        return chatConversationDao.selectSummaryList(selectDto)
+            .stream()
+            .map(ChatConversationConverter.INSTANCE::po2vo)
+            .toList();
+    }
+
+    @Override
+    public PageData<ChatConversationVo> selectSummaryPage(PageSelectListDto<ChatConversationSelectDto> selectDto) {
         Page<ChatConversationPo> page = PageContext.of(selectDto.getPageNum(), selectDto.getPageSize(), () -> {
-            chatConversationDao.selectList(selectDto.getQuery());
+            chatConversationDao.selectSummaryList(selectDto.getQuery());
         });
         List<ChatConversationVo> result = page.getResult()
             .stream()

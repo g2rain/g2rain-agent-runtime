@@ -33,6 +33,22 @@ public interface ChatConversationService {
     PageData<ChatConversationVo> selectPage(PageSelectListDto<ChatConversationSelectDto> selectDto);
 
     /**
+     * 控制台/侧栏摘要列表（不含 session_shared）
+     *
+     * @param selectDto 查询条件
+     * @return VO 列表
+     */
+    List<ChatConversationVo> selectSummaryList(ChatConversationSelectDto selectDto);
+
+    /**
+     * 摘要分页
+     *
+     * @param selectDto 分页查询
+     * @return 分页 VO
+     */
+    PageData<ChatConversationVo> selectSummaryPage(PageSelectListDto<ChatConversationSelectDto> selectDto);
+
+    /**
      * 新增或更新数据
      *
      * @param dto 数据传输对象

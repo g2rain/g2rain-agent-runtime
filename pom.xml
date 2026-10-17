@@ -21,6 +21,26 @@
         AI Agent runtime engine for task orchestration, execution, and state management.
     </description>
 
+    <organization>
+        <name>G2rain</name>
+        <url>http://www.g2rain.com/</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <name>Jagger</name>
+            <email>g2rain_developer@163.com</email>
+            <organization>G2rain</organization>
+            <organizationUrl>http://www.g2rain.com/</organizationUrl>
+        </developer>
+        <developer>
+            <id>alpha</id>
+            <name>Alpha</name>
+            <organization>G2rain</organization>
+            <organizationUrl>http://www.g2rain.com/</organizationUrl>
+        </developer>
+    </developers>
+
     <modules>
         <module>g2rain-agent-runtime-api</module>
         <module>g2rain-agent-runtime-biz</module>
