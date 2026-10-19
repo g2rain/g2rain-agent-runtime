@@ -83,6 +83,14 @@ public interface ChatConversationDao {
     List<ChatConversationPo> selectList(ChatConversationSelectDto selectDto);
 
     /**
+     * 摘要列表（不含 session_shared）
+     *
+     * @param selectDto 查询条件
+     * @return 实体列表
+     */
+    List<ChatConversationPo> selectSummaryList(ChatConversationSelectDto selectDto);
+
+    /**
      * 插入单条记录（忽略数据隔离）
      *
      * @param entity 实体对象

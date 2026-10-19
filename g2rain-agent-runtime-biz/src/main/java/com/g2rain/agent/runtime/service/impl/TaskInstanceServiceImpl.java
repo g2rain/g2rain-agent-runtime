@@ -6,6 +6,7 @@ import com.g2rain.common.model.PageData;
 import com.g2rain.common.model.PageSelectListDto;
 import com.g2rain.common.utils.Asserts;
 import com.g2rain.common.utils.Moments;
+import com.g2rain.common.utils.Strings;
 import com.g2rain.common.validation.Validations;
 import com.g2rain.agent.runtime.converter.TaskInstanceConverter;
 import com.g2rain.agent.runtime.dao.TaskInstanceDao;
@@ -56,14 +57,36 @@ public class TaskInstanceServiceImpl implements TaskInstanceService {
 
     @Override
     public PageData<TaskInstanceVo> selectPage(PageSelectListDto<TaskInstanceSelectDto> selectDto) {
+        return selectSummaryPage(selectDto);
+    }
+
+    @Override
+    public List<TaskInstanceVo> selectSummaryList(TaskInstanceSelectDto selectDto) {
+        return taskInstanceDao.selectSummaryList(selectDto)
+            .stream()
+            .map(TaskInstanceConverter.INSTANCE::po2vo)
+            .toList();
+    }
+
+    @Override
+    public PageData<TaskInstanceVo> selectSummaryPage(PageSelectListDto<TaskInstanceSelectDto> selectDto) {
         Page<TaskInstancePo> page = PageContext.of(selectDto.getPageNum(), selectDto.getPageSize(), () -> {
-            taskInstanceDao.selectList(selectDto.getQuery());
+            taskInstanceDao.selectSummaryList(selectDto.getQuery());
         });
         List<TaskInstanceVo> result = page.getResult()
             .stream()
             .map(TaskInstanceConverter.INSTANCE::po2vo)
             .toList();
         return PageData.of(page.getPageNum(), page.getPageSize(), page.getTotal(), result);
+    }
+
+    @Override
+    public TaskInstanceVo getByTaskId(String taskId) {
+        Asserts.isTrue(Strings.isNotBlank(taskId), SystemErrorCode.PARAM_REQUIRED, "taskId");
+        TaskInstanceSelectDto selectDto = new TaskInstanceSelectDto();
+        selectDto.setTaskId(taskId);
+        List<TaskInstanceVo> rows = selectList(selectDto);
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
     @Override

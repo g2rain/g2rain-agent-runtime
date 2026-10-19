@@ -237,6 +237,12 @@
             <if test="taskId != null">
                 AND task_id = #{taskId, jdbcType=VARCHAR}
             </if>
+            <if test="taskIds != null and taskIds.size() > 0">
+                AND task_id IN
+                <foreach collection="taskIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
             <if test="nodeId != null">
                 AND node_id = #{nodeId, jdbcType=VARCHAR}
             </if>

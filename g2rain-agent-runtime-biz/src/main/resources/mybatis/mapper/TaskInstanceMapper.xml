@@ -325,8 +325,26 @@
             <if test="sourceMessageId != null">
                 AND source_message_id = #{sourceMessageId, jdbcType=VARCHAR}
             </if>
+            <if test="taskIds != null and taskIds.size() > 0">
+                AND task_id IN
+                <foreach collection="taskIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
+            <if test="sourceMessageIds != null and sourceMessageIds.size() > 0">
+                AND source_message_id IN
+                <foreach collection="sourceMessageIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
             <if test="status != null">
                 AND status = #{status, jdbcType=VARCHAR}
+            </if>
+            <if test="statuses != null and statuses.size() > 0">
+                AND status IN
+                <foreach collection="statuses" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
             </if>
             <if test="currentNodeId != null">
                 AND current_node_id = #{currentNodeId, jdbcType=VARCHAR}
@@ -336,6 +354,12 @@
             </if>
             <if test="startedTime != null">
                 AND started_time = #{startedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="startedFrom != null">
+                AND started_time &gt;= #{startedFrom, jdbcType=TIMESTAMP}
+            </if>
+            <if test="startedTo != null">
+                AND started_time &lt; #{startedTo, jdbcType=TIMESTAMP}
             </if>
             <if test="suspendedTime != null">
                 AND suspended_time = #{suspendedTime, jdbcType=TIMESTAMP}
@@ -349,19 +373,121 @@
             <if test="stateVersion != null">
                 AND state_version = #{stateVersion, jdbcType=BIGINT}
             </if>
-            <if test="skillVersions != null">
-                AND skill_versions = #{skillVersions, jdbcType=LONGVARCHAR}
-            </if>
-            <if test="shared != null">
-                AND shared = #{shared, jdbcType=LONGVARCHAR}
-            </if>
-            <if test="prior != null">
-                AND prior = #{prior, jdbcType=LONGVARCHAR}
-            </if>
-            <if test="record != null">
-                AND record = #{record, jdbcType=LONGVARCHAR}
-            </if>
             <!-- 过滤已删除的记录 -->
+            AND (delete_flag = 0 OR delete_flag IS NULL)
+        </where>
+        <include refid="dynamicOrderBy"/>
+    </sql>
+
+    <!-- 控制台列表：不含 request/shared/prior/record 等大字段 -->
+    <sql id="selectSummaryListBody">
+        SELECT
+        id,
+        create_time, update_time,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version,
+        delete_flag,
+        version
+        FROM task_instance
+        <where>
+            <if test="id != null">
+                AND id = #{id, jdbcType=BIGINT}
+            </if>
+            <if test="ids != null and ids.size() > 0">
+                AND id IN
+                <foreach collection="ids" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=BIGINT}
+                </foreach>
+            </if>
+            <if test="createTime != null">
+                <if test="createTime[0] != '' and (createTime.size() lt 2 or createTime[1] == '')">
+                    AND create_time >= #{createTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] == '' and createTime[1] != ''">
+                    AND create_time &lt;= #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="createTime.size() >= 2 and createTime[0] != '' and createTime[1] != ''">
+                    AND create_time BETWEEN #{createTime[0], jdbcType=TIMESTAMP}
+                    AND #{createTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <if test="updateTime != null">
+                <if test="updateTime[0] != '' and (updateTime.size() lt 2 or updateTime[1] == '')">
+                    AND update_time >= #{updateTime[0], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] == '' and updateTime[1] != ''">
+                    AND update_time &lt;= #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+                <if test="updateTime.size() >= 2 and updateTime[0] != '' and updateTime[1] != ''">
+                    AND update_time BETWEEN #{updateTime[0], jdbcType=TIMESTAMP}
+                    AND #{updateTime[1], jdbcType=TIMESTAMP}
+                </if>
+            </if>
+            <if test="organId != null">
+                AND organ_id = #{organId, jdbcType=BIGINT}
+            </if>
+            <if test="conversationId != null">
+                AND conversation_id = #{conversationId, jdbcType=VARCHAR}
+            </if>
+            <if test="taskId != null">
+                AND task_id = #{taskId, jdbcType=VARCHAR}
+            </if>
+            <if test="agentId != null">
+                AND agent_id = #{agentId, jdbcType=BIGINT}
+            </if>
+            <if test="goalSummary != null">
+                AND goal_summary = #{goalSummary, jdbcType=VARCHAR}
+            </if>
+            <if test="sourceMessageId != null">
+                AND source_message_id = #{sourceMessageId, jdbcType=VARCHAR}
+            </if>
+            <if test="taskIds != null and taskIds.size() > 0">
+                AND task_id IN
+                <foreach collection="taskIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
+            <if test="sourceMessageIds != null and sourceMessageIds.size() > 0">
+                AND source_message_id IN
+                <foreach collection="sourceMessageIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
+            <if test="status != null">
+                AND status = #{status, jdbcType=VARCHAR}
+            </if>
+            <if test="statuses != null and statuses.size() > 0">
+                AND status IN
+                <foreach collection="statuses" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=VARCHAR}
+                </foreach>
+            </if>
+            <if test="currentNodeId != null">
+                AND current_node_id = #{currentNodeId, jdbcType=VARCHAR}
+            </if>
+            <if test="finalMessage != null">
+                AND final_message = #{finalMessage, jdbcType=VARCHAR}
+            </if>
+            <if test="startedTime != null">
+                AND started_time = #{startedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="startedFrom != null">
+                AND started_time &gt;= #{startedFrom, jdbcType=TIMESTAMP}
+            </if>
+            <if test="startedTo != null">
+                AND started_time &lt; #{startedTo, jdbcType=TIMESTAMP}
+            </if>
+            <if test="suspendedTime != null">
+                AND suspended_time = #{suspendedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="finishedTime != null">
+                AND finished_time = #{finishedTime, jdbcType=TIMESTAMP}
+            </if>
+            <if test="traceId != null">
+                AND trace_id = #{traceId, jdbcType=VARCHAR}
+            </if>
+            <if test="stateVersion != null">
+                AND state_version = #{stateVersion, jdbcType=BIGINT}
+            </if>
             AND (delete_flag = 0 OR delete_flag IS NULL)
         </where>
         <include refid="dynamicOrderBy"/>
@@ -522,6 +648,11 @@
     <!-- 根据 SelectDto 条件查询列表 -->
     <select id="selectList" parameterType="com.g2rain.agent.runtime.dto.TaskInstanceSelectDto" resultMap="BaseResultMap">
         <include refid="selectListBody"/>
+    </select>
+
+    <!-- 控制台摘要列表 -->
+    <select id="selectSummaryList" parameterType="com.g2rain.agent.runtime.dto.TaskInstanceSelectDto" resultMap="BaseResultMap">
+        <include refid="selectSummaryListBody"/>
     </select>
 
     <!-- 插入单条记录（忽略数据隔离） -->

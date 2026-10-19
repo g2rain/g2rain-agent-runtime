@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 任务恢复动作审计表查询入参DTO
@@ -34,6 +35,12 @@ public class TaskResumeRecordSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "所属任务")
     private String taskId;
+
+    /**
+     * 多任务筛选（IN）
+     */
+    @Schema(description = "多任务筛选")
+    private List<String> taskIds;
 
     /**
      * 关联节点

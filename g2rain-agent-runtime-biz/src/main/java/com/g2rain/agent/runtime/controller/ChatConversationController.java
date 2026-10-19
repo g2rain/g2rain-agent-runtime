@@ -35,12 +35,12 @@ public class ChatConversationController implements ChatConversationApi {
 
     @Override
     public Result<List<ChatConversationVo>> selectList(ChatConversationSelectDto selectDto) {
-        return Result.success(chatConversationService.selectList(selectDto));
+        return Result.success(chatConversationService.selectSummaryList(selectDto));
     }
 
     @Override
     public Result<PageData<ChatConversationVo>> selectPage(PageSelectListDto<ChatConversationSelectDto> selectDto) {
-        return Result.successPage(chatConversationService.selectPage(selectDto));
+        return Result.successPage(chatConversationService.selectSummaryPage(selectDto));
     }
 
     @PostMapping("/save")
