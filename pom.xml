@@ -21,6 +21,14 @@
         AI Agent runtime engine for task orchestration, execution, and state management.
     </description>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <organization>
         <name>G2rain</name>
         <url>http://www.g2rain.com/</url>
