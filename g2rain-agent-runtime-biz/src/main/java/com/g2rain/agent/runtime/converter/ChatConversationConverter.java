@@ -31,6 +31,7 @@ public interface ChatConversationConverter {
      */
     @Mapping(target = "createTime", source = "createTime", qualifiedByName = "localDateTimeToString")
     @Mapping(target = "updateTime", source = "updateTime", qualifiedByName = "localDateTimeToString")
+    @Mapping(target = "activeTaskStatus", ignore = true)
     ChatConversationVo po2vo(ChatConversationPo po);
 
     /**

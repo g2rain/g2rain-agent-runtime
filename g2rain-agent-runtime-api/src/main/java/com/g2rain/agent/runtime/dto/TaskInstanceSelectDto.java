@@ -61,6 +61,18 @@ public class TaskInstanceSelectDto extends BaseSelectListDto {
     private String sourceMessageId;
 
     /**
+     * 多任务筛选（IN）
+     */
+    @Schema(description = "多任务筛选")
+    private List<String> taskIds;
+
+    /**
+     * 多触发消息筛选（IN）
+     */
+    @Schema(description = "多触发消息筛选")
+    private List<String> sourceMessageIds;
+
+    /**
      * 任务状态[RUNNING, SUSPENDED, SUCCEEDED, FAILED, CANCELED]
      */
     @Schema(description = "任务状态[RUNNING, SUSPENDED, SUCCEEDED, FAILED, CANCELED]")

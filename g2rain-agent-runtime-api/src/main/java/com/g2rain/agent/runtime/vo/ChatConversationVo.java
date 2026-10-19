@@ -56,6 +56,12 @@ public class ChatConversationVo extends BaseVo {
     private String activeTaskId;
 
     /**
+     * 当前任务状态（查询时回填，非表字段）
+     */
+    @Schema(description = "当前任务状态[RUNNING, SUSPENDED, SUCCEEDED, FAILED, CANCELED]")
+    private String activeTaskStatus;
+
+    /**
      * 本轮栅栏版本；新会话为 0，落库按此单调推进
      */
     @Schema(description = "本轮栅栏版本；新会话为 0，落库按此单调推进")

@@ -6,12 +6,16 @@ import com.g2rain.common.model.PageData;
 import com.g2rain.common.model.PageSelectListDto;
 import com.g2rain.common.utils.Asserts;
 import com.g2rain.common.utils.Moments;
+import com.g2rain.common.utils.Strings;
 import com.g2rain.common.validation.Validations;
 import com.g2rain.agent.runtime.converter.ChatConversationConverter;
 import com.g2rain.agent.runtime.dao.ChatConversationDao;
+import com.g2rain.agent.runtime.dao.TaskInstanceDao;
 import com.g2rain.agent.runtime.dao.po.ChatConversationPo;
+import com.g2rain.agent.runtime.dao.po.TaskInstancePo;
 import com.g2rain.agent.runtime.dto.ChatConversationDto;
 import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
+import com.g2rain.agent.runtime.dto.TaskInstanceSelectDto;
 import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
 import com.g2rain.common.web.PrincipalContextHolder;
@@ -24,7 +28,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 聊天会话表服务实现类
@@ -37,6 +43,9 @@ public class ChatConversationServiceImpl implements ChatConversationService {
 
     @Resource(name = "chatConversationDao")
     private ChatConversationDao chatConversationDao;
+
+    @Resource(name = "taskInstanceDao")
+    private TaskInstanceDao taskInstanceDao;
 
     private IdGenerator idGenerator;
 
@@ -56,7 +65,35 @@ public class ChatConversationServiceImpl implements ChatConversationService {
 
     @Override
     public PageData<ChatConversationVo> selectPage(PageSelectListDto<ChatConversationSelectDto> selectDto) {
-        return selectSummaryPage(selectDto);
+        PageData<ChatConversationVo> page = selectSummaryPage(selectDto);
+        fillActiveTaskStatus(page.getRecords());
+        return page;
+    }
+
+    /**
+     * 按当前页的 activeTaskId 批量查任务摘要，回填当前任务状态。
+     */
+    private void fillActiveTaskStatus(List<ChatConversationVo> rows) {
+        if (Objects.isNull(rows) || rows.isEmpty()) {
+            return;
+        }
+
+        List<String> taskIds = rows.stream()
+            .map(ChatConversationVo::getActiveTaskId)
+            .filter(Strings::isNotBlank)
+            .distinct()
+            .toList();
+        if (taskIds.isEmpty()) {
+            return;
+        }
+
+        TaskInstanceSelectDto select = new TaskInstanceSelectDto();
+        select.setTaskIds(taskIds);
+        Map<String, String> statusByTask = taskInstanceDao.selectSummaryList(select)
+            .stream()
+            .filter(task -> Objects.nonNull(task.getStatus()))
+            .collect(Collectors.toMap(TaskInstancePo::getTaskId, TaskInstancePo::getStatus, (left, right) -> left));
+        rows.forEach(row -> row.setActiveTaskStatus(statusByTask.get(row.getActiveTaskId())));
     }
 
     @Override
