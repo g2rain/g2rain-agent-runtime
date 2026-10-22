@@ -193,6 +193,7 @@ public class DefaultToolInvoker implements ToolInvoker {
             String result = callback.call(request.arguments(), ctx);
             return successOf(result);
         } catch (RuntimeException ex) {
+            log.error("failed to doInvoke", ex);
             // 不把原始异常抛出编排层，按原因收成失败观测
             return observationOf(request, ex);
         }

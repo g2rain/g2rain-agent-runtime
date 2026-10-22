@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.engine.flow.finalize;
 
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
@@ -39,6 +41,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public final class DefaultGoalGate implements GoalGate {
 
     /**
@@ -95,6 +98,7 @@ public final class DefaultGoalGate implements GoalGate {
                     return traced(answer.finalMessage().trim(), ReplySource.VERIFIED);
                 }
             } catch (RuntimeException ex) {
+                log.error("failed to present", ex);
                 Trace.at(TraceStage.FINALIZE, "verify_failed")
                     .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
                     .warn();

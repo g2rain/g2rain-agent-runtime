@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.engine.state;
 
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
@@ -58,6 +60,7 @@ import java.util.Objects;
  * @since 2026/10/3
  */
 @Component
+@Slf4j
 public class TurnSessionHydrate {
 
     /**
@@ -157,6 +160,7 @@ public class TurnSessionHydrate {
         try {
             hash = store.hGetAll(keys.state());
         } catch (RuntimeException e) {
+            log.error("failed to load", e);
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
         ChatConversationVo row = conversations.find(conversationId);
@@ -243,6 +247,7 @@ public class TurnSessionHydrate {
             renewed = store.renew(keys.state(), traceId, properties.getState().getConversationTtl(), keys.sessionShared(),
                 extra, fence.version());
         } catch (RuntimeException e) {
+            log.error("failed to load", e);
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
         turn.replaceFence(new ConversationFence(fence.conversationId(), fence.userId(), fence.activeTaskId(),
@@ -420,6 +425,7 @@ public class TurnSessionHydrate {
         try {
             payloads.saveSpaceField(payloadId, taskId, nodeId, field, PrincipalContextHolder.getTraceId(), raw);
         } catch (RuntimeException e) {
+            log.error("failed to spillField", e);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
         return JSON.obj2str(SpaceSpill.of(payloadId));

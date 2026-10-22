@@ -149,6 +149,7 @@ public class DefaultPromptAssembler implements PromptAssembler {
         try {
             return JSON.str2obj(inputSchema, JsonNode.class);
         } catch (RuntimeException ex) {
+            log.error("failed to parse schema", ex);
             // 非法 schema 原样交给模型，不让整次组装失败
             return inputSchema;
         }
