@@ -1,5 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.plan;
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.ExecutionMode;
@@ -40,6 +42,7 @@ import java.util.stream.IntStream;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DefaultPlanner implements Planner {
 
     /**
@@ -157,6 +160,7 @@ public class DefaultPlanner implements Planner {
             ProviderNodes.expand(graph, skillByKey, turn);
             applyDefaultTargets(graph, skillByKey);
         } catch (BusinessException ex) {
+            log.error("failed to plan", ex);
             Trace.at(TraceStage.PLAN, "failed").kv("reason", FailReason.PROVIDER).kv("errorCode", ex.getErrorCode()).error();
             failPlan(ctx, RuntimeMessage.PLAN_FAILED.text());
             return;

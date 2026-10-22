@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.engine.state;
 
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
@@ -44,6 +46,7 @@ import java.util.Optional;
  * @since 2026/10/3
  */
 @Component
+@Slf4j
 public class EvidenceFlow {
 
     /**
@@ -112,15 +115,18 @@ public class EvidenceFlow {
             calls.insertStarted(startedDto(node, call, started));
             return new PrewriteResult.Proceed(started.evidenceId());
         } catch (TransientDataAccessException e) {
+            log.error("failed to prewrite", e);
             // 库表瞬时失败：热态改 UNKNOWN_PRE_CALL，禁止本轮再调同一写动作
             return unknownPreCall(node, started);
         } catch (DataAccessException e) {
+            log.error("failed to prewrite", e);
             // 库表永久失败：热态改 CANCELLED，允许换键或稍后重试，不把 STARTED 留成幽灵
             EvidenceHead cancelled = started.withStatus(EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
             node.addEvidence(cancelled);
             flushPlan.apply(node.turn(), false);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         } catch (RuntimeException e) {
+            log.error("failed to prewrite", e);
             return unknownPreCall(node, started);
         }
     }
@@ -169,6 +175,7 @@ public class EvidenceFlow {
         try {
             raw = store.hGet(keys.writes(taskId), WriteIndexEntry.field(toolName, key));
         } catch (RuntimeException e) {
+            log.error("failed to findLiveEvidence", e);
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
         WriteIndexEntry entry = JSON.str2obj(raw, WriteIndexEntry.class);
@@ -193,6 +200,7 @@ public class EvidenceFlow {
         try {
             calls.update(unknown, null);
         } catch (RuntimeException e) {
+            log.error("failed to unknownPreCall", e);
             // 保留 Redis；轮末 persistTurn 按 call_id 再追
             Trace.at(TraceStage.STATE, "call_update_deferred")
                 .kv("evidenceId", unknown.evidenceId())
@@ -274,6 +282,7 @@ public class EvidenceFlow {
                 }
             }
         } catch (RuntimeException e) {
+            log.error("failed to record", e);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
         return head.evidenceId();

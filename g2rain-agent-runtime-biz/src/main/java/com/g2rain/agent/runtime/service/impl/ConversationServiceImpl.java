@@ -3,24 +3,38 @@ package com.g2rain.agent.runtime.service.impl;
 
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
+import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
+import com.g2rain.agent.runtime.dto.ChatMessageSelectDto;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnPipeline;
 import com.g2rain.agent.runtime.engine.TurnRequest;
 import com.g2rain.agent.runtime.engine.TurnResult;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
 import com.g2rain.agent.runtime.event.EventPublisher;
 import com.g2rain.agent.runtime.event.TurnEvent;
 import com.g2rain.agent.runtime.event.TurnEvents;
+import com.g2rain.agent.runtime.service.ChatConversationService;
+import com.g2rain.agent.runtime.service.ChatMessageService;
 import com.g2rain.agent.runtime.service.ConversationService;
 import com.g2rain.agent.runtime.support.RedisKeys;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.trace.TraceScope;
+import com.g2rain.agent.runtime.vo.ChatConversationVo;
+import com.g2rain.agent.runtime.vo.ChatMessageVo;
+import com.g2rain.common.exception.SystemErrorCode;
+import com.g2rain.common.utils.Asserts;
+import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
+import com.g2rain.common.web.PrincipalContextHolder;
 import com.g2rain.data.redis.DistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * 会话请求的同步编排入口。
@@ -56,6 +70,16 @@ public class ConversationServiceImpl implements ConversationService {
      * 向客户端发布本轮生命周期和结果事件的发布器。
      */
     private final EventPublisher eventPublisher;
+
+    /**
+     * 会话表服务（对话客户端查询"我的会话"）。
+     */
+    private final ChatConversationService chatConversationService;
+
+    /**
+     * 消息表服务（对话客户端查询"我的会话消息"）。
+     */
+    private final ChatMessageService chatMessageService;
 
     /**
      * 持会话锁跑一整轮：空会话标识先生成，再加锁、回灌状态并进入流水线。
@@ -130,5 +154,56 @@ public class ConversationServiceImpl implements ConversationService {
         // persist 失败仍发已构造的结果帧，避免客户端一直等收口
         eventPublisher.publish(resultEvent);
         return result;
+    }
+
+    @Override
+    public List<ChatConversationVo> listConversations() {
+        ChatConversationSelectDto select = ownerSelect();
+        select.setSorts(List.of("lastMessageTime,desc"));
+        return chatConversationService.selectSummaryList(select);
+    }
+
+    @Override
+    public List<ChatMessageVo> listMessages(String conversationId) {
+        Asserts.isTrue(Strings.isNotBlank(conversationId), SystemErrorCode.PARAM_REQUIRED, "conversationId");
+        ChatConversationSelectDto select = ownerSelect();
+        select.setConversationId(conversationId);
+        requireOwned(chatConversationService.selectSummaryList(select));
+
+        ChatMessageSelectDto messageSelect = new ChatMessageSelectDto();
+        messageSelect.setOrganId(PrincipalContextHolder.getOrganId());
+        messageSelect.setConversationId(conversationId);
+        messageSelect.setSorts(List.of("createdAtMs,asc", "id,asc"));
+        return chatMessageService.selectList(messageSelect);
+    }
+
+    @Override
+    public int deleteConversation(Long id) {
+        Asserts.isTrue(Objects.nonNull(id) && id > 0, SystemErrorCode.PARAM_REQUIRED, "id");
+        ChatConversationSelectDto select = ownerSelect();
+        select.setId(id);
+        requireOwned(chatConversationService.selectSummaryList(select));
+        return chatConversationService.delete(id);
+    }
+
+    /**
+     * 当前主体的会话查询条件；主体不完整时拒绝。
+     */
+    private static ChatConversationSelectDto ownerSelect() {
+        Long organId = PrincipalContextHolder.getOrganId();
+        Long userId = PrincipalContextHolder.getUserId();
+        Asserts.isTrue(Objects.nonNull(organId) && Objects.nonNull(userId), SystemErrorCode.UNAUTHENTICATED);
+
+        ChatConversationSelectDto select = new ChatConversationSelectDto();
+        select.setOrganId(organId);
+        select.setUserId(userId);
+        return select;
+    }
+
+    /**
+     * 会话不存在或不属于当前主体时统一返回"无权访问该会话"，不区分两种情况。
+     */
+    private static void requireOwned(List<ChatConversationVo> owned) {
+        Asserts.isTrue(Collections.isNotEmpty(owned), RuntimeErrorCode.CONVERSATION_FORBIDDEN);
     }
 }

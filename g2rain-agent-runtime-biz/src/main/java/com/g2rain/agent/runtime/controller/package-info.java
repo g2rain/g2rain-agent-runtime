@@ -6,7 +6,8 @@
  * </p>
  *
  * <ul>
- *     <li>{@link com.g2rain.agent.runtime.controller.ConversationController} — {@code /v1/chat/completions} 流式入口</li>
+ *     <li>{@link com.g2rain.agent.runtime.controller.ConversationController} — {@code /v1/chat/completions} 流式入口；
+ *     {@code /chat/**} 对话客户端会话查询，只返回当前主体（员工或匿名访客）自己的数据</li>
  *     <li>其余 *Controller — 运行态表 CRUD（任务实例、图节点/边、检查点、工具调用记录等），供运维/审计查询</li>
  * </ul>
  *

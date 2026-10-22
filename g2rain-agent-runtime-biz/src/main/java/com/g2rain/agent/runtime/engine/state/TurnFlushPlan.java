@@ -97,6 +97,7 @@ public class TurnFlushPlan {
         try {
             ok = store.flush(keys.state(), turn.conversation().version(), ops);
         } catch (RuntimeException e) {
+            log.error("failed to apply", e);
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
         if (!ok) {

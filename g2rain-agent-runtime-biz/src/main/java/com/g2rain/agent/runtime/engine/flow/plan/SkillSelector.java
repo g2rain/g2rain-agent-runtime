@@ -1,5 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.plan;
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
@@ -33,6 +35,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SkillSelector {
 
     /**
@@ -97,6 +100,7 @@ public class SkillSelector {
                     .map(String::trim)
                     .toList();
             } catch (RuntimeException ex) {
+                log.error("failed to select", ex);
                 Trace.at(TraceStage.PLAN, "candidates_unparsed")
                     .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
                     .warn();
@@ -119,6 +123,7 @@ public class SkillSelector {
 
             return ordered.isEmpty() ? whitelist : ordered;
         } catch (RuntimeException ex) {
+            log.error("failed to select", ex);
             // 调用或解析异常：不阻断规划，退回全量候选
             Trace.at(TraceStage.PLAN, "candidates_failed")
                 .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())

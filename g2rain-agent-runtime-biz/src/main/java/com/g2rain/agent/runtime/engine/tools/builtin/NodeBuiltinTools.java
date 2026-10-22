@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.engine.tools.builtin;
 
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.Source;
@@ -43,6 +45,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class NodeBuiltinTools implements BuiltinTools {
 
     /**
@@ -218,6 +221,7 @@ public class NodeBuiltinTools implements BuiltinTools {
         try {
             return SourceType.valueOf(raw.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
+            log.error("failed to parseSourceType", ex);
             throw new ToolRejectedException(RuntimeErrorCode.SOURCE_REJECT, next, "来源类型 [" + raw + "] 不存在");
         }
     }

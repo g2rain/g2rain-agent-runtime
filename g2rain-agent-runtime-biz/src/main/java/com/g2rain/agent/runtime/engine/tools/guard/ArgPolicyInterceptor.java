@@ -100,6 +100,7 @@ public class ArgPolicyInterceptor implements ToolInterceptor {
                 args = JSON.str2obj("{}", JsonNode.class);
             }
         } catch (RuntimeException ex) {
+            log.error("failed to prepareArguments", ex);
             String message = Objects.requireNonNullElse(ex.getMessage(), ex.getClass().getSimpleName());
             return Optional.of(Observation.rejected(
                 RuntimeErrorCode.ARG_JSON_INVALID,
@@ -143,6 +144,7 @@ public class ArgPolicyInterceptor implements ToolInterceptor {
         try {
             return JSON.str2obj(json, JsonNode.class);
         } catch (RuntimeException ex) {
+            log.error("failed to schemaOf", ex);
             // schema 非法时视为无 schema，narrowTopLevel 会跳过收窄
             return null;
         }

@@ -173,6 +173,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             // 热态已 flush；交互历史再落 MySQL，失败则整轮 begin 作废
             conversations.insertMessage(turn.conversation().conversationId(), user.getTaskId(), user, request.getChannel());
         } catch (RuntimeException e) {
+            log.error("failed to begin", e);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
 
