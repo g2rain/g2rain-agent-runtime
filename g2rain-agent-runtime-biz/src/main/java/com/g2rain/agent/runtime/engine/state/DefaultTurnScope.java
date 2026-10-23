@@ -11,6 +11,7 @@ import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
+import com.g2rain.agent.runtime.domain.state.progress.TurnProgress;
 import com.g2rain.agent.runtime.domain.state.task.ClosedTask;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
@@ -158,6 +159,11 @@ public final class DefaultTurnScope implements TurnScope {
      * 本轮最终回复；追加时记录。
      */
     private @Nullable DialogueMessage reply;
+
+    /**
+     * 本轮执行过程。
+     */
+    private final TurnProgress progress = new TurnProgress();
 
     /**
      * @param organId       机构 id
@@ -374,7 +380,12 @@ public final class DefaultTurnScope implements TurnScope {
 
     @Override
     public Optional<DialogueMessage> reply() {
-        return Optional.ofNullable(reply);
+        return Objects.isNull(reply) ? Optional.empty() : Optional.of(reply);
+    }
+
+    @Override
+    public TurnProgress progress() {
+        return progress;
     }
 
     /**

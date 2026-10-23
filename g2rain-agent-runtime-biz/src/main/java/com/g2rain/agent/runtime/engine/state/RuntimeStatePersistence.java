@@ -10,6 +10,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.state.repo.CallRepository;
 import com.g2rain.agent.runtime.engine.state.repo.ConversationRepository;
 import com.g2rain.agent.runtime.engine.state.repo.GraphRepository;
+import com.g2rain.agent.runtime.engine.state.repo.ProgressRepository;
 import com.g2rain.agent.runtime.engine.state.repo.TaskRepository;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.common.exception.BusinessException;
@@ -62,6 +63,11 @@ public class RuntimeStatePersistence {
     private final CallRepository calls;
 
     /**
+     * 执行过程步骤仓储。
+     */
+    private final ProgressRepository progress;
+
+    /**
      * 轮末冷库事务：首句推进会话 {@code state_version}，再写任务 / 图节点空间 / 证据头 / 检查点 / 消息。
      * <p>CAS 影响 0 行则抛 {@link RuntimeErrorCode#STATE_FENCED}，整事务回滚。</p>
      *
@@ -105,6 +111,9 @@ public class RuntimeStatePersistence {
             }
             conversations.insertMessage(conversationId, message.getTaskId(), message, null);
         });
+
+        // 本轮执行步骤与消息同事务落库，历史接口按 traceId 关联到最终回复
+        progress.insert(conversationId, scope.traceId(), scope.progress().pending());
     }
 
     /**

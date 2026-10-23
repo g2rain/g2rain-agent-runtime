@@ -17,22 +17,13 @@ import java.util.Objects;
 /**
  * GraphEffect（图副作用）：本拍归约后、待应用到帧/图上的动作。
  * <p>
- * 含：发事件、保存挂起、清除挂起、停图挂回执。
+ * 含：保存挂起、清除挂起、停图挂回执。执行步骤由各环节经 {@code StepEvents} 直接推送，不走副作用。
  * </p>
  *
  * @author alpha
  * @since 2026/8/21
  */
 public sealed interface GraphEffect {
-
-    /**
-     * 发布一条过程提示。
-     *
-     * @param nodeId 相关节点 ID，仅用于日志定位
-     * @param text   提示文案
-     */
-    record Publish(String nodeId, String text) implements GraphEffect {
-    }
 
     /**
      * 保存任务级挂起检查点（追问/审批等）。

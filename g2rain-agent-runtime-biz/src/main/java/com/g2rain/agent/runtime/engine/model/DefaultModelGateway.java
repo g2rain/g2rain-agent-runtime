@@ -2,7 +2,10 @@ package com.g2rain.agent.runtime.engine.model;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
@@ -31,10 +34,12 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * DefaultModelGateway（默认模型网关）：经 {@link RestClient} 把请求 POST 到模型服务。
@@ -58,6 +63,11 @@ public class DefaultModelGateway implements ModelGateway {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
+     * 表示额度不足的厂商错误码（OpenAI / Anthropic）。
+     */
+    private static final Set<String> QUOTA_CODES = Set.of("insufficient_quota", "billing_error");
+
+    /**
      * 指向模型服务的 RestClient（已配 baseUrl 等）。
      */
     private final RestClient modelRestClient;
@@ -66,6 +76,11 @@ public class DefaultModelGateway implements ModelGateway {
      * Runtime 配置；其中 model.maxRetries 控制额外重试次数。
      */
     private final RuntimeProperties runtimeProperties;
+
+    /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
 
     /**
      * 调用聊天补全接口，并输出 {@code [Trace][MODEL]} 调用轨迹。
@@ -81,6 +96,8 @@ public class DefaultModelGateway implements ModelGateway {
     @Override
     public ChatCompletionResponse chat(ModelUse use, @Nullable String model, ChatCompletionRequest request) {
         long start = System.nanoTime();
+        // 模型步骤只显示用途、耗时与 token，不显示模型名
+        String stepId = stepEvents.start(StepStage.MODEL, RuntimeMessage.valueOf("MODEL_" + use.name()).text());
         // 本轮指定了模型才写入，未指定保持请求原值
         if (Strings.isNotBlank(model)) {
             request.setModel(model.trim());
@@ -89,11 +106,49 @@ public class DefaultModelGateway implements ModelGateway {
             // POST /v1/chat/completions
             var rsp = exchange("/v1/chat/completions", request, ChatCompletionResponse.class);
             traceCall(use, request, rsp, elapsedMs(start));
+            stepEvents.done(stepId, tokensOf(rsp), usageOf(use, rsp));
             return rsp;
         } catch (RuntimeException ex) {
             traceFailure(use, request, ex, elapsedMs(start));
+            stepEvents.fail(stepId, ex);
             throw ex;
         }
+    }
+
+    /**
+     * 模型步骤说明：总 token 数；没有用量时为空。
+     *
+     * @param response 模型响应
+     * @return 步骤说明
+     */
+    private static @Nullable String tokensOf(ChatCompletionResponse response) {
+        ChatCompletionUsage usage = response.getUsage();
+        if (Objects.isNull(usage) || Objects.isNull(usage.getTotalTokens())) {
+            return null;
+        }
+        return RuntimeMessage.STEP_MODEL_TOKENS.text("tokens", "%,d".formatted(usage.getTotalTokens()));
+    }
+
+    /**
+     * 模型步骤的排查信息：用途、实际模型与 token 明细；只入库，不下发。
+     *
+     * @param use      调用用途
+     * @param response 模型响应
+     * @return 排查信息
+     */
+    private static Map<String, Object> usageOf(ModelUse use, ChatCompletionResponse response) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("use", use.name());
+        if (Strings.isNotBlank(response.getModel())) {
+            extra.put("model", response.getModel());
+        }
+        ChatCompletionUsage usage = response.getUsage();
+        if (Objects.nonNull(usage)) {
+            Optional.ofNullable(usage.getPromptTokens()).ifPresent(v -> extra.put("promptTokens", v));
+            Optional.ofNullable(usage.getCompletionTokens()).ifPresent(v -> extra.put("completionTokens", v));
+            Optional.ofNullable(usage.getTotalTokens()).ifPresent(v -> extra.put("totalTokens", v));
+        }
+        return extra;
     }
 
     /**
@@ -165,12 +220,10 @@ public class DefaultModelGateway implements ModelGateway {
                     path, i + 1, j - 1, ex.getMessage()
                 );
             } catch (RestClientResponseException ex) {
-                // 非 5xx：业务/客户端错误，不重试，直接包装抛出
-                if (!ex.getStatusCode().is5xxServerError()) {
-                    throw new BusinessException(
-                        RuntimeErrorCode.DEPENDENCY_UNAVAILABLE,
-                        ex, "Model Gateway"
-                    );
+                // 4xx 与超时：重试也无法恢复，按上游状态码与错误码分类后直接抛出
+                RuntimeErrorCode classified = classify(ex);
+                if (Objects.nonNull(classified)) {
+                    throw new BusinessException(classified, ex, upstreamMessage(ex));
                 }
                 // 5xx：可重试
                 lastAccessError = ex;
@@ -191,6 +244,59 @@ public class DefaultModelGateway implements ModelGateway {
             RuntimeErrorCode.DEPENDENCY_UNAVAILABLE,
             lastAccessError, "Model Gateway"
         );
+    }
+
+    /**
+     * 按 model-nexus 透传的上游状态码与错误码分类；可重试的 5xx 返回 {@code null}。
+     *
+     * @param ex 模型服务的错误响应
+     * @return 模型类错误码；可重试时为空
+     */
+    private static @Nullable RuntimeErrorCode classify(RestClientResponseException ex) {
+        int status = ex.getStatusCode().value();
+        String code = Strings.defaultIfBlank(Objects.toString(upstreamError(ex).get("code"), null), "");
+        if (status == 402 || QUOTA_CODES.contains(code)) {
+            return RuntimeErrorCode.MODEL_QUOTA;
+        }
+        if (status == 401 || status == 403) {
+            return RuntimeErrorCode.MODEL_AUTH;
+        }
+        if (status == 429) {
+            return RuntimeErrorCode.MODEL_RATE_LIMIT;
+        }
+        if (status == 504 || "timeout".equals(code)) {
+            return RuntimeErrorCode.MODEL_TIMEOUT;
+        }
+        if (!ex.getStatusCode().is4xxClientError()) {
+            return null;
+        }
+        // 平台错误码形如 system.40401 / model_nexus.40001，属于模型配置问题；其余为上游参数问题
+        return status == 404 || code.contains(".") ? RuntimeErrorCode.MODEL_CONFIG : RuntimeErrorCode.MODEL_PARAM;
+    }
+
+    /**
+     * 上游错误原文；没有时用 HTTP 状态描述。
+     *
+     * @param ex 模型服务的错误响应
+     * @return 错误原文
+     */
+    private static String upstreamMessage(RestClientResponseException ex) {
+        Object message = upstreamError(ex).get("message");
+        return Objects.nonNull(message) ? message.toString() : ex.getStatusText();
+    }
+
+    /**
+     * 解析 OpenAI 风格错误体的 {@code error} 对象；格式不符返回空 Map。
+     *
+     * @param ex 模型服务的错误响应
+     * @return error 对象
+     */
+    private static Map<?, ?> upstreamError(RestClientResponseException ex) {
+        try {
+            return JSON.str2map(ex.getResponseBodyAsString()).get("error") instanceof Map<?, ?> error ? error : Map.of();
+        } catch (RuntimeException _) {
+            return Map.of();
+        }
     }
 
     /**

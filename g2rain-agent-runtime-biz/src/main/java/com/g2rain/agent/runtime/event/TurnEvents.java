@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.event;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
+import com.g2rain.agent.runtime.domain.state.progress.StepView;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import org.jspecify.annotations.Nullable;
 
@@ -25,15 +26,15 @@ public final class TurnEvents {
     }
 
     /**
-     * 过程提示帧。
+     * 执行步骤帧。
      *
      * @param turn 本轮
-     * @param text 提示文案
+     * @param step 步骤快照
      * @return PROGRESS 帧
      */
-    public static TurnEvent progress(TurnScope turn, String text) {
-        return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), text, null,
-            List.of(), List.of(), null, null, turn.traceId());
+    public static TurnEvent progress(TurnScope turn, StepView step) {
+        return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), null, null,
+            List.of(), List.of(), null, null, null, step, turn.traceId());
     }
 
     /**
@@ -44,10 +45,12 @@ public final class TurnEvents {
      * @param text        回复正文
      * @param actions     可执行动作
      * @param suggestions 候选答案
+     * @param errorCode   失败时的业务错误码；可空
      * @return RESULT 帧
      */
     public static TurnEvent result(TurnScope turn, @Nullable TurnStatus status, @Nullable String text,
-                                   @Nullable List<ResumeAction> actions, @Nullable List<String> suggestions) {
+                                   @Nullable List<ResumeAction> actions, @Nullable List<String> suggestions,
+                                   @Nullable String errorCode) {
         TurnStatus outward = Objects.isNull(status) ? TurnStatus.FAILED : status;
         List<ResumeAction> allowed = outward == TurnStatus.WAITING ? copy(actions) : List.of();
         DialogueMessage reply = turn.reply().orElse(null);
@@ -55,7 +58,8 @@ public final class TurnEvents {
             allowed, copy(suggestions),
             Objects.isNull(reply) ? null : reply.getCreatedAt(),
             Objects.isNull(reply) ? null : reply.getElapsedMs(),
-            turn.traceId());
+            outward == TurnStatus.FAILED ? errorCode : null,
+            null, turn.traceId());
     }
 
     /**
@@ -68,7 +72,7 @@ public final class TurnEvents {
      */
     public static TurnEvent failed(String traceId, String conversationId, String text) {
         return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(),
-            null, null, traceId);
+            null, null, null, null, traceId);
     }
 
     /**

@@ -81,7 +81,7 @@ CREATE TABLE `task_instance` (
     `skill_versions` JSON DEFAULT NULL COMMENT                                                          '开跑时固定的 skill 版本',
     `shared` JSON DEFAULT NULL COMMENT                                                                  '任务级共享值',
     `prior` JSON DEFAULT NULL COMMENT                                                                   '前情',
-    `record` JSON DEFAULT NULL COMMENT                                                                  '结束时的任务记录',
+    `task_record` JSON DEFAULT NULL COMMENT                                                             '结束时的任务记录',
     `source_message_id` VARCHAR(64) DEFAULT NULL COMMENT                                                '触发开任务的消息标识',
     `status` VARCHAR(32) NOT NULL DEFAULT 'RUNNING' COMMENT                                             '任务状态[RUNNING, SUSPENDED, SUCCEEDED, FAILED, CANCELED]',
     `current_node_id` VARCHAR(64) DEFAULT NULL COMMENT                                                  '当前节点',
@@ -278,3 +278,36 @@ CREATE TABLE `task_resume_record` (
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_checkpoint` (`organ_id`, `checkpoint_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '任务恢复动作审计表';
+
+-- ---------------------------------------------
+-- 10. 执行过程步骤 (chat_progress)
+-- ---------------------------------------------
+DROP TABLE IF EXISTS `chat_progress`;
+
+CREATE TABLE `chat_progress` (
+    `id` BIGINT NOT NULL COMMENT                                                                        '主键标识',
+    `organ_id` BIGINT NOT NULL COMMENT                                                                  '机构标识',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT                                                      '所属会话',
+    `trace_id` VARCHAR(64) NOT NULL COMMENT                                                             '所属轮次追踪号；与最终回复的 trace_id 关联',
+    `task_id` VARCHAR(64) DEFAULT NULL COMMENT                                                          '关联任务；可空',
+    `step_id` VARCHAR(64) NOT NULL COMMENT                                                              '步骤标识；本轮内唯一',
+    `parent_step_id` VARCHAR(64) DEFAULT NULL COMMENT                                                   '上级步骤；顶层为空',
+    `seq` INT NOT NULL COMMENT                                                                          '本轮内开始顺序',
+    `stage` VARCHAR(16) NOT NULL COMMENT                                                                '环节[ROUTE, PLAN, NODE, ROUND, MODEL, TOOL, VERIFY]',
+    `status` VARCHAR(16) NOT NULL COMMENT                                                               '状态[RUNNING, DONE, FAILED]',
+    `title` VARCHAR(256) NOT NULL COMMENT                                                               '标题',
+    `detail` VARCHAR(1000) DEFAULT NULL COMMENT                                                         '补充说明',
+    `node_id` VARCHAR(64) DEFAULT NULL COMMENT                                                          '所属节点',
+    `round` INT DEFAULT NULL COMMENT                                                                    'ReAct 轮次',
+    `error_code` VARCHAR(64) DEFAULT NULL COMMENT                                                       '失败错误码',
+    `extra` JSON DEFAULT NULL COMMENT                                                                   '排查信息（token、参数摘要、上游原文）；不下发 chat，供会话追踪查看',
+    `started_at_ms` BIGINT NOT NULL COMMENT                                                             '开始时间 epoch ms',
+    `elapsed_ms` INT DEFAULT NULL COMMENT                                                               '耗时毫秒',
+    `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT                                      '创建时间',
+    `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT          '更新时间',
+    `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
+    `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_organ_trace_step` (`organ_id`, `trace_id`, `step_id`, (IF(delete_flag = 0, 0, NULL))),
+    INDEX `idx_organ_conversation` (`organ_id`, `conversation_id`, `trace_id`, `seq`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '执行过程步骤表';

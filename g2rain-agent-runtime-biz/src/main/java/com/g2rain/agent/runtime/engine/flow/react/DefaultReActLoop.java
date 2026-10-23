@@ -12,6 +12,7 @@ import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -26,6 +27,7 @@ import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
@@ -101,6 +103,11 @@ public class DefaultReActLoop implements ReActLoop {
     private final EvidenceReader evidenceReader;
 
     /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
+
+    /**
      * 跑节点内循环直至控流退出、停滞超限或轮次用尽。
      *
      * @param context 循环上下文（帧、节点、可变历史、工具表）
@@ -127,6 +134,9 @@ public class DefaultReActLoop implements ReActLoop {
         StallTracker stall = new StallTracker();
 
         for (int round = 0; round < maxRounds; round++) {
+            // 下一轮开始时上一轮自动完成，节点结束时最后一轮随之结束
+            stepEvents.start(StepStage.ROUND, RuntimeMessage.STEP_ROUND.text("n", String.valueOf(round + 1)),
+                context.nodeId(), round + 1);
             context.scope().round(0);
             // 调模型前先刷热态，崩溃后能按当前轮次恢复
             stateFacade.flush(context.frame().turn());

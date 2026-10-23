@@ -4,11 +4,15 @@ import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.agent.runtime.engine.TurnPipeline;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.event.EventPublisher;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.dto.ChatMessageSelectDto;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.service.ChatMessageService;
+import com.g2rain.agent.runtime.service.ChatProgressService;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
+import com.g2rain.agent.runtime.vo.ChatMessageVo;
+import com.g2rain.agent.runtime.vo.ChatProgressVo;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.model.SortItem;
@@ -22,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -35,13 +40,16 @@ class ConversationServiceImplChatTest {
     private ConversationServiceImpl service;
     private ChatConversationService chatConversationService;
     private ChatMessageService chatMessageService;
+    private ChatProgressService chatProgressService;
 
     @BeforeEach
     void setUp() {
         chatConversationService = mock(ChatConversationService.class);
         chatMessageService = mock(ChatMessageService.class);
+        chatProgressService = mock(ChatProgressService.class);
         service = new ConversationServiceImpl(mock(DistributedLock.class), mock(RuntimeStateFacade.class),
-            mock(TurnPipeline.class), mock(EventPublisher.class), chatConversationService, chatMessageService);
+            mock(TurnPipeline.class), mock(EventPublisher.class), mock(StepEvents.class),
+            chatConversationService, chatMessageService, chatProgressService);
     }
 
     @Test
@@ -78,6 +86,36 @@ class ConversationServiceImplChatTest {
         verify(chatMessageService).selectList(captor.capture());
         assertEquals("c-own", captor.getValue().getConversationId());
         assertEquals(10001L, captor.getValue().getOrganId());
+    }
+
+    @Test
+    void listMessages_shouldAttachProgressToFinalReplyWithoutExtra() {
+        when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(new ChatConversationVo()));
+        ChatMessageVo user = message("USER", "USER_TEXT", null, "t-1");
+        ChatMessageVo reply = message("AGENT", "AGENT_REPLY", null, "t-1");
+        ChatMessageVo inner = message("AGENT", "AGENT_REPLY", "n-1", "t-1");
+        when(chatMessageService.selectList(any())).thenReturn(List.of(user, reply, inner));
+        ChatProgressVo step = new ChatProgressVo();
+        step.setTraceId("t-1");
+        step.setStepId("s-1");
+        step.setExtra("{\"model\":\"secret\"}");
+        when(chatProgressService.selectList(any())).thenReturn(List.of(step));
+
+        runAs(77L, () -> service.listMessages("c-own"));
+
+        assertEquals(List.of(step), reply.getProgress());
+        assertNull(step.getExtra());
+        assertNull(user.getProgress());
+        assertNull(inner.getProgress());
+    }
+
+    private static ChatMessageVo message(String role, String type, String nodeId, String traceId) {
+        ChatMessageVo vo = new ChatMessageVo();
+        vo.setRole(role);
+        vo.setMessageType(type);
+        vo.setNodeId(nodeId);
+        vo.setTraceId(traceId);
+        return vo;
     }
 
     @Test

@@ -29,7 +29,7 @@
         <result column="skill_versions" property="skillVersions" jdbcType="LONGVARCHAR"/>
         <result column="shared" property="shared" jdbcType="LONGVARCHAR"/>
         <result column="prior" property="prior" jdbcType="LONGVARCHAR"/>
-        <result column="record" property="record" jdbcType="LONGVARCHAR"/>
+        <result column="task_record" property="taskRecord" jdbcType="LONGVARCHAR"/>
         <!-- deleteFlag字段（如果存在） -->
         <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
         <!-- version字段（如果存在） -->
@@ -129,8 +129,8 @@
                         prior
                         <include refid="directionClause"/>
                     </when>
-                    <when test="item.column == 'record'">
-                        record
+                    <when test="item.column == 'taskRecord'">
+                        task_record
                         <include refid="directionClause"/>
                     </when>
                 </choose>
@@ -146,7 +146,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -157,7 +157,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{request, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{skillVersions, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{record, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{request, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{skillVersions, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{taskRecord, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -228,8 +228,8 @@
             <if test="prior != null">
                 prior = #{prior, jdbcType=LONGVARCHAR},
             </if>
-            <if test="record != null">
-                record = #{record, jdbcType=LONGVARCHAR},
+            <if test="taskRecord != null">
+                task_record = #{taskRecord, jdbcType=LONGVARCHAR},
             </if>
             <!-- version字段更新（如果存在，版本号自增） -->
             version = version + 1
@@ -245,7 +245,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -264,7 +264,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -379,7 +379,7 @@
         <include refid="dynamicOrderBy"/>
     </sql>
 
-    <!-- 控制台列表：不含 request/shared/prior/record 等大字段 -->
+    <!-- 控制台列表：不含 request/shared/prior/task_record 等大字段 -->
     <sql id="selectSummaryListBody">
         SELECT
         id,
@@ -506,7 +506,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, skill_versions, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -519,7 +519,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.request, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.skillVersions, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.record, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.request, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.skillVersions, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.taskRecord, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -596,8 +596,8 @@
             <if test="prior != null">
                 prior = #{prior, jdbcType=LONGVARCHAR},
             </if>
-            <if test="record != null">
-                record = #{record, jdbcType=LONGVARCHAR},
+            <if test="taskRecord != null">
+                task_record = #{taskRecord, jdbcType=LONGVARCHAR},
             </if>
             <!-- version字段更新（乐观锁版本号自增） -->
             version = version + 1
@@ -606,7 +606,7 @@
         AND version = #{version, jdbcType=INTEGER}
     </update>
 
-    <!-- 轮末 CAS：state_version 单调推进，并写 shared / prior / record 等冷字段 -->
+    <!-- 轮末 CAS：state_version 单调推进，并写 shared / prior / task_record 等冷字段 -->
     <update id="advanceStateVersion" parameterType="com.g2rain.agent.runtime.dao.po.TaskInstancePo">
         UPDATE task_instance
         SET state_version = #{stateVersion, jdbcType=BIGINT},
@@ -621,7 +621,7 @@
             finished_time = #{finishedTime, jdbcType=TIMESTAMP},
             shared = #{shared, jdbcType=LONGVARCHAR},
             prior = #{prior, jdbcType=LONGVARCHAR},
-            record = #{record, jdbcType=LONGVARCHAR},
+            task_record = #{taskRecord, jdbcType=LONGVARCHAR},
             update_time = CURRENT_TIMESTAMP,
             version = version + 1
         WHERE task_id = #{taskId, jdbcType=VARCHAR}

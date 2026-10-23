@@ -11,6 +11,7 @@ import com.g2rain.agent.runtime.domain.react.ChatTurn;
 import com.g2rain.agent.runtime.domain.react.ReActLoopContext;
 import com.g2rain.agent.runtime.domain.react.ReActLoopResult;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
@@ -32,6 +33,7 @@ import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -45,6 +47,7 @@ import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.support.ChatMessages;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
@@ -102,6 +105,11 @@ public class DefaultNodeRunner implements NodeRunner {
     private final EvidenceFlow evidenceFlow;
 
     /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
+
+    /**
      * 在节点轨迹作用域内跑单个节点：节点内所有日志带节点 ID，并输出开始与结束轨迹。
      *
      * @param node  要跑的节点
@@ -155,9 +163,31 @@ public class DefaultNodeRunner implements NodeRunner {
             return effects;
         }
 
-        // 真正要跑才发过程提示，并把节点推进 RUNNING
-        String startedCopy = Strings.isNotBlank(node.getTitle()) ? node.getTitle().trim() : RuntimeMessage.STATUS_WORKING.text();
-        effects.add(new GraphEffect.Publish(node.getNodeId(), startedCopy));
+        // 真正要跑才开节点步骤，并把节点推进 RUNNING；结束时按节点终态收尾步骤
+        String startedCopy = Strings.isNotBlank(node.getTitle()) ? node.getTitle().trim() : RuntimeMessage.STEP_TITLE_DEFAULT.text();
+        String stepId = stepEvents.start(StepStage.NODE, startedCopy, node.getNodeId(), null);
+        boolean completed = false;
+        try {
+            List<GraphEffect> result = proceed(node, frame, skill, nodeScope, effects);
+            completed = true;
+            return result;
+        } finally {
+            finishStep(stepId, node, completed);
+        }
+    }
+
+    /**
+     * 节点已开跑：组历史与工具 → 写回查 / 确认续跑 → ReAct 循环 → 按结果产副作用。
+     *
+     * @param node      当前节点
+     * @param frame     当前图执行帧
+     * @param skill     节点技能；可空
+     * @param nodeScope 已打开的节点空间
+     * @param effects   本拍副作用列表
+     * @return 本拍副作用列表
+     */
+    private List<GraphEffect> proceed(TaskNode node, GraphFrame frame, @Nullable Skill skill, NodeScope nodeScope,
+                                      List<GraphEffect> effects) {
         node.setStatus(nodeStateMachine.transit(NodeEvent.SELECTED, node.getStatus()).to());
         frame.turn().mark(node.getNodeId(), node.getStatus(), null, null);
 
@@ -206,6 +236,28 @@ public class DefaultNodeRunner implements NodeRunner {
     }
 
     /**
+     * 按节点终态收尾节点步骤；异常中断按失败处理。
+     *
+     * @param stepId    节点步骤；可空
+     * @param node      刚跑完的节点
+     * @param completed 是否正常返回
+     */
+    private void finishStep(@Nullable String stepId, TaskNode node, boolean completed) {
+        if (!completed) {
+            stepEvents.fail(stepId, RuntimeMessage.STEP_FAILED.text(), null, null);
+            return;
+        }
+        switch (node.getStatus()) {
+            case FAILED -> stepEvents.fail(stepId,
+                Strings.defaultIfBlank(node.getErrorMessage(), RuntimeMessage.STEP_FAILED.text()), null, null);
+            case SUSPENDED -> stepEvents.done(stepId, RuntimeMessage.STEP_WAITING.text());
+            case WAITING_DELEGATE -> stepEvents.done(stepId, RuntimeMessage.STATUS_PREPARING.text());
+            case CANCELLED -> stepEvents.done(stepId, RuntimeMessage.STEP_CANCELLED.text());
+            default -> stepEvents.done(stepId, null);
+        }
+    }
+
+    /**
      * 按节点内循环事件组装要应用的图副作用。
      *
      * <p>DELEGATE 子节点失败或取消只发结束事件，不停整图。</p>
@@ -229,10 +281,6 @@ public class DefaultNodeRunner implements NodeRunner {
                 String message = Strings.defaultIfBlank(result.message(), RuntimeMessage.STEP_WAITING.text());
                 effects.add(new GraphEffect.SaveSuspend(nodeId, result.checkpointType(), message, result.pendingAction(), result.missingParameters(), result.suggestions()));
                 effects.add(new GraphEffect.Halt(new ExecutorResult(TaskStatus.SUSPENDED, nodeId, message, result.checkpointType())));
-                yield effects;
-            }
-            case LOOP_WAITING_DELEGATE -> {
-                effects.add(new GraphEffect.Publish(nodeId, RuntimeMessage.STATUS_PREPARING.text()));
                 yield effects;
             }
             case LOOP_CANCELLED -> {

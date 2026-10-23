@@ -4,6 +4,7 @@ package com.g2rain.agent.runtime.domain.state;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
+import com.g2rain.agent.runtime.domain.state.progress.TurnProgress;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
@@ -127,6 +128,11 @@ public interface TurnScope {
      * @return 本轮最终回复（AGENT_REPLY 且无节点）；尚未生成时为空
      */
     Optional<DialogueMessage> reply();
+
+    /**
+     * @return 本轮执行过程
+     */
+    TurnProgress progress();
 
     /**
      * 开新任务并设置 activeTaskId。

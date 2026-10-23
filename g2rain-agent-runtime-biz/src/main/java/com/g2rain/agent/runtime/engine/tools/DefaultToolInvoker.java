@@ -115,7 +115,7 @@ public class DefaultToolInvoker implements ToolInvoker {
             }
         }
 
-        toolEvents.started(request);
+        String stepId = toolEvents.started(request);
         // 实际回调只发生在全部 before 通过之后；异常在 doInvoke 内收成 Observation
         long callStart = System.nanoTime();
         Observation obs = doInvoke(request);
@@ -127,6 +127,7 @@ public class DefaultToolInvoker implements ToolInvoker {
         }
 
         trace(request, obs, null, start);
+        toolEvents.finished(stepId, obs, argsBrief(request));
         return obs;
     }
 

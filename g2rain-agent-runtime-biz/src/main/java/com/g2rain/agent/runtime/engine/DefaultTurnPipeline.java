@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.engine;
 
 
+import com.g2rain.agent.runtime.domain.decision.AgentSelection;
 import com.g2rain.agent.runtime.domain.decision.TurnMode;
 import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.entry.RejectedReply;
@@ -9,6 +10,7 @@ import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.engine.flow.decision.TurnDispatcher;
 import com.g2rain.agent.runtime.engine.flow.entry.TurnEntryGuard;
@@ -18,6 +20,8 @@ import com.g2rain.agent.runtime.engine.flow.hydrate.Hydrator;
 import com.g2rain.agent.runtime.engine.flow.lifecycle.TaskLifecycle;
 import com.g2rain.agent.runtime.engine.flow.plan.Planner;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
+import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
@@ -25,6 +29,7 @@ import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
@@ -81,6 +86,11 @@ public class DefaultTurnPipeline implements TurnPipeline {
     private final Finalizer finalizer;
 
     /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
+
+    /**
      * 执行本轮，并输出收口轨迹。
      *
      * @param ctx 已 begin 的本轮上下文
@@ -101,6 +111,8 @@ public class DefaultTurnPipeline implements TurnPipeline {
      * @return 本轮结果
      */
     private TurnResult execute(TurnContext ctx) {
+        // 本轮首个步骤：客户端从这一帧拿到会话 ID
+        String routeStep = stepEvents.start(StepStage.ROUTE, RuntimeMessage.STEP_ROUTE.text());
         EntryResult entry = entryGuard.guard(ctx);
         ctx.setEntryResult(entry);
         traceEntry(entry);
@@ -133,10 +145,15 @@ public class DefaultTurnPipeline implements TurnPipeline {
                 turn.append(agent);
             }
 
+            if (notice) {
+                stepEvents.done(routeStep, null);
+            } else {
+                stepEvents.fail(routeStep, null, null, null);
+            }
             return early;
         }
 
-        doRun(ctx, entry);
+        doRun(ctx, entry, routeStep);
         // 无论 doRun 成功、短路还是失败，都走收口拼最终文案
         return finalizer.finalize(ctx);
     }
@@ -146,17 +163,20 @@ public class DefaultTurnPipeline implements TurnPipeline {
      *
      * <p>未捕获异常会把任务与节点标 FAILED，并在尚未写入结果时补一条失败 {@link TurnResult}。</p>
      *
-     * @param ctx   本轮上下文
-     * @param entry 入口闸门已通过的结论
+     * @param ctx       本轮上下文
+     * @param entry     入口闸门已通过的结论
+     * @param routeStep 理解问题步骤；决策后结束
      */
-    private void doRun(TurnContext ctx, EntryResult entry) {
+    private void doRun(TurnContext ctx, EntryResult entry, @Nullable String routeStep) {
         try {
             TurnDecision decision = turnDispatcher.decide(ctx, entry);
             ctx.setDecision(decision);
             // 决策失败：不建任务、不构图，交给收口
             if (ctx.isFailed()) {
+                stepEvents.fail(routeStep, Objects.isNull(ctx.getResult()) ? null : ctx.getResult().getContent(), null, null);
                 return;
             }
+            stepEvents.done(routeStep, routeDetail(decision));
 
             // 仅回复 / 待用户确认：不建任务、不构图
             if (decision.mode().skipsTask()) {
@@ -191,8 +211,10 @@ public class DefaultTurnPipeline implements TurnPipeline {
 
             ctx.setFailed(true);
             TurnScope turn = ctx.getTurn();
-            String msg = RuntimeMessage.ERROR_GENERIC.text();
-            turn.fail(msg, RuntimeUtils.businessCode(ex));
+            // 按失败分类生成文案；识别不了的仍为通用失败
+            String msg = FailureCategory.of(ex).text();
+            String errorCode = RuntimeUtils.businessCode(ex);
+            turn.fail(msg, errorCode);
 
             // 阶段内已写过结果则保留，避免覆盖更具体的失败文案
             if (Objects.nonNull(ctx.getResult())) {
@@ -201,8 +223,25 @@ public class DefaultTurnPipeline implements TurnPipeline {
 
             String conversationId = turn.conversation().conversationId();
             String taskId = turn.task().map(TaskMetadata::getTaskId).orElse(null);
-            ctx.setResult(TurnResult.fail(conversationId, taskId, msg));
+            TurnResult failed = TurnResult.fail(conversationId, taskId, msg);
+            failed.setErrorCode(errorCode);
+            ctx.setResult(failed);
         }
+    }
+
+    /**
+     * 理解问题步骤的结论：决策模式，选了员工时附上员工名。
+     *
+     * @param decision 本轮决策
+     * @return 步骤说明
+     */
+    private static String routeDetail(TurnDecision decision) {
+        String mode = RuntimeMessage.valueOf("MODE_" + decision.mode().name()).text();
+        AgentSelection agent = decision.agent();
+        if (Objects.isNull(agent) || Strings.isBlank(agent.getAgentName())) {
+            return mode;
+        }
+        return mode + "，" + RuntimeMessage.STEP_ROUTE_AGENT.text("agent", agent.getAgentName());
     }
 
     /**

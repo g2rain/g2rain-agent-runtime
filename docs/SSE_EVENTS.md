@@ -1,6 +1,6 @@
 # 对话流式接口规范（SSE）
 
-本文档面向前端，说明如何调用对话接口、如何解析流式事件、如何渲染和回应。前端只需处理两种事件：过程提示 `PROGRESS` 和本轮结果 `RESULT`。
+本文档面向前端，说明如何调用对话接口、如何解析流式事件、如何渲染和回应。前端只需处理两种事件：执行步骤 `PROGRESS` 和本轮结果 `RESULT`。
 
 ---
 
@@ -29,7 +29,7 @@
 | 请求体 | `application/json` |
 | 响应 | `text/event-stream` |
 
-一次请求对应一轮对话。服务端推送若干 `PROGRESS` 后，推送且只推送一个 `RESULT`，然后关闭连接。
+一次请求对应一轮对话。服务端推送若干 `PROGRESS`（每个步骤开始一帧、结束一帧）后，推送且只推送一个 `RESULT`，然后关闭连接。
 
 ---
 
@@ -82,10 +82,10 @@
 
 ```text
 event: PROGRESS
-data: {"type":"PROGRESS","conversationId":"6e96…","text":"正在处理"}
+data: {"type":"PROGRESS","conversationId":"6e96…","traceId":"…","step":{"stepId":"s1","stage":"ROUTE","status":"RUNNING","title":"理解问题"}}
 
 event: PROGRESS
-data: {"type":"PROGRESS","conversationId":"6e96…","text":"查询标签"}
+data: {"type":"PROGRESS","conversationId":"6e96…","traceId":"…","step":{"stepId":"s1","stage":"ROUTE","status":"DONE","title":"理解问题","detail":"新开任务，选中「CMS 助手」","elapsedMs":620}}
 
 event: RESULT
 data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前共有 3 个标签：产品动态、技术分享、公司新闻。"}
@@ -110,20 +110,45 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 |---|---|---|---|---|
 | `type` | String | ✓ | ✓ | `PROGRESS` 或 `RESULT`，与 `event:` 行相同 |
 | `conversationId` | String | ✓ | ✓ | 会话 ID |
-| `text` | String | ✓ | ✓ | `PROGRESS`：过程提示文字；`RESULT`：回复正文 |
+| `text` | String | | ✓ | 回复正文 |
+| `step` | Object | ✓ | | 执行步骤，见 4.1 |
 | `status` | String | | ✓ | 本轮结果状态，见第 5 节 |
 | `actions` | String[] | | 仅 `WAITING` | 用户可执行的动作，见第 6 节 |
 | `suggestions` | String[] | | 可选 | 候选答案，见第 6 节 |
+| `createdAtMs` | Long | | 有回复时 | 回复的发言时间（epoch ms），与历史消息一致 |
+| `elapsedMs` | Integer | | 有回复时 | 本轮耗时（毫秒），从服务端开始处理本次请求算起，与历史消息一致 |
+| `errorCode` | String | | 仅 `FAILED` | 失败时的业务错误码，如 `agent_runtime.40201`（模型额度不足） |
+| `traceId` | String | ✓ | ✓ | 本轮追踪号；失败时建议展示末 6 位，便于反馈问题时定位日志 |
 
-### 4.1 PROGRESS：过程提示
+### 4.1 PROGRESS：执行步骤
 
 ```json
-{"type":"PROGRESS","conversationId":"6e96…","text":"创建标签"}
+{"type":"PROGRESS","conversationId":"6e96…","traceId":"…",
+ "step":{"stepId":"s7","parentStepId":"s6","stage":"TOOL","status":"DONE","title":"调用 查询标签","detail":"成功","nodeId":"n1","elapsedMs":820}}
 ```
 
-- 表示服务端正在做什么，例如"正在处理""查询文章""为文章添加标签"。
-- 前端用 `text` 覆盖同一行状态文字（例如回复气泡上方的一行灰色提示）。
-- 可能丢失或数量不定，不影响结果，前端不需要依赖它。
+`step` 字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `stepId` | String | 步骤 ID；同一步骤的开始与结束共用 |
+| `parentStepId` | String | 上级步骤；顶层不出现 |
+| `stage` | String | 环节：`ROUTE` 理解问题、`PLAN` 规划、`NODE` 节点、`ROUND` 推理轮次、`MODEL` 模型调用、`TOOL` 工具调用、`VERIFY` 校验结果 |
+| `status` | String | `RUNNING` / `DONE` / `FAILED` |
+| `title` | String | 标题，如"调用 查询标签"、"第 2 轮" |
+| `detail` | String | 补充说明，如"成功"、"规划 2 个节点：查询文章 → 添加标签"；可能不出现 |
+| `nodeId` | String | 所属节点；可能不出现 |
+| `round` | Integer | 推理轮次；仅 `ROUND` |
+| `elapsedMs` | Integer | 耗时；结束后才有 |
+| `errorCode` | String | 失败错误码；仅 `FAILED` |
+
+渲染规则：
+
+- **按 `stepId` 合并**：首次出现追加一行，再次出现更新同一行的状态、说明与耗时。
+- **按 `parentStepId` 缩进**：层级为"节点 → 轮次 → 模型 / 工具"，理解问题与规划下也可能挂模型调用。
+- 每个步骤都保留，拼成执行过程时间线；`RESULT` 之前服务端会把仍在进行的步骤全部结束。
+- 模型步骤不含模型名；推理轮次不显示上限。
+- 同一时间线也通过历史接口返回（第 9 节），刷新后可还原。
 
 ### 4.2 RESULT：本轮结果
 
@@ -139,7 +164,8 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 
 - 每轮恰好一个，且是最后一个事件。收到后即可结束本轮。
 - `text` 是数字员工的回复，可能包含换行（`\n`），按纯文本渲染。
-- `text` 与历史消息中的记录一致，刷新后显示相同内容。
+- `text`、`createdAtMs`、`elapsedMs` 与历史消息中的记录一致，刷新后显示相同内容。
+- 等待确认这类多次请求的回合，`elapsedMs` 只计算本次请求，不累加用户操作的时间。
 
 ---
 
@@ -203,7 +229,10 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 
 ```text
 event: PROGRESS
-data: {"type":"PROGRESS","text":"正在处理"}
+data: {"type":"PROGRESS","step":{"stepId":"s1","stage":"ROUTE","status":"RUNNING","title":"理解问题"}}
+
+event: PROGRESS
+data: {"type":"PROGRESS","step":{"stepId":"s1","stage":"ROUTE","status":"DONE","title":"理解问题","detail":"直接回复","elapsedMs":540}}
 
 event: RESULT
 data: {"type":"RESULT","status":"DONE","text":"你好，我是 CMS 内容管理数字员工，可以帮你管理网站、文章、页面和标签。"}
@@ -213,16 +242,21 @@ data: {"type":"RESULT","status":"DONE","text":"你好，我是 CMS 内容管理�
 
 请求：`{"channel":"web","userInput":"我们有哪些标签？"}`
 
+以下 PROGRESS 只列结束帧（stage、status、title、detail），缩进表示层级；开始帧字段相同、`status` 为 `RUNNING`：
+
 ```text
-event: PROGRESS
-data: {"type":"PROGRESS","text":"正在处理"}
+ROUTE  DONE  理解问题            新开任务，选中「CMS 助手」
+PLAN   DONE  规划步骤            规划 1 个节点：标签与文章打标
+NODE   ...   标签与文章打标
+ROUND  DONE    第 1 轮
+MODEL  DONE      推理            1,203 tokens
+TOOL   DONE      调用 查询标签   成功
+ROUND  DONE    第 2 轮
+MODEL  DONE      推理            860 tokens
+NODE   DONE  标签与文章打标
+```
 
-event: PROGRESS
-data: {"type":"PROGRESS","text":"标签与文章打标"}
-
-event: PROGRESS
-data: {"type":"PROGRESS","text":"查询标签"}
-
+```text
 event: RESULT
 data: {"type":"RESULT","status":"DONE","text":"目前共有 3 个标签：产品动态、技术分享、公司新闻。"}
 ```
@@ -259,10 +293,10 @@ data: {"type":"RESULT","status":"WAITING","text":"确认为这篇文章添加标
 
 ```text
 event: PROGRESS
-data: {"type":"PROGRESS","text":"正在处理"}
+data: {"type":"PROGRESS","step":{"stepId":"t3","parentStepId":"t2","stage":"TOOL","status":"RUNNING","title":"调用 为文章添加标签"}}
 
 event: PROGRESS
-data: {"type":"PROGRESS","text":"为文章添加标签"}
+data: {"type":"PROGRESS","step":{"stepId":"t3","parentStepId":"t2","stage":"TOOL","status":"DONE","title":"调用 为文章添加标签","detail":"成功","elapsedMs":410}}
 
 event: RESULT
 data: {"type":"RESULT","status":"DONE","text":"已为《发布公告》添加标签「产品动态」。"}
@@ -334,13 +368,31 @@ data: {"type":"RESULT","status":"FAILED","text":"处理没有成功，请稍后�
 type TurnStatus = 'DONE' | 'WAITING' | 'FAILED' | 'CANCELLED';
 type ResumeAction = 'REPLY' | 'CONFIRM' | 'REJECT' | 'CANCEL';
 
+interface TurnStep {
+  stepId: string;
+  parentStepId?: string;
+  stage: 'ROUTE' | 'PLAN' | 'NODE' | 'ROUND' | 'MODEL' | 'TOOL' | 'VERIFY';
+  status: 'RUNNING' | 'DONE' | 'FAILED';
+  title: string;
+  detail?: string;
+  nodeId?: string;
+  round?: number;
+  elapsedMs?: number;
+  errorCode?: string;
+}
+
 interface TurnEvent {
   type: 'PROGRESS' | 'RESULT';
   conversationId: string;
+  traceId: string;
+  step?: TurnStep;
   text?: string;
   status?: TurnStatus;
   actions?: ResumeAction[];
   suggestions?: string[];
+  createdAtMs?: number;
+  elapsedMs?: number;
+  errorCode?: string;
 }
 
 interface TurnRequest {
@@ -409,8 +461,8 @@ export async function sendTurn(
 
 ```text
             发送请求
-  空闲 ───────────────▶ 处理中（显示状态行）
-   ▲                       │ PROGRESS：更新状态行
+  空闲 ───────────────▶ 处理中（显示执行过程）
+   ▲                       │ PROGRESS：按 stepId 追加或更新步骤
    │                       │ RESULT：
    │                       ▼
    │          ┌─ DONE / CANCELLED ──▶ 显示回复 ──▶ 空闲
@@ -424,8 +476,8 @@ export async function sendTurn(
 |---|---|
 | 发送前 | 把用户输入作为本地消息先显示出来 |
 | 第一个事件 | 保存 `conversationId`（新会话） |
-| `PROGRESS` | 用 `text` 更新状态行 |
-| `RESULT` | 清除状态行；追加回复气泡；`WAITING` 时按第 6 节渲染按钮、选项；禁用之前的按钮 |
+| `PROGRESS` | 按 `stepId` 合并步骤，按 `parentStepId` 缩进 |
+| `RESULT` | 执行过程定格；追加回复气泡；`WAITING` 时按第 6 节渲染按钮、选项；禁用之前的按钮 |
 | 点击按钮 | 立即禁用该组按钮，防止重复提交 |
 
 ### 8.4 并发
@@ -439,7 +491,7 @@ export async function sendTurn(
 打开已有会话或刷新页面时，通过历史接口加载消息：
 
 ```text
-GET /chat_message/list?conversationId=<会话ID>
+GET /chat/message/list?conversationId=<会话ID>
 ```
 
 返回 `chat_message` 记录，前端按以下规则展示：
@@ -450,6 +502,9 @@ GET /chat_message/list?conversationId=<会话ID>
 | 用户消息 | `role = USER` 的全部显示 |
 | 数字员工消息 | `role = AGENT` 且 `nodeId` 为空的才显示（带 `nodeId` 的是执行过程中的内部文字） |
 | 正文 | `content` 字段 |
+| 时间 | `createdAtMs` 字段 |
+| 耗时 | `elapsedMs` 字段；仅最终回复有值，旧数据为空 |
+| 执行过程 | `progress` 字段：本轮步骤列表（字段同 4.1，按开始顺序）；仅最终回复有值，旧数据为空 |
 
 历史消息中不包含按钮。如果需要在刷新后恢复最后一轮的按钮，前端可以按会话缓存最近一条 `RESULT`；用户也可以直接输入文字继续对话。
 
@@ -461,7 +516,7 @@ GET /chat_message/list?conversationId=<会话ID>
 |---|---|---|
 | 请求参数不合法（如缺少 `channel`） | HTTP 400，没有事件流 | 提示参数错误 |
 | 同一会话已有请求在处理 | 返回 `RESULT`，`status=FAILED` | 提示稍后再试 |
-| 服务端处理异常 | 返回 `RESULT`，`status=FAILED`，`text` 为统一说明 | 显示回复，提供重试 |
+| 服务端处理异常 | 返回 `RESULT`，`status=FAILED`，`text` 按失败原因给出说明（见第 11 节），带 `errorCode` | 显示回复与追踪号，提供重试 |
 | 连接在 `RESULT` 前断开 | 流结束但没有 `RESULT` | 重新加载历史消息（第 9 节）；服务端的处理可能已完成 |
 | 长时间没有事件 | 每 15 秒收到一行 `: ping` | 无需处理；如需超时，建议不低于 120 秒 |
 | 按钮已失效 | 返回"当前没有待确认的操作"或"当前不能执行这个操作" | 显示回复 |
@@ -476,9 +531,15 @@ GET /chat_message/list?conversationId=<会话ID>
 
 | 场景 | 文案 |
 |---|---|
-| 开始处理 | 正在处理 |
+| 理解问题（首个步骤） | 理解问题 |
 | 准备前置信息 | 正在准备所需信息 |
 | 通用失败 | 处理没有成功，请稍后再试。 |
+| 模型额度不足 | 模型服务额度不足，请联系管理员。 |
+| 模型密钥无效 | 模型访问密钥无效，请联系管理员。 |
+| 内容或参数不符合模型要求 | 内容过长或参数不符合模型要求，请精简后再试。 |
+| 模型未配置 | 模型未配置或未启用，请联系管理员。 |
+| 模型限流 | 模型繁忙，请稍后重试。 |
+| 模型超时 | 模型响应超时，请稍后重试。 |
 | 已取消 | 已取消。 |
 | 已完成 | 已完成。 |
 | 需要补充信息 | 还需要您补充一些信息。 |
