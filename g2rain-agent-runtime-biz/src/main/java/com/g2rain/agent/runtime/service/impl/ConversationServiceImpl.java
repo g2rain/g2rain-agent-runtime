@@ -235,12 +235,13 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public int deleteConversation(Long id) {
-        Asserts.isTrue(Objects.nonNull(id) && id > 0, SystemErrorCode.PARAM_REQUIRED, "id");
+    public int deleteConversation(String conversationId) {
+        Asserts.isTrue(Strings.isNotBlank(conversationId), SystemErrorCode.PARAM_REQUIRED, "conversationId");
         ChatConversationSelectDto select = ownerSelect();
-        select.setId(id);
-        requireOwned(chatConversationService.selectSummaryList(select));
-        return chatConversationService.delete(id);
+        select.setConversationId(conversationId);
+        List<ChatConversationVo> owned = chatConversationService.selectSummaryList(select);
+        requireOwned(owned);
+        return chatConversationService.delete(owned.getFirst().getId());
     }
 
     /**

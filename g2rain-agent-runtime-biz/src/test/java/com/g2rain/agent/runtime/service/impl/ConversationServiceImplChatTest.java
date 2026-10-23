@@ -122,15 +122,17 @@ class ConversationServiceImplChatTest {
     void deleteConversation_ofOthers_shouldBeForbidden() {
         when(chatConversationService.selectSummaryList(any())).thenReturn(List.of());
 
-        runAs(77L, () -> assertThrows(BusinessException.class, () -> service.deleteConversation(9L)));
+        runAs(77L, () -> assertThrows(BusinessException.class, () -> service.deleteConversation("c-other")));
         verify(chatConversationService, never()).delete(anyLong());
     }
 
     @Test
     void deleteConversation_ofOwn_shouldDelete() {
-        when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(new ChatConversationVo()));
+        ChatConversationVo own = new ChatConversationVo();
+        own.setId(9L);
+        when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(own));
 
-        runAs(77L, () -> service.deleteConversation(9L));
+        runAs(77L, () -> service.deleteConversation("c-own"));
 
         verify(chatConversationService).delete(9L);
     }
