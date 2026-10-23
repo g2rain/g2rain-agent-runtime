@@ -141,6 +141,11 @@ public enum RuntimeErrorCode implements ErrorCode {
      */
     MODEL_TIMEOUT("agent_runtime.50401", "{0:message}"),
 
+    /**
+     * 模型服务返回格式异常（model-nexus 502 invalid_response，如上游 200 却缺 choices）。
+     */
+    MODEL_RESPONSE("agent_runtime.50201", "{0:message}"),
+
     CONVERSATION_BUSY("agent_runtime.40910", "会话忙碌"),
 
     CONVERSATION_NOT_FOUND("agent_runtime.40410", "会话不存在：{0:conversationId}"),

@@ -247,7 +247,7 @@ public class DefaultModelGateway implements ModelGateway {
     }
 
     /**
-     * 按 model-nexus 透传的上游状态码与错误码分类；可重试的 5xx 返回 {@code null}。
+     * 按 model-nexus 透传的上游状态码与错误码分类；可重试的 5xx（不含 504 与 invalid_response）返回 {@code null}。
      *
      * @param ex 模型服务的错误响应
      * @return 模型类错误码；可重试时为空
@@ -266,6 +266,10 @@ public class DefaultModelGateway implements ModelGateway {
         }
         if (status == 504 || "timeout".equals(code)) {
             return RuntimeErrorCode.MODEL_TIMEOUT;
+        }
+        // 上游返回格式不合规：同一请求重试也不会恢复
+        if ("invalid_response".equals(code)) {
+            return RuntimeErrorCode.MODEL_RESPONSE;
         }
         if (!ex.getStatusCode().is4xxClientError()) {
             return null;

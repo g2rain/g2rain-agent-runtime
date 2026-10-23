@@ -33,6 +33,7 @@ public enum RuntimeMessage {
     ERROR_MODEL_CONFIG("error.model_config", "模型未配置或未启用，请联系管理员。"),
     ERROR_MODEL_RATE_LIMIT("error.model_rate_limit", "模型繁忙，请稍后重试。"),
     ERROR_MODEL_TIMEOUT("error.model_timeout", "模型响应超时，请稍后重试。"),
+    ERROR_MODEL_RESPONSE("error.model_response", "模型服务返回异常，请稍后重试或联系管理员。"),
     STATUS_PREPARING("status.preparing", "正在准备所需信息"),
     STEP_WAITING("step.waiting", "等您回复"),
     STEP_CANCELLED("step.cancelled", "已取消"),

@@ -10,7 +10,7 @@ import java.util.Objects;
 /**
  * 本轮失败分类：由异常链上的业务错误码决定面向用户的文案。
  *
- * <p>模型类失败（额度、密钥、参数、配置、限流、超时）重试或降级都无法恢复，属于致命失败：
+ * <p>模型类失败（额度、密钥、参数、配置、限流、超时、返回异常）重试或降级都无法恢复，属于致命失败：
  * 各处降级分支遇到时应直接上抛，由收口按分类生成文案。</p>
  */
 public enum FailureCategory {
@@ -21,6 +21,7 @@ public enum FailureCategory {
     CONFIG(RuntimeErrorCode.MODEL_CONFIG, RuntimeMessage.ERROR_MODEL_CONFIG),
     RATE_LIMIT(RuntimeErrorCode.MODEL_RATE_LIMIT, RuntimeMessage.ERROR_MODEL_RATE_LIMIT),
     TIMEOUT(RuntimeErrorCode.MODEL_TIMEOUT, RuntimeMessage.ERROR_MODEL_TIMEOUT),
+    RESPONSE(RuntimeErrorCode.MODEL_RESPONSE, RuntimeMessage.ERROR_MODEL_RESPONSE),
     INTERNAL(null, RuntimeMessage.ERROR_GENERIC);
 
     /**

@@ -215,7 +215,17 @@ public interface TurnScope {
     void close(TaskStatus status, String finalMessage);
 
     /**
-     * 本轮失败收口：只把当前节点或仍在 RUNNING 的节点标 FAILED，关任务，追加一条 AGENT 回复。
+     * 本轮中止：只把当前节点或仍在 RUNNING 的节点标 FAILED，关任务；不追加回复。
+     *
+     * <p>用于随后仍会经 Finalizer 收口的场景，由收口统一追加唯一一条最终回复。</p>
+     *
+     * @param text      失败文案，写入失败节点与任务终态
+     * @param errorCode 节点错误码，写入失败节点便于排查；可空
+     */
+    void abort(String text, @Nullable String errorCode);
+
+    /**
+     * 本轮失败收口：{@link #abort} 后追加一条 AGENT 回复。用于不再经过 Finalizer 的场景。
      *
      * @param text      面向用户的统一文案
      * @param errorCode 节点错误码，写入失败节点便于排查；可空

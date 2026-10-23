@@ -580,13 +580,13 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
-     * 本轮失败：当前节点与仍 RUNNING 的节点标 FAILED，任务 close 为 FAILED，并追加 AGENT 回复。
+     * 本轮中止：当前节点与仍 RUNNING 的节点标 FAILED，任务 close 为 FAILED；不追加回复。
      *
      * @param text      失败文案
      * @param errorCode 稳定错误码；可空
      */
     @Override
-    public void fail(String text, @Nullable String errorCode) {
+    public void abort(String text, @Nullable String errorCode) {
         String currentId = Objects.nonNull(task) ? task.getCurrentNodeId() : null;
         if (Strings.isNotBlank(currentId)) {
             mark(currentId, NodeStatus.FAILED, errorCode, text);
@@ -598,6 +598,17 @@ public final class DefaultTurnScope implements TurnScope {
             }
         });
         close(TaskStatus.FAILED, text);
+    }
+
+    /**
+     * 本轮失败：{@link #abort} 后追加一条 AGENT 回复。
+     *
+     * @param text      失败文案
+     * @param errorCode 稳定错误码；可空
+     */
+    @Override
+    public void fail(String text, @Nullable String errorCode) {
+        abort(text, errorCode);
         if (Strings.isBlank(text)) {
             return;
         }

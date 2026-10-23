@@ -145,6 +145,7 @@
 | `CONFIG` | model-nexus 平台错误（404、`model_nexus.*`） | 模型未配置或未启用，请联系管理员 |
 | `RATE_LIMIT` | 429 | 模型繁忙，请稍后重试 |
 | `TIMEOUT` | 上游超时 | 模型响应超时，请稍后重试 |
+| `RESPONSE` | model-nexus 502 `invalid_response`（上游 200 但响应体不合规） | 模型服务返回异常，请稍后重试或联系管理员 |
 | `TOOL` | MCP / 工具错误（`TOOL_*`、`MCP_*`） | 调用「工具名」失败：原因 |
 | `INTERNAL` | 其余 | 处理没有成功，请稍后再试 |
 
@@ -163,7 +164,8 @@
 3. 工具失败沿用 `DefaultToolInvoker` 已有的观测分类（`TOOL_*` / `MCP_*`），在 `TOOL` 步骤上带出工具名和原因。
 4. 有异常可取的兜底（`DefaultTurnPipeline`、`ConversationServiceImpl.runLocked`）：从异常链取 `FailureCategory` 生成文案，取不到才使用 `ERROR_GENERIC`；`errorCode` 写入 RESULT（第 5 步起同时写入失败步骤）。`DefaultFinalizer`、`DefaultGraphTransitionReducer`、`SseEventSink` 三处没有异常可取，保持通用文案。
 5. 模型类失败为**致命失败**：意图判断（`DefaultIntentClassifier`）、选技能（`SkillSelector`）、规划（`PlanDrafter`）原有的降级分支遇到时直接上抛（`FailureCategory.throwIfFatal`），不再降级后继续执行。目标校验（`DefaultGoalGate`）仍降级为拼接结果，避免丢掉已完成的工作。
-6. 504 / 超时不重试，避免超时被放大为多倍等待。
+6. 504 / 超时与 502 `invalid_response` 不重试，避免同一错误被放大为多倍等待。
+7. 每轮只有一个追加最终回复的出口：流水线内的异常用 `TurnScope.abort` 只标失败，由 `DefaultFinalizer` 统一追加回复；只有流水线外的异常（`ConversationServiceImpl.runTurn`）用 `TurnScope.fail` 自带回复。
 
 ### 4.4 RESULT 新增字段
 

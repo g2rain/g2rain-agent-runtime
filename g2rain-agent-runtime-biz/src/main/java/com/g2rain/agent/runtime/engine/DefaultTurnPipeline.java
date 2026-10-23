@@ -214,7 +214,8 @@ public class DefaultTurnPipeline implements TurnPipeline {
             // 按失败分类生成文案；识别不了的仍为通用失败
             String msg = FailureCategory.of(ex).text();
             String errorCode = RuntimeUtils.businessCode(ex);
-            turn.fail(msg, errorCode);
+            // 只标失败不追加回复：随后由 Finalizer 统一追加唯一一条最终回复
+            turn.abort(msg, errorCode);
 
             // 阶段内已写过结果则保留，避免覆盖更具体的失败文案
             if (Objects.nonNull(ctx.getResult())) {
