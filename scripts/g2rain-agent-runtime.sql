@@ -52,6 +52,7 @@ CREATE TABLE `chat_message` (
     `content` MEDIUMTEXT NOT NULL COMMENT                                                               '消息内容',
     `trace_id` VARCHAR(64) DEFAULT NULL COMMENT                                                         '本条消息追踪号',
     `created_at_ms` BIGINT NOT NULL COMMENT                                                             '业务发言时间 epoch ms',
+    `elapsed_ms` INT DEFAULT NULL COMMENT                                                               '本轮耗时毫秒；仅最终回复',
     `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT                                      '入库时间',
     `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT          '更新时间',
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',

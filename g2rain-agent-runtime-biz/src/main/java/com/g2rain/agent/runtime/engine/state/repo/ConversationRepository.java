@@ -154,6 +154,7 @@ public class ConversationRepository {
         dto.setMessageType(type.name());
         dto.setContent(message.getText());
         dto.setCreatedAtMs(message.getCreatedAt());
+        dto.setElapsedMs(message.getElapsedMs());
         if (Strings.isNotBlank(channel)) {
             dto.setChannel(RuntimeUtils.clip(channel.trim(), MSG_CHANNEL_MAX));
         }
@@ -239,6 +240,7 @@ public class ConversationRepository {
         message.setRound(vo.getRound());
         message.setModel(vo.getModel());
         message.setCreatedAt(Objects.requireNonNullElse(vo.getCreatedAtMs(), 0L));
+        message.setElapsedMs(vo.getElapsedMs());
         return message;
     }
 }

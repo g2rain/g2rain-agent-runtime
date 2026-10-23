@@ -150,6 +150,16 @@ public final class DefaultTurnScope implements TurnScope {
     private Platform platform = Platform.empty();
 
     /**
+     * 本轮开始时间（epoch ms），用于计算最终回复耗时。
+     */
+    private final long startedAt = System.currentTimeMillis();
+
+    /**
+     * 本轮最终回复；追加时记录。
+     */
+    private @Nullable DialogueMessage reply;
+
+    /**
      * @param organId       机构 id
      * @param userId        用户 id
      * @param traceId       本轮 traceId
@@ -347,13 +357,24 @@ public final class DefaultTurnScope implements TurnScope {
      * 把一条消息追加到本轮内存对话，并按配置裁剪最早消息。
      *
      * <p>裁剪时同步调整 Redis 和 MySQL 的已刷写计数，避免后续增量刷写跳过仍需保留的
-     * 消息。Agent 最终回复追加后会发布消息完成事件。</p>
+     * 消息。Agent 最终回复追加时写入本轮耗时并记为 {@link #reply()}。</p>
      *
      * @param message 待追加消息
      */
     @Override
     public void append(DialogueMessage message) {
+        if (message.getRole() == DialogueRole.AGENT
+            && message.getType() == MessageType.AGENT_REPLY
+            && Strings.isBlank(message.getNodeId())) {
+            message.setElapsedMs(Math.toIntExact(Math.max(0, message.getCreatedAt() - startedAt)));
+            reply = message;
+        }
         dialogue.append(message);
+    }
+
+    @Override
+    public Optional<DialogueMessage> reply() {
+        return Optional.ofNullable(reply);
     }
 
     /**

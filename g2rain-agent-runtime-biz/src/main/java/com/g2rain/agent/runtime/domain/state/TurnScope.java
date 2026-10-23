@@ -124,6 +124,11 @@ public interface TurnScope {
     void append(DialogueMessage message);
 
     /**
+     * @return 本轮最终回复（AGENT_REPLY 且无节点）；尚未生成时为空
+     */
+    Optional<DialogueMessage> reply();
+
+    /**
      * 开新任务并设置 activeTaskId。
      *
      * @param metadata 任务元数据

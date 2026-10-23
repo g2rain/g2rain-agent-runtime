@@ -97,6 +97,12 @@ public class ChatMessageVo extends BaseVo {
     private Long createdAtMs;
 
     /**
+     * 本轮耗时毫秒；仅最终回复
+     */
+    @Schema(description = "本轮耗时毫秒；仅最终回复")
+    private Integer elapsedMs;
+
+    /**
      * 消息内容
      */
     @Schema(description = "消息内容")

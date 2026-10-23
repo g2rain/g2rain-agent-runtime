@@ -81,6 +81,11 @@ public class ChatMessagePo extends BasePo {
     private Long createdAtMs;
 
     /**
+     * 本轮耗时毫秒；仅最终回复
+     */
+    private Integer elapsedMs;
+
+    /**
      * 消息内容
      */
     private String content;

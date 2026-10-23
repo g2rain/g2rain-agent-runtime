@@ -23,11 +23,14 @@ import java.util.List;
  * @param status         本轮结果状态；仅 RESULT
  * @param actions        可执行动作；仅 RESULT 且 WAITING
  * @param suggestions    候选答案，点击后作为 REPLY 的 userInput 发回；仅 RESULT
+ * @param createdAtMs    最终回复的发言时间 epoch ms，与入库一致；仅 RESULT
+ * @param elapsedMs      本轮耗时毫秒，与入库一致；仅 RESULT
  * @param traceId        本轮 ID，只用于 SSE 路由，不下发
  * @author alpha
  * @since 2026/8/27
  */
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 public record TurnEvent(TurnEventType type, String conversationId, @Nullable String text, @Nullable TurnStatus status,
-                        List<ResumeAction> actions, List<String> suggestions, @JsonIgnore String traceId) {
+                        List<ResumeAction> actions, List<String> suggestions, @Nullable Long createdAtMs,
+                        @Nullable Integer elapsedMs, @JsonIgnore String traceId) {
 }

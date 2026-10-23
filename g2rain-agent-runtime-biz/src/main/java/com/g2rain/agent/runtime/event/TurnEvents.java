@@ -2,6 +2,7 @@ package com.g2rain.agent.runtime.event;
 
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
+import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import org.jspecify.annotations.Nullable;
 
@@ -32,11 +33,11 @@ public final class TurnEvents {
      */
     public static TurnEvent progress(TurnScope turn, String text) {
         return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), text, null,
-            List.of(), List.of(), turn.traceId());
+            List.of(), List.of(), null, null, turn.traceId());
     }
 
     /**
-     * 本轮结果帧；只有 WAITING 才带动作。
+     * 本轮结果帧；只有 WAITING 才带动作，时间与耗时取自本轮最终回复。
      *
      * @param turn        本轮
      * @param status      本轮结果状态；空按 FAILED
@@ -49,8 +50,12 @@ public final class TurnEvents {
                                    @Nullable List<ResumeAction> actions, @Nullable List<String> suggestions) {
         TurnStatus outward = Objects.isNull(status) ? TurnStatus.FAILED : status;
         List<ResumeAction> allowed = outward == TurnStatus.WAITING ? copy(actions) : List.of();
+        DialogueMessage reply = turn.reply().orElse(null);
         return new TurnEvent(TurnEventType.RESULT, turn.conversation().conversationId(), text, outward,
-            allowed, copy(suggestions), turn.traceId());
+            allowed, copy(suggestions),
+            Objects.isNull(reply) ? null : reply.getCreatedAt(),
+            Objects.isNull(reply) ? null : reply.getElapsedMs(),
+            turn.traceId());
     }
 
     /**
@@ -62,7 +67,8 @@ public final class TurnEvents {
      * @return RESULT 帧
      */
     public static TurnEvent failed(String traceId, String conversationId, String text) {
-        return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(), traceId);
+        return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(),
+            null, null, traceId);
     }
 
     /**
