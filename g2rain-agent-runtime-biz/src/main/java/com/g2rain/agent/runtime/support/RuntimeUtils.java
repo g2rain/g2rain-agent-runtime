@@ -158,6 +158,28 @@ public final class RuntimeUtils {
     }
 
     /**
+     * 还原模型在 JSON 字符串里多转义一次的换行。
+     *
+     * <p>只在文本没有任何真实换行、却含字面 {@code \n} 时还原 {@code \r\n}、{@code \n}、{@code \t}；
+     * 已有真实换行的多行文本（含代码块）原样返回。</p>
+     *
+     * <pre>{@code
+     * RuntimeUtils.unescapeLiteral("第一段\\n\\n第二段"); // "第一段\n\n第二段"
+     * RuntimeUtils.unescapeLiteral("a\nb\\n");           // 原样返回
+     * }</pre>
+     *
+     * @param text 模型给出的文案
+     * @return 还原后的文案
+     */
+    public static String unescapeLiteral(String text) {
+        if (text.indexOf('\n') >= 0 || !text.contains("\\n")) {
+            return text;
+        }
+
+        return text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t");
+    }
+
+    /**
      * 按字符数截断，被截断时以 {@code …} 结尾。
      *
      * <pre>{@code

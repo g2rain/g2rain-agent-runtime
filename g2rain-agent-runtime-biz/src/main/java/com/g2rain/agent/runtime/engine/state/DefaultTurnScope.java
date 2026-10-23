@@ -166,6 +166,11 @@ public final class DefaultTurnScope implements TurnScope {
     private final TurnProgress progress = new TurnProgress();
 
     /**
+     * 本轮新建会话时的标题；会话已存在为空。
+     */
+    private @Nullable String createdTitle;
+
+    /**
      * @param organId       机构 id
      * @param userId        用户 id
      * @param traceId       本轮 traceId
@@ -386,6 +391,20 @@ public final class DefaultTurnScope implements TurnScope {
     @Override
     public TurnProgress progress() {
         return progress;
+    }
+
+    @Override
+    public Optional<String> createdTitle() {
+        return Objects.isNull(createdTitle) ? Optional.empty() : Optional.of(createdTitle);
+    }
+
+    /**
+     * 回灌时记下本轮新建会话的标题。
+     *
+     * @param title 新建会话的标题；会话已存在为空
+     */
+    public void markCreated(@Nullable String title) {
+        this.createdTitle = title;
     }
 
     /**

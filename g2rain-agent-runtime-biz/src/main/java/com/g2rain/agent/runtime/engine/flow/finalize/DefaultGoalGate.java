@@ -102,10 +102,10 @@ public final class DefaultGoalGate implements GoalGate {
                     if (Boolean.FALSE.equals(answer.achieved())) {
                         Trace.at(TraceStage.FINALIZE, "goal_unmet").kv("goal", pack.goal()).warn();
                         stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_UNMET.text());
-                        return traced(answer.finalMessage().trim(), ReplySource.UNMET);
+                        return traced(RuntimeUtils.unescapeLiteral(answer.finalMessage()).trim(), ReplySource.UNMET);
                     }
                     stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_MET.text());
-                    return traced(answer.finalMessage().trim(), ReplySource.VERIFIED);
+                    return traced(RuntimeUtils.unescapeLiteral(answer.finalMessage()).trim(), ReplySource.VERIFIED);
                 }
                 stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_FAILED.text());
             } catch (RuntimeException ex) {

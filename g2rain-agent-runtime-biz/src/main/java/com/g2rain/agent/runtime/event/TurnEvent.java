@@ -14,13 +14,14 @@ import java.util.List;
  * <ul>
  *   <li>{@link TurnEventType#PROGRESS}：执行步骤，只带 {@code step}；同一步骤的开始与结束共用 {@code stepId}，
  *       客户端按 {@code stepId} 合并为时间线。</li>
+ *   <li>{@link TurnEventType#TITLE}：会话标题，{@code text} 为标题；只在标题生成或变化时发。</li>
  *   <li>{@link TurnEventType#RESULT}：本轮结果，带 {@code status}、{@code text}；等待用户时另带
  *       {@code actions}，有候选答案时带 {@code suggestions}。每轮恰好一帧且为最后一帧。</li>
  * </ul>
  *
  * @param type           事件类型
  * @param conversationId 会话 ID；每帧都带，新会话从首帧即可拿到
- * @param text           回复正文；仅 RESULT
+ * @param text           RESULT 为回复正文，TITLE 为会话标题
  * @param status         本轮结果状态；仅 RESULT
  * @param actions        可执行动作；仅 RESULT 且 WAITING
  * @param suggestions    候选答案，点击后作为 REPLY 的 userInput 发回；仅 RESULT

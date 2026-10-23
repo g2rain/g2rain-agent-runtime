@@ -38,6 +38,18 @@ public final class TurnEvents {
     }
 
     /**
+     * 会话标题帧。
+     *
+     * @param turn  本轮
+     * @param title 会话标题
+     * @return TITLE 帧
+     */
+    public static TurnEvent title(TurnScope turn, String title) {
+        return new TurnEvent(TurnEventType.TITLE, turn.conversation().conversationId(), title, null,
+            List.of(), List.of(), null, null, null, null, turn.traceId());
+    }
+
+    /**
      * 本轮结果帧；只有 WAITING 才带动作，时间与耗时取自本轮最终回复。
      *
      * @param turn        本轮

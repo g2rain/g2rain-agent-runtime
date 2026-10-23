@@ -1,6 +1,6 @@
 # 对话流式接口规范（SSE）
 
-本文档面向前端，说明如何调用对话接口、如何解析流式事件、如何渲染和回应。前端只需处理两种事件：执行步骤 `PROGRESS` 和本轮结果 `RESULT`。
+本文档面向前端，说明如何调用对话接口、如何解析流式事件、如何渲染和回应。前端需处理三种事件：执行步骤 `PROGRESS`、会话标题 `TITLE` 和本轮结果 `RESULT`。
 
 ---
 
@@ -29,7 +29,7 @@
 | 请求体 | `application/json` |
 | 响应 | `text/event-stream` |
 
-一次请求对应一轮对话。服务端推送若干 `PROGRESS`（每个步骤开始一帧、结束一帧）后，推送且只推送一个 `RESULT`，然后关闭连接。
+一次请求对应一轮对话。服务端推送若干 `PROGRESS`（每个步骤开始一帧、结束一帧），新建会话时另推一帧 `TITLE`；`PROGRESS` 与 `TITLE` 可在 `RESULT` 之前任意时刻出现，最后推送且只推送一个 `RESULT`，然后关闭连接。
 
 ---
 
@@ -108,9 +108,9 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 
 | 字段 | 类型 | PROGRESS | RESULT | 说明 |
 |---|---|---|---|---|
-| `type` | String | ✓ | ✓ | `PROGRESS` 或 `RESULT`，与 `event:` 行相同 |
+| `type` | String | ✓ | ✓ | `PROGRESS`、`TITLE` 或 `RESULT`，与 `event:` 行相同 |
 | `conversationId` | String | ✓ | ✓ | 会话 ID |
-| `text` | String | | ✓ | 回复正文 |
+| `text` | String | | ✓ | `RESULT`：回复正文；`TITLE`：会话标题 |
 | `step` | Object | ✓ | | 执行步骤，见 4.1 |
 | `status` | String | | ✓ | 本轮结果状态，见第 5 节 |
 | `actions` | String[] | | 仅 `WAITING` | 用户可执行的动作，见第 6 节 |
@@ -150,7 +150,16 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 - 模型步骤不含模型名；推理轮次不显示上限。
 - 同一时间线也通过历史接口返回（第 9 节），刷新后可还原。
 
-### 4.2 RESULT：本轮结果
+### 4.2 TITLE：会话标题
+
+```json
+{"type":"TITLE","conversationId":"6e96…","traceId":"…","text":"我们有哪些标签？"}
+```
+
+- 只在标题生成或变化时下发；目前仅在本轮新建会话时开局发一次（标题取首句前 64 字），已有会话的轮次不发。
+- 前端收到后把该会话插到会话列表顶部（或更新已有项的标题），并同步页面标题；无需再拉会话列表。
+
+### 4.3 RESULT：本轮结果
 
 ```json
 {
@@ -382,7 +391,7 @@ interface TurnStep {
 }
 
 interface TurnEvent {
-  type: 'PROGRESS' | 'RESULT';
+  type: 'PROGRESS' | 'TITLE' | 'RESULT';
   conversationId: string;
   traceId: string;
   step?: TurnStep;
@@ -406,6 +415,7 @@ interface TurnRequest {
 export async function sendTurn(
   req: TurnRequest,
   onProgress: (e: TurnEvent) => void,
+  onTitle: (e: TurnEvent) => void,
   onResult: (e: TurnEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -444,6 +454,8 @@ export async function sendTurn(
       const event: TurnEvent = JSON.parse(data);
       if (event.type === 'PROGRESS') {
         onProgress(event);
+      } else if (event.type === 'TITLE') {
+        onTitle(event);
       } else if (event.type === 'RESULT') {
         gotResult = true;
         onResult(event);

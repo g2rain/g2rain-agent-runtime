@@ -186,9 +186,8 @@ public class TurnSessionHydrate {
         if (!Objects.equals(fence.userId(), userId)) {
             throw new BusinessException(RuntimeErrorCode.CONVERSATION_FORBIDDEN);
         }
-        if (Objects.isNull(row)) {
-            conversations.create(conversationId, user, request.getUserInput());
-        }
+        // 本轮新建会话时记下标题，开局下发一次 TITLE
+        String createdTitle = Objects.isNull(row) ? conversations.create(conversationId, user, request.getUserInput()) : null;
         int dialogueMax = properties.getState().getDialogueMax();
         List<DialogueMessage> dialogue = readDialogue(keys, dialogueMax);
         if (Collections.isEmpty(dialogue)) {
@@ -241,6 +240,7 @@ public class TurnSessionHydrate {
         }
         DefaultTurnScope turn = new DefaultTurnScope(organId, userId, traceId, fence, dialogue, records, entities, task,
             graph, checkpoint, shared, prior, sessionShared, dialogueMax);
+        turn.markCreated(createdTitle);
         List<KeyTtl> extra = taskKeys(keys, turn, taskTtl(task));
         RenewResult renewed;
         try {

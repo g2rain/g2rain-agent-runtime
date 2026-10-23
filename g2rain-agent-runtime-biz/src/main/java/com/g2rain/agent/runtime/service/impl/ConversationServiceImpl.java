@@ -146,6 +146,8 @@ public class ConversationServiceImpl implements ConversationService {
      * @return 本轮结果（已带 traceId）
      */
     private TurnResult runTurn(TurnRequest request, TurnScope turn) {
+        // 新会话开局即下发标题，客户端插入会话列表；已有会话不发
+        turn.createdTitle().ifPresent(title -> eventPublisher.publish(TurnEvents.title(turn, title)));
         TurnResult result;
         try {
             // 流水线只处理业务编排；结果收口和 State 持久化仍由当前锁内流程负责。

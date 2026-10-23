@@ -106,6 +106,8 @@ public class ControlBuiltinTools implements BuiltinTools {
                                      @ToolParam(required = false, description = "快捷气泡建议") @Nullable List<String> suggestions,
                                      ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
+        // 模型偶尔把换行多转义一次，面向用户的文案先还原
+        question = RuntimeUtils.unescapeLiteral(question);
         expectedFields = Objects.requireNonNullElse(expectedFields, List.of());
         rejectAnswered(ctx, question, expectedFields);
         requireGrounded(ctx, expectedFields);
@@ -137,6 +139,7 @@ public class ControlBuiltinTools implements BuiltinTools {
                                      @ToolParam(description = "被拦下的写工具名") String toolName,
                                      ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
+        summary = RuntimeUtils.unescapeLiteral(summary);
         requireWriteTool(ctx, toolName);
         PendingAction gated = gatedWrite(ctx, toolName);
         ctx.scope().note(NodeNoteKey.GATED_WRITE, null);
@@ -191,7 +194,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FINISH)
     public NodeActionResult finish(@ToolParam(description = "节点正式产出") String output, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
-        finish(ctx, output);
+        finish(ctx, RuntimeUtils.unescapeLiteral(output));
         return new NodeActionResult(ctx.getNodeStatus().name(), ctx.getFinishRejectedReason());
     }
 
@@ -214,6 +217,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FAIL)
     public NodeActionResult fail(@ToolParam(description = "失败原因") String reason, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
+        reason = RuntimeUtils.unescapeLiteral(reason);
         ctx.applyFail(reason);
         return new NodeActionResult(ctx.getNodeStatus().name(), reason);
     }

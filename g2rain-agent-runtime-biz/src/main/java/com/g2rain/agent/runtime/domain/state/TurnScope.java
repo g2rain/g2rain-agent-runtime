@@ -135,6 +135,11 @@ public interface TurnScope {
     TurnProgress progress();
 
     /**
+     * @return 本轮新建会话时的标题；会话已存在为空
+     */
+    Optional<String> createdTitle();
+
+    /**
      * 开新任务并设置 activeTaskId。
      *
      * @param metadata 任务元数据
