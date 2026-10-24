@@ -127,7 +127,7 @@ public class DefaultToolInvoker implements ToolInvoker {
         }
 
         trace(request, obs, null, start);
-        toolEvents.finished(stepId, obs, argsBrief(request));
+        toolEvents.finished(stepId, request, obs, argsBrief(request));
         return obs;
     }
 

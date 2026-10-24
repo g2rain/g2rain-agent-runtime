@@ -133,7 +133,7 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 |---|---|---|
 | `stepId` | String | 步骤 ID；同一步骤的开始与结束共用 |
 | `parentStepId` | String | 上级步骤；顶层不出现 |
-| `stage` | String | 环节：`ROUTE` 理解问题、`PLAN` 规划、`NODE` 节点、`ROUND` 推理轮次、`MODEL` 模型调用、`TOOL` 工具调用、`VERIFY` 校验结果 |
+| `stage` | String | 环节：`ROUTE` 理解问题、`PLAN` 规划、`NODE` 节点、`ROUND` 推理轮次、`MODEL` 模型调用、`TOOL` 工具调用（含完成、追问、申请确认、委派等控流动作，如"完成""委派：知识问答"）、`VERIFY` 校验结果 |
 | `status` | String | `RUNNING` / `DONE` / `FAILED` |
 | `title` | String | 标题，如"调用 查询标签"、"第 2 轮" |
 | `detail` | String | 补充说明，如"成功"、"规划 2 个节点：查询文章 → 添加标签"；可能不出现 |
