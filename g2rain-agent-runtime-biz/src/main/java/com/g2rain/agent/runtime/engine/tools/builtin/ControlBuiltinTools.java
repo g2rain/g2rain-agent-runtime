@@ -17,12 +17,9 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
-import com.g2rain.agent.runtime.engine.state.EntityExtractor;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
-import com.g2rain.agent.runtime.engine.tools.policy.FinishContext;
-import com.g2rain.agent.runtime.engine.tools.policy.FinishDecision;
-import com.g2rain.agent.runtime.engine.tools.policy.FinishPolicy;
+import com.g2rain.agent.runtime.engine.tools.finish.NodeFinisher;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -30,8 +27,6 @@ import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
 import com.g2rain.agent.runtime.support.tool.BuiltinTools;
-import com.g2rain.agent.runtime.support.trace.Trace;
-import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -67,19 +62,14 @@ public class ControlBuiltinTools implements BuiltinTools {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * finish 门槛（必填产出、节点完成目标等）
+     * 节点收口：finish 门槛、落产出与实体沉淀。
      */
-    private final FinishPolicy finishPolicy;
+    private final NodeFinisher nodeFinisher;
 
     /**
      * 委派深度上限。
      */
     private final RuntimeProperties runtimeProperties;
-
-    /**
-     * finish 后沉淀 output 实体候选与 share。
-     */
-    private final EntityExtractor entityExtractor;
 
     /**
      * 向用户追问（含补参）。
@@ -194,7 +184,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FINISH)
     public NodeActionResult finish(@ToolParam(description = "节点正式产出") String output, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
-        finish(ctx, RuntimeUtils.unescapeLiteral(output));
+        nodeFinisher.finish(ctx, RuntimeUtils.unescapeLiteral(output));
         return new NodeActionResult(ctx.getNodeStatus().name(), ctx.getFinishRejectedReason());
     }
 
@@ -430,31 +420,5 @@ public class ControlBuiltinTools implements BuiltinTools {
         }
 
         return gated;
-    }
-
-    /**
-     * 完成节点：先过 finish 门槛，通过后落产出 / provides，再结束循环。
-     *
-     * @param ctx    节点执行现场
-     * @param output 节点正式产出
-     */
-    private void finish(ToolExecutionContext ctx, Object output) {
-        // 门槛未过：只记拒绝原因，节点仍可继续循环
-        FinishDecision decision = finishPolicy.evaluate(new FinishContext(output, ctx));
-
-        if (!decision.allowed()) {
-            ctx.applyFinishRejected(Objects.requireNonNullElse(decision.reason(), ModelHint.FINISH_REJECTED.text()));
-            return;
-        }
-
-        ctx.applyFinish(output);
-        entityExtractor.captureOutputs(ctx.scope(), ctx.contract());
-        // 技能有写工具、节点却无完成目标就结束：观察规划漏填 target 的频率
-        if (Objects.isNull(ctx.getTarget()) && ctx.hasWriteTools()) {
-            Trace.at(TraceStage.NODE, "finished_without_target")
-                .kv("nodeId", ctx.getNodeId())
-                .kv("skillKey", ctx.getSkillKey())
-                .info();
-        }
     }
 }
