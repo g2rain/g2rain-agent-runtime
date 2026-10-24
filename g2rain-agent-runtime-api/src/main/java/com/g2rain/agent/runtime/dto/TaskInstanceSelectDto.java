@@ -160,5 +160,5 @@ public class TaskInstanceSelectDto extends BaseSelectListDto {
      * 结束时的任务记录
      */
     @Schema(description = "结束时的任务记录")
-    private String record;
+    private String taskRecord;
 }

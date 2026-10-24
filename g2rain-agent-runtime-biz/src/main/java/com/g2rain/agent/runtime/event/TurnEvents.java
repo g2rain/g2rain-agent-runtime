@@ -2,6 +2,8 @@ package com.g2rain.agent.runtime.event;
 
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
+import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
+import com.g2rain.agent.runtime.domain.state.progress.StepView;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import org.jspecify.annotations.Nullable;
 
@@ -24,33 +26,52 @@ public final class TurnEvents {
     }
 
     /**
-     * 过程提示帧。
+     * 执行步骤帧。
      *
      * @param turn 本轮
-     * @param text 提示文案
+     * @param step 步骤快照
      * @return PROGRESS 帧
      */
-    public static TurnEvent progress(TurnScope turn, String text) {
-        return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), text, null,
-            List.of(), List.of(), turn.traceId());
+    public static TurnEvent progress(TurnScope turn, StepView step) {
+        return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), null, null,
+            List.of(), List.of(), null, null, null, step, turn.traceId());
     }
 
     /**
-     * 本轮结果帧；只有 WAITING 才带动作。
+     * 会话标题帧。
+     *
+     * @param turn  本轮
+     * @param title 会话标题
+     * @return TITLE 帧
+     */
+    public static TurnEvent title(TurnScope turn, String title) {
+        return new TurnEvent(TurnEventType.TITLE, turn.conversation().conversationId(), title, null,
+            List.of(), List.of(), null, null, null, null, turn.traceId());
+    }
+
+    /**
+     * 本轮结果帧；只有 WAITING 才带动作，时间与耗时取自本轮最终回复。
      *
      * @param turn        本轮
      * @param status      本轮结果状态；空按 FAILED
      * @param text        回复正文
      * @param actions     可执行动作
      * @param suggestions 候选答案
+     * @param errorCode   失败时的业务错误码；可空
      * @return RESULT 帧
      */
     public static TurnEvent result(TurnScope turn, @Nullable TurnStatus status, @Nullable String text,
-                                   @Nullable List<ResumeAction> actions, @Nullable List<String> suggestions) {
+                                   @Nullable List<ResumeAction> actions, @Nullable List<String> suggestions,
+                                   @Nullable String errorCode) {
         TurnStatus outward = Objects.isNull(status) ? TurnStatus.FAILED : status;
         List<ResumeAction> allowed = outward == TurnStatus.WAITING ? copy(actions) : List.of();
+        DialogueMessage reply = turn.reply().orElse(null);
         return new TurnEvent(TurnEventType.RESULT, turn.conversation().conversationId(), text, outward,
-            allowed, copy(suggestions), turn.traceId());
+            allowed, copy(suggestions),
+            Objects.isNull(reply) ? null : reply.getCreatedAt(),
+            Objects.isNull(reply) ? null : reply.getElapsedMs(),
+            outward == TurnStatus.FAILED ? errorCode : null,
+            null, turn.traceId());
     }
 
     /**
@@ -62,7 +83,8 @@ public final class TurnEvents {
      * @return RESULT 帧
      */
     public static TurnEvent failed(String traceId, String conversationId, String text) {
-        return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(), traceId);
+        return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(),
+            null, null, null, null, traceId);
     }
 
     /**

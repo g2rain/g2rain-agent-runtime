@@ -50,6 +50,11 @@ public final class TurnResult {
     private @Nullable String content;
 
     /**
+     * 失败时的业务错误码；仅 FAILED 且识别出业务异常时有值。
+     */
+    private @Nullable String errorCode;
+
+    /**
      * 挂起场景下允许客户端发起的恢复动作列表。
      *
      * <p>例：{@code [REPLY, CONFIRM]}；非挂起时通常为空列表。</p>

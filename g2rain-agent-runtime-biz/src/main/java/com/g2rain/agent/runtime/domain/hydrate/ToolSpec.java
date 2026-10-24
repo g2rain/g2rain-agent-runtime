@@ -73,6 +73,14 @@ public class ToolSpec {
     private List<ExtractSpec> extracts = new ArrayList<>();
 
     /**
+     * 直接作答：响应中答复文本的路径。
+     *
+     * <p>业务成功且取到非空文本时，以该文本完成节点，不再回到模型；完成门槛未过或取不到文本时照常进入下一轮。
+     * 只允许配在 NONE 工具上。</p>
+     */
+    private @Nullable String returnDirect;
+
+    /**
      * @return 缺省 NONE
      */
     public SideEffect sideEffectOrDefault() {

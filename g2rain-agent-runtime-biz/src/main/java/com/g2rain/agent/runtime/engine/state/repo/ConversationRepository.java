@@ -83,20 +83,21 @@ public class ConversationRepository {
      * @param conversationId 会话 id
      * @param userId         所属用户
      * @param titleHint      可选标题
+     * @return 新建时写入的标题；已存在或无标题时为空
      */
-    public void create(String conversationId, Long userId, @Nullable String titleHint) {
+    public @Nullable String create(String conversationId, Long userId, @Nullable String titleHint) {
         if (Objects.nonNull(find(conversationId))) {
-            return;
+            return null;
         }
+        String title = Strings.isNotBlank(titleHint) ? RuntimeUtils.clip(titleHint.trim(), CONV_TITLE_MAX) : null;
         ChatConversationDto dto = new ChatConversationDto();
         dto.setConversationId(conversationId);
         dto.setOrganId(PrincipalContextHolder.getOrganId());
         dto.setUserId(userId);
         dto.setStateVersion(0L);
-        if (Strings.isNotBlank(titleHint)) {
-            dto.setTitle(RuntimeUtils.clip(titleHint.trim(), CONV_TITLE_MAX));
-        }
+        dto.setTitle(title);
         chatConversationService.save(dto);
+        return title;
     }
 
     /**
@@ -154,6 +155,7 @@ public class ConversationRepository {
         dto.setMessageType(type.name());
         dto.setContent(message.getText());
         dto.setCreatedAtMs(message.getCreatedAt());
+        dto.setElapsedMs(message.getElapsedMs());
         if (Strings.isNotBlank(channel)) {
             dto.setChannel(RuntimeUtils.clip(channel.trim(), MSG_CHANNEL_MAX));
         }
@@ -239,6 +241,7 @@ public class ConversationRepository {
         message.setRound(vo.getRound());
         message.setModel(vo.getModel());
         message.setCreatedAt(Objects.requireNonNullElse(vo.getCreatedAtMs(), 0L));
+        message.setElapsedMs(vo.getElapsedMs());
         return message;
     }
 }

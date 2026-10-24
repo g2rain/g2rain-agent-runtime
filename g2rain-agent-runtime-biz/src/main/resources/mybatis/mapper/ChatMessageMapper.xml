@@ -23,6 +23,7 @@
         <result column="message_type" property="messageType" jdbcType="VARCHAR"/>
         <result column="trace_id" property="traceId" jdbcType="VARCHAR"/>
         <result column="created_at_ms" property="createdAtMs" jdbcType="BIGINT"/>
+        <result column="elapsed_ms" property="elapsedMs" jdbcType="INTEGER"/>
         <result column="content" property="content" jdbcType="LONGVARCHAR"/>
         <!-- deleteFlag字段（如果存在） -->
         <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
@@ -120,7 +121,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -131,7 +132,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{model, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{content, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{model, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{elapsedMs, jdbcType=INTEGER}, #{content, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -184,6 +185,9 @@
             <if test="createdAtMs != null">
                 created_at_ms = #{createdAtMs, jdbcType=BIGINT},
             </if>
+            <if test="elapsedMs != null">
+                elapsed_ms = #{elapsedMs, jdbcType=INTEGER},
+            </if>
             <if test="content != null">
                 content = #{content, jdbcType=LONGVARCHAR},
             </if>
@@ -201,7 +205,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -220,7 +224,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -321,7 +325,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -334,7 +338,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.model, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.content, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.model, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.elapsedMs, jdbcType=INTEGER}, #{item.content, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -392,6 +396,9 @@
             </if>
             <if test="createdAtMs != null">
                 created_at_ms = #{createdAtMs, jdbcType=BIGINT},
+            </if>
+            <if test="elapsedMs != null">
+                elapsed_ms = #{elapsedMs, jdbcType=INTEGER},
             </if>
             <if test="content != null">
                 content = #{content, jdbcType=LONGVARCHAR},

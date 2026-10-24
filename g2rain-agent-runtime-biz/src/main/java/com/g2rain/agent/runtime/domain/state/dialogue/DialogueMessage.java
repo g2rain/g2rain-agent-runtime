@@ -69,6 +69,11 @@ public class DialogueMessage {
     private long createdAt;
 
     /**
+     * 本轮耗时毫秒；仅最终回复有值，由 TurnScope 追加时写入。
+     */
+    private @Nullable Integer elapsedMs;
+
+    /**
      * 本轮选用的模型名；仅用户消息记录，供观测与排查。
      */
     private @Nullable String model;

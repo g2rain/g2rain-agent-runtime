@@ -51,8 +51,8 @@ public interface ConversationService {
     /**
      * 删除当前主体的会话；会话须属于当前主体。
      *
-     * @param id 会话主键
+     * @param conversationId 会话标识（客户端由 TITLE 事件即可得知，无需主键）
      * @return 影响行数
      */
-    int deleteConversation(Long id);
+    int deleteConversation(String conversationId);
 }

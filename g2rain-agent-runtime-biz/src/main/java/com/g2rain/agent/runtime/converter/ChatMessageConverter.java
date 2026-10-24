@@ -31,6 +31,7 @@ public interface ChatMessageConverter {
      */
     @Mapping(target = "createTime", source = "createTime", qualifiedByName = "localDateTimeToString")
     @Mapping(target = "updateTime", source = "updateTime", qualifiedByName = "localDateTimeToString")
+    @Mapping(target = "progress", ignore = true)
     ChatMessageVo po2vo(ChatMessagePo po);
 
     /**

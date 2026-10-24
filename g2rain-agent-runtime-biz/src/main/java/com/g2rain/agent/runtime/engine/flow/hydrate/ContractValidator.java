@@ -25,7 +25,7 @@ import java.util.Objects;
  * 发布/装载期技能契约校验。任一规则失败则该 Skill 不可用。
  *
  * <p>校验可委派技能不得含 WRITE 工具、写工具须有 success、confirm 仅允许 WRITE、
- * 入参 from 与常量互斥、平台引用须在目录内、LIST 产出须有 fields、默认完成目标 target 须是本技能的写工具。</p>
+ * returnDirect 仅允许 NONE、入参 from 与常量互斥、平台引用须在目录内、LIST 产出须有 fields、默认完成目标 target 须是本技能的写工具。</p>
  *
  * @author alpha
  * @since 2026/10/3
@@ -67,6 +67,11 @@ public class ContractValidator {
             }
 
             if (Boolean.TRUE.equals(tool.getConfirm()) && tool.sideEffectOrDefault() != SideEffect.WRITE) {
+                return false;
+            }
+
+            // 直接作答会跳过模型收口，只允许只读工具
+            if (Strings.isNotBlank(tool.getReturnDirect()) && tool.sideEffectOrDefault() != SideEffect.NONE) {
                 return false;
             }
 

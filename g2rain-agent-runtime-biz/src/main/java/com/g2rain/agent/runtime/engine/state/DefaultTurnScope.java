@@ -11,6 +11,7 @@ import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
+import com.g2rain.agent.runtime.domain.state.progress.TurnProgress;
 import com.g2rain.agent.runtime.domain.state.task.ClosedTask;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
@@ -148,6 +149,26 @@ public final class DefaultTurnScope implements TurnScope {
      * 本轮平台身份快照；begin 前默认为空。
      */
     private Platform platform = Platform.empty();
+
+    /**
+     * 本轮开始时间（epoch ms），用于计算最终回复耗时。
+     */
+    private final long startedAt = System.currentTimeMillis();
+
+    /**
+     * 本轮最终回复；追加时记录。
+     */
+    private @Nullable DialogueMessage reply;
+
+    /**
+     * 本轮执行过程。
+     */
+    private final TurnProgress progress = new TurnProgress();
+
+    /**
+     * 本轮新建会话时的标题；会话已存在为空。
+     */
+    private @Nullable String createdTitle;
 
     /**
      * @param organId       机构 id
@@ -347,13 +368,43 @@ public final class DefaultTurnScope implements TurnScope {
      * 把一条消息追加到本轮内存对话，并按配置裁剪最早消息。
      *
      * <p>裁剪时同步调整 Redis 和 MySQL 的已刷写计数，避免后续增量刷写跳过仍需保留的
-     * 消息。Agent 最终回复追加后会发布消息完成事件。</p>
+     * 消息。Agent 最终回复追加时写入本轮耗时并记为 {@link #reply()}。</p>
      *
      * @param message 待追加消息
      */
     @Override
     public void append(DialogueMessage message) {
+        if (message.getRole() == DialogueRole.AGENT
+            && message.getType() == MessageType.AGENT_REPLY
+            && Strings.isBlank(message.getNodeId())) {
+            message.setElapsedMs(Math.toIntExact(Math.max(0, message.getCreatedAt() - startedAt)));
+            reply = message;
+        }
         dialogue.append(message);
+    }
+
+    @Override
+    public Optional<DialogueMessage> reply() {
+        return Objects.isNull(reply) ? Optional.empty() : Optional.of(reply);
+    }
+
+    @Override
+    public TurnProgress progress() {
+        return progress;
+    }
+
+    @Override
+    public Optional<String> createdTitle() {
+        return Objects.isNull(createdTitle) ? Optional.empty() : Optional.of(createdTitle);
+    }
+
+    /**
+     * 回灌时记下本轮新建会话的标题。
+     *
+     * @param title 新建会话的标题；会话已存在为空
+     */
+    public void markCreated(@Nullable String title) {
+        this.createdTitle = title;
     }
 
     /**
@@ -529,13 +580,13 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
-     * 本轮失败：当前节点与仍 RUNNING 的节点标 FAILED，任务 close 为 FAILED，并追加 AGENT 回复。
+     * 本轮中止：当前节点与仍 RUNNING 的节点标 FAILED，任务 close 为 FAILED；不追加回复。
      *
      * @param text      失败文案
      * @param errorCode 稳定错误码；可空
      */
     @Override
-    public void fail(String text, @Nullable String errorCode) {
+    public void abort(String text, @Nullable String errorCode) {
         String currentId = Objects.nonNull(task) ? task.getCurrentNodeId() : null;
         if (Strings.isNotBlank(currentId)) {
             mark(currentId, NodeStatus.FAILED, errorCode, text);
@@ -547,6 +598,17 @@ public final class DefaultTurnScope implements TurnScope {
             }
         });
         close(TaskStatus.FAILED, text);
+    }
+
+    /**
+     * 本轮失败：{@link #abort} 后追加一条 AGENT 回复。
+     *
+     * @param text      失败文案
+     * @param errorCode 稳定错误码；可空
+     */
+    @Override
+    public void fail(String text, @Nullable String errorCode) {
+        abort(text, errorCode);
         if (Strings.isBlank(text)) {
             return;
         }

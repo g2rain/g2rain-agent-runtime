@@ -681,7 +681,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 环节 | 行为 |
 |---|---|
 | 关闭 | 任务到终态时只修改内存中的状态；`activeTaskId` 在 persist 成功后才清空 |
-| 记录 | persist 成功后生成 `TaskRecord`，写入 `task_instance.record`，并追加到 Redis `records` |
+| 记录 | persist 成功后生成 `TaskRecord`，写入 `task_instance.task_record`，并追加到 Redis `records` |
 | 实体 | persist 时从本轮成功证据的 `entities` 和已完成节点的 `entityOutputs` 合并实体索引；超过 `state.entities-max` 时淘汰最早加入的 |
 | 换任务 | 开新任务时，旧任务打包为 `ClosedTask`，随本轮 persist 一起落库，再删除旧任务组 |
 

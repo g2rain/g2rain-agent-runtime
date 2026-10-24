@@ -92,9 +92,9 @@ public class ConversationController {
         return Result.success(conversationService.listMessages(conversationId));
     }
 
-    @DeleteMapping("/chat/conversation/{id}")
+    @DeleteMapping("/chat/conversation/{conversationId}")
     @Operation(summary = "删除我的会话", description = "会话须属于当前主体")
-    public Result<Integer> deleteConversation(@Parameter(description = "会话主键") @PathVariable Long id) {
-        return Result.success(conversationService.deleteConversation(id));
+    public Result<Integer> deleteConversation(@Parameter(description = "会话标识") @PathVariable String conversationId) {
+        return Result.success(conversationService.deleteConversation(conversationId));
     }
 }
