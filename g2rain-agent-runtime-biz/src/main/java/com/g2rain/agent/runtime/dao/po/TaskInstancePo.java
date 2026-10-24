@@ -114,7 +114,7 @@ public class TaskInstancePo extends BasePo {
     /**
      * 结束时的任务记录
      */
-    private String record;
+    private String taskRecord;
 
     /**
      * 删除标识[0:未删除, 1:已删除]

@@ -15,8 +15,6 @@ import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
-import com.g2rain.agent.runtime.event.EventPublisher;
-import com.g2rain.agent.runtime.event.TurnEvents;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -53,11 +51,6 @@ public class DefaultEffectHandler implements EffectHandler {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 本轮事件发布器。
-     */
-    private final EventPublisher eventPublisher;
-
-    /**
      * 待批参数摘要上限。
      */
     private final RuntimeProperties runtimeProperties;
@@ -81,22 +74,11 @@ public class DefaultEffectHandler implements EffectHandler {
 
         effects.forEach(effect -> {
             switch (effect) {
-                case GraphEffect.Publish p -> publish(frame, p);
                 case GraphEffect.SaveSuspend s -> saveSuspend(frame, s);
                 case GraphEffect.ClearSuspend c -> clearSuspend(frame, c);
                 case GraphEffect.Halt h -> halt(frame, h);
             }
         });
-    }
-
-    /**
-     * 发布一条过程提示。
-     *
-     * @param frame   当前图执行帧，提供本轮视图
-     * @param publish 过程提示副作用
-     */
-    private void publish(GraphFrame frame, GraphEffect.Publish publish) {
-        eventPublisher.publish(TurnEvents.progress(frame.turn(), publish.text()));
     }
 
     /**

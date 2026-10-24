@@ -12,6 +12,7 @@ import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -23,9 +24,11 @@ import com.g2rain.agent.runtime.engine.model.ModelUse;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
 import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
+import com.g2rain.agent.runtime.engine.tools.finish.NodeFinisher;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
@@ -101,6 +104,16 @@ public class DefaultReActLoop implements ReActLoop {
     private final EvidenceReader evidenceReader;
 
     /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
+
+    /**
+     * 节点收口：returnDirect 命中时与 finish 共用完成门槛。
+     */
+    private final NodeFinisher nodeFinisher;
+
+    /**
      * 跑节点内循环直至控流退出、停滞超限或轮次用尽。
      *
      * @param context 循环上下文（帧、节点、可变历史、工具表）
@@ -127,6 +140,9 @@ public class DefaultReActLoop implements ReActLoop {
         StallTracker stall = new StallTracker();
 
         for (int round = 0; round < maxRounds; round++) {
+            // 下一轮开始时上一轮自动完成，节点结束时最后一轮随之结束
+            stepEvents.start(StepStage.ROUND, RuntimeMessage.STEP_ROUND.text("n", String.valueOf(round + 1)),
+                context.nodeId(), round + 1);
             context.scope().round(0);
             // 调模型前先刷热态，崩溃后能按当前轮次恢复
             stateFacade.flush(context.frame().turn());
@@ -240,6 +256,17 @@ public class DefaultReActLoop implements ReActLoop {
                 }
 
                 stall.recordProgress();
+
+                // 契约声明直接作答：以响应中的答复完成节点，不再回到模型；门槛未过则照常下一轮
+                String reply = directReply(context, toolName, observation);
+                if (Objects.nonNull(reply)) {
+                    if (nodeFinisher.finish(toolContext, reply)) {
+                        skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_NODE_EXITED.text());
+                        return exited(toolContext);
+                    }
+
+                    toolContext.clearFinishRejected();
+                }
             }
         }
 
@@ -264,6 +291,27 @@ public class DefaultReActLoop implements ReActLoop {
         stateFacade.act(context.scope(), NodeAction.model(
             context.scope().rounds(), call.getId(), toolName, argumentsOf(context, toolName, raw), message
         ));
+    }
+
+    /**
+     * 直接作答文本：工具契约配置了 {@code returnDirect} 且业务成功时，取响应中该路径的文本。
+     *
+     * @param context     循环上下文
+     * @param toolName    工具名
+     * @param observation 本次观测
+     * @return 答复文本；未配置、非成功或取不到非空文本为 {@code null}
+     */
+    private static @Nullable String directReply(ReActLoopContext context, String toolName, Observation observation) {
+        SkillContract contract = context.contract();
+        ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(toolName);
+        String path = Objects.isNull(spec) ? null : spec.getReturnDirect();
+        JsonNode data = observation.data();
+        if (Strings.isBlank(path) || observation.outcome() != Outcome.SUCCESS || Objects.isNull(data)) {
+            return null;
+        }
+
+        JsonNode node = JSON.lookupNode(data, path);
+        return JSON.hasValue(node) ? Strings.blankToNull(JSON.asString(node)) : null;
     }
 
     /**

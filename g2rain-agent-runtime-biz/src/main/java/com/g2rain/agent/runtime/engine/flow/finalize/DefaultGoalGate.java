@@ -1,14 +1,18 @@
 package com.g2rain.agent.runtime.engine.flow.finalize;
 
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.GoalGatePrompt;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -39,6 +43,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public final class DefaultGoalGate implements GoalGate {
 
     /**
@@ -60,6 +65,11 @@ public final class DefaultGoalGate implements GoalGate {
      * 模型网关，核验目标时调用。
      */
     private final ModelGateway modelGateway;
+
+    /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
 
     /**
      * 呈现最终答复：未成功退回草稿 → 可直接采用的单节点结论 → 模型核验 → 拼接节点结论。
@@ -85,16 +95,23 @@ public final class DefaultGoalGate implements GoalGate {
         }
 
         if (cfg.isEnabled()) {
+            String stepId = stepEvents.start(StepStage.VERIFY, RuntimeMessage.STEP_VERIFY.text());
             try {
                 GoalGateAnswer answer = verify(pack, cfg.getPromptMaxChars(), ctx.getRequest().getModel());
                 if (Objects.nonNull(answer)) {
                     if (Boolean.FALSE.equals(answer.achieved())) {
                         Trace.at(TraceStage.FINALIZE, "goal_unmet").kv("goal", pack.goal()).warn();
-                        return traced(answer.finalMessage().trim(), ReplySource.UNMET);
+                        stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_UNMET.text());
+                        return traced(RuntimeUtils.unescapeLiteral(answer.finalMessage()).trim(), ReplySource.UNMET);
                     }
-                    return traced(answer.finalMessage().trim(), ReplySource.VERIFIED);
+                    stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_MET.text());
+                    return traced(RuntimeUtils.unescapeLiteral(answer.finalMessage()).trim(), ReplySource.VERIFIED);
                 }
+                stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_FAILED.text());
             } catch (RuntimeException ex) {
+                // 校验失败降级为拼接结果，不丢已完成的工作
+                stepEvents.fail(stepId, RuntimeMessage.STEP_VERIFY_FAILED.text(), RuntimeUtils.businessCode(ex), null);
+                log.error("failed to present", ex);
                 Trace.at(TraceStage.FINALIZE, "verify_failed")
                     .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
                     .warn();

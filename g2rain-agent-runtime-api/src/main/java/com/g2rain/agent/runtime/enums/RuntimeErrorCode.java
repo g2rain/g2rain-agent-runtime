@@ -111,6 +111,41 @@ public enum RuntimeErrorCode implements ErrorCode {
      */
     DEPENDENCY_UNAVAILABLE("agent_runtime.50003", "依赖不可用：{0:dependency}"),
 
+    /**
+     * 模型服务额度不足（上游 402 / insufficient_quota / billing_error）。
+     */
+    MODEL_QUOTA("agent_runtime.40201", "{0:message}"),
+
+    /**
+     * 模型访问密钥无效或无权限（上游 401 / 403）。
+     */
+    MODEL_AUTH("agent_runtime.40101", "{0:message}"),
+
+    /**
+     * 请求内容或参数不符合模型要求（上游其余 4xx，如 context_length_exceeded）。
+     */
+    MODEL_PARAM("agent_runtime.40033", "{0:message}"),
+
+    /**
+     * 模型未配置或未启用（model-nexus 平台错误，如 404 资源不存在）。
+     */
+    MODEL_CONFIG("agent_runtime.40034", "{0:message}"),
+
+    /**
+     * 模型限流（上游 429）。
+     */
+    MODEL_RATE_LIMIT("agent_runtime.42901", "{0:message}"),
+
+    /**
+     * 模型响应超时（上游 504 / timeout）。
+     */
+    MODEL_TIMEOUT("agent_runtime.50401", "{0:message}"),
+
+    /**
+     * 模型服务返回格式异常（model-nexus 502 invalid_response，如上游 200 却缺 choices）。
+     */
+    MODEL_RESPONSE("agent_runtime.50201", "{0:message}"),
+
     CONVERSATION_BUSY("agent_runtime.40910", "会话忙碌"),
 
     CONVERSATION_NOT_FOUND("agent_runtime.40410", "会话不存在：{0:conversationId}"),

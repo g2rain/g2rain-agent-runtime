@@ -174,7 +174,7 @@ public class TaskRepository {
     }
 
     /**
-     * 从已结束任务的 {@code task_instance.record} 回灌会话 records。
+     * 从已结束任务的 {@code task_instance.task_record} 回灌会话 records。
      *
      * @param conversationId 会话 id
      * @param limit          最多条数
@@ -190,7 +190,7 @@ public class TaskRepository {
         List<TaskRecord> records = new ArrayList<>();
         // 只取有纪要的任务，按结束时间倒序（未结束排后）截取，再反序列化
         rows.stream()
-            .filter(vo -> Strings.isNotBlank(vo.getRecord()))
+            .filter(vo -> Strings.isNotBlank(vo.getTaskRecord()))
             .sorted((a, b) -> {
                 LocalDateTime fa = a.getFinishedTime();
                 LocalDateTime fb = b.getFinishedTime();
@@ -207,7 +207,7 @@ public class TaskRepository {
             })
             .limit(Math.max(0, limit))
             .forEach(vo -> {
-                TaskRecord record = RepoSupport.JSON.str2obj(vo.getRecord(), TaskRecord.class);
+                TaskRecord record = RepoSupport.JSON.str2obj(vo.getTaskRecord(), TaskRecord.class);
                 if (Objects.nonNull(record)) {
                     records.add(record);
                 }
@@ -246,7 +246,7 @@ public class TaskRepository {
         dto.setStateVersion(stateVersion);
         dto.setShared(RepoSupport.toJson(shared));
         dto.setPrior(Objects.isNull(prior) ? null : RepoSupport.toJson(prior));
-        dto.setRecord(RepoSupport.toJson(record));
+        dto.setTaskRecord(RepoSupport.toJson(record));
         if (Objects.nonNull(metadata.getSuspendedAt())) {
             dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
         }

@@ -155,5 +155,5 @@ public class TaskInstanceDto extends BaseDto {
      */
     @Size(max = 1073741824)
     @Schema(description = "结束时的任务记录", maxLength = 1073741824)
-    private String record;
+    private String taskRecord;
 }

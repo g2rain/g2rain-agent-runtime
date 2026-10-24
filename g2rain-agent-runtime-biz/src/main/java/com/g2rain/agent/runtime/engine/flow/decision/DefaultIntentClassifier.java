@@ -4,6 +4,7 @@ package com.g2rain.agent.runtime.engine.flow.decision;
 import com.g2rain.agent.runtime.domain.decision.IntentResult;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
+import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.IntentPrompt;
 import com.g2rain.common.json.JsonCodec;
@@ -82,6 +83,8 @@ public final class DefaultIntentClassifier implements IntentClassifier {
 
             return parsed.complete(request.agentCandidates());
         } catch (RuntimeException ex) {
+            // 模型额度、密钥等致命失败不降级，交给收口按分类回复
+            FailureCategory.throwIfFatal(ex);
             log.warn("[IntentClassifier] classify failed, scene={}", request.scene(), ex);
             return null;
         }

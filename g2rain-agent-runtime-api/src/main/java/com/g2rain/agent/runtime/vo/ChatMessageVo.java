@@ -7,6 +7,8 @@ import lombok.Setter;
 import com.g2rain.common.model.BaseVo;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.util.List;
+
 import com.g2rain.common.json.ConditionalJsonIgnore;
 import com.g2rain.common.json.AdminCompanyCondition;
 
@@ -95,6 +97,18 @@ public class ChatMessageVo extends BaseVo {
      */
     @Schema(description = "业务发言时间 epoch ms")
     private Long createdAtMs;
+
+    /**
+     * 本轮耗时毫秒；仅最终回复
+     */
+    @Schema(description = "本轮耗时毫秒；仅最终回复")
+    private Integer elapsedMs;
+
+    /**
+     * 本轮执行步骤；仅对话客户端历史接口在最终回复上填充，按开始顺序，不含排查信息
+     */
+    @Schema(description = "本轮执行步骤；仅最终回复")
+    private List<ChatProgressVo> progress;
 
     /**
      * 消息内容

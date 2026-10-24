@@ -1,17 +1,21 @@
 package com.g2rain.agent.runtime.engine.flow.plan;
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.ExecutionMode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.plan.PlanStep;
+import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.engine.TurnResult;
 import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
@@ -40,6 +44,7 @@ import java.util.stream.IntStream;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DefaultPlanner implements Planner {
 
     /**
@@ -51,6 +56,11 @@ public class DefaultPlanner implements Planner {
      * 模型出图。
      */
     private final PlanDrafter planDrafter;
+
+    /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
 
     /**
      * 规划本轮任务图并经 Facade 写入当前 Task。
@@ -91,6 +101,21 @@ public class DefaultPlanner implements Planner {
             return;
         }
 
+        String stepId = stepEvents.start(StepStage.PLAN, RuntimeMessage.STEP_PLAN.text());
+        create(ctx);
+        if (ctx.isFailed()) {
+            stepEvents.fail(stepId, Objects.isNull(ctx.getResult()) ? null : ctx.getResult().getContent(), null, null);
+            return;
+        }
+        stepEvents.done(stepId, planDetail(ctx.getTurn().graph()));
+    }
+
+    /**
+     * 新建计划：筛候选、出图、补前置节点并落图；失败时经 {@link #failPlan} 标记。
+     *
+     * @param ctx 本轮上下文
+     */
+    private void create(TurnContext ctx) {
         // 新建计划必须已有任务和技能；缺任一则失败，避免画出空图
         var turn = ctx.getTurn();
         TaskMetadata task = turn.task().orElse(null);
@@ -157,6 +182,7 @@ public class DefaultPlanner implements Planner {
             ProviderNodes.expand(graph, skillByKey, turn);
             applyDefaultTargets(graph, skillByKey);
         } catch (BusinessException ex) {
+            log.error("failed to plan", ex);
             Trace.at(TraceStage.PLAN, "failed").kv("reason", FailReason.PROVIDER).kv("errorCode", ex.getErrorCode()).error();
             failPlan(ctx, RuntimeMessage.PLAN_FAILED.text());
             return;
@@ -178,6 +204,20 @@ public class DefaultPlanner implements Planner {
             .kv("skills", graph.getNodes().stream().map(TaskNode::getSkillKey).toList())
             .kv("firstReady", focusNodeId)
             .info();
+    }
+
+    /**
+     * 规划步骤的结论，如"规划 2 个节点：查询订单 → 发起退款"。
+     *
+     * @param graph 已落图的任务图
+     * @return 步骤说明
+     */
+    private static String planDetail(TaskGraph graph) {
+        List<String> titles = graph.getNodes().stream()
+            .map(node -> Strings.defaultIfBlank(node.getTitle(), node.getSkillKey()))
+            .toList();
+        String count = RuntimeMessage.STEP_PLAN_DONE.text("count", String.valueOf(titles.size()));
+        return titles.isEmpty() ? count : count + "：" + String.join(" → ", titles);
     }
 
     /**

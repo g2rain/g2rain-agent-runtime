@@ -1,5 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.plan;
 
+
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
@@ -10,6 +12,7 @@ import com.g2rain.agent.runtime.domain.state.task.Prior;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
+import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.PlanPrompt;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -41,6 +44,7 @@ import java.util.stream.Collectors;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PlanDrafter {
 
     /**
@@ -108,6 +112,9 @@ public class PlanDrafter {
             Set<String> allowedSkills = candidates.stream().map(SkillItem::skillKey).collect(Collectors.toSet());
             return resolve(JSON.str2obj(planStr, LlmPlanAnswer.class), allowedSkills, skillByKey);
         } catch (RuntimeException ex) {
+            // 模型额度、密钥等致命失败不降级，交给收口按分类回复
+            FailureCategory.throwIfFatal(ex);
+            log.error("failed to draft", ex);
             Trace.at(TraceStage.PLAN, "llm_failed")
                 .kv("error", ex.getClass().getSimpleName() + ": " + ex.getMessage())
                 .warn();

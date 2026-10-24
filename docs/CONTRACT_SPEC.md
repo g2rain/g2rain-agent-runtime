@@ -105,7 +105,8 @@ skill_contract
     ├── success { path, op, value }
     ├── error { code, message }
     ├── extracts[] { key, path, fields, entity }
-    └── verify { tool, args }
+    ├── verify { tool, args }
+    └── returnDirect        直接作答的答复路径
 ```
 
 ---
@@ -138,6 +139,7 @@ key 为工具名，必须与 `toolNames` 中的名称完全一致。
 | `error` | Object | 无 | 业务失败时错误码、错误信息所在路径 | 见 6.2 |
 | `extracts` | List | `[]` | 从结果中抽取的语义片段 | 见 6.3 |
 | `verify` | Object | 无 | 写结果不确定时的回查方式 | 见 6.4 |
+| `returnDirect` | String（响应路径） | 无 | 直接作答：工具结果就是节点的最终答复，如 `data.answer` | 业务成功且该路径取到非空文本时，以该文本按 finish 的完成判定（10.2）完成节点，不再回到模型；判定未通过或取不到文本时照常进入下一轮。只允许 `NONE` 工具。适用于下游已生成答复的工具（如知识问答） |
 
 ---
 
@@ -433,6 +435,8 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 **"完成"**：证据状态为 `SUCCESS` 且业务未判失败；结果为空也算完成。
 
+配置了 `returnDirect` 的工具成功后，Runtime 以取到的答复作为 `output` 执行同一套判定：通过即完成节点，不经过模型调用 `builtin_node_finish`；未通过则不打断，节点进入下一轮由模型继续。
+
 ---
 
 ## 11. 平台字段
@@ -590,6 +594,7 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | 11 | 每个 `extracts[].path` 非空 |
 | 12 | `type: LIST` 的产出配置了非空 `fields` |
 | 13 | 枚举属性的取值合法（区分大小写） |
+| 14 | `returnDirect` 只出现在 `NONE` 工具上 |
 
 以下内容**不在装载时校验**，由编写者保证：
 

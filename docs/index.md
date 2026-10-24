@@ -21,6 +21,7 @@
 - [意图路由与选人](INTENT_ROUTING.md)
 - [链路轨迹日志](TRACE_LOGGING.md)
 - [工具结果与进展判定](TOOL_OBSERVATION.md)
+- [执行过程时间线与失败原因透传](design/progress-and-failure.md)（已实施，待联调）
 
 ## 开发与交付
 

@@ -2,25 +2,47 @@ package com.g2rain.agent.runtime.service.impl;
 
 
 import com.g2rain.agent.runtime.domain.state.TurnScope;
+import com.g2rain.agent.runtime.domain.state.TurnStatus;
+import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
+import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
+import com.g2rain.agent.runtime.dto.ChatMessageSelectDto;
+import com.g2rain.agent.runtime.dto.ChatProgressSelectDto;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnPipeline;
 import com.g2rain.agent.runtime.engine.TurnRequest;
 import com.g2rain.agent.runtime.engine.TurnResult;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.event.EventPublisher;
+import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.event.TurnEvent;
 import com.g2rain.agent.runtime.event.TurnEvents;
+import com.g2rain.agent.runtime.service.ChatConversationService;
+import com.g2rain.agent.runtime.service.ChatMessageService;
+import com.g2rain.agent.runtime.service.ChatProgressService;
 import com.g2rain.agent.runtime.service.ConversationService;
+import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RedisKeys;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.trace.TraceScope;
+import com.g2rain.agent.runtime.vo.ChatConversationVo;
+import com.g2rain.agent.runtime.vo.ChatMessageVo;
+import com.g2rain.agent.runtime.vo.ChatProgressVo;
+import com.g2rain.common.exception.SystemErrorCode;
+import com.g2rain.common.utils.Asserts;
+import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
+import com.g2rain.common.web.PrincipalContextHolder;
 import com.g2rain.data.redis.DistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 会话请求的同步编排入口。
@@ -58,9 +80,29 @@ public class ConversationServiceImpl implements ConversationService {
     private final EventPublisher eventPublisher;
 
     /**
+     * 执行步骤的记录与推送。
+     */
+    private final StepEvents stepEvents;
+
+    /**
+     * 会话表服务（对话客户端查询"我的会话"）。
+     */
+    private final ChatConversationService chatConversationService;
+
+    /**
+     * 消息表服务（对话客户端查询"我的会话消息"）。
+     */
+    private final ChatMessageService chatMessageService;
+
+    /**
+     * 执行过程步骤表服务（历史消息附带本轮执行步骤）。
+     */
+    private final ChatProgressService chatProgressService;
+
+    /**
      * 持会话锁跑一整轮：空会话标识先生成，再加锁、回灌状态并进入流水线。
      *
-     * <p>锁内顺序固定为 begin → 首条过程提示 → 流水线 → flush/persist → 结果帧。
+     * <p>锁内顺序固定为 begin → 流水线（逐步推送执行步骤）→ flush/persist → 结果帧。
      * 编排异常收成失败结果并仍发结束事件；持久化失败只记日志，不改变已算出的本轮结果。</p>
      *
      * @param request 本轮请求；会话标识可空，空则现场生成
@@ -83,7 +125,7 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     /**
-     * 锁内跑一整轮：begin → 首条过程提示 → 流水线 → flush/persist → 结果帧。
+     * 锁内跑一整轮：begin 后绑定本轮，再进入 {@link #runTurn}。
      *
      * @param request 本轮请求；会话标识已确定
      * @return 本轮结果（已带 traceId）
@@ -92,9 +134,20 @@ public class ConversationServiceImpl implements ConversationService {
         // begin 负责回灌 State、推进栅栏并写入本轮用户消息。
         TurnScope turn = runtimeStateFacade.begin(request);
         TraceScope.bindTask(turn.conversation().activeTaskId());
-        // 锁内先发一条过程提示，客户端从首帧即可拿到会话 ID
-        eventPublisher.publish(TurnEvents.progress(turn, RuntimeMessage.STATUS_WORKING.text()));
+        // 绑定本轮：各环节经 StepEvents 记录并推送执行步骤，首帧即带会话 ID
+        return ScopedValue.where(StepEvents.TURN, turn).call(() -> runTurn(request, turn));
+    }
 
+    /**
+     * 本轮流水线 → 收尾执行步骤 → flush/persist → 结果帧；在 {@link StepEvents#TURN} 作用域内执行。
+     *
+     * @param request 本轮请求
+     * @param turn    已 begin 的本轮视图
+     * @return 本轮结果（已带 traceId）
+     */
+    private TurnResult runTurn(TurnRequest request, TurnScope turn) {
+        // 新会话开局即下发标题，客户端插入会话列表；已有会话不发
+        turn.createdTitle().ifPresent(title -> eventPublisher.publish(TurnEvents.title(turn, title)));
         TurnResult result;
         try {
             // 流水线只处理业务编排；结果收口和 State 持久化仍由当前锁内流程负责。
@@ -103,19 +156,24 @@ public class ConversationServiceImpl implements ConversationService {
         } catch (RuntimeException ex) {
             log.error("[ConversationService] turn failed conversationId={}",
                 turn.conversation().conversationId(), ex);
-            String errorContent = RuntimeMessage.ERROR_GENERIC.text();
+            // 按失败分类生成文案；识别不了的仍为通用失败
+            String errorContent = FailureCategory.of(ex).text();
+            String errorCode = RuntimeUtils.businessCode(ex);
             // 先把本轮标失败：节点与任务落为 FAILED，并追加失败回复
-            turn.fail(errorContent, RuntimeUtils.businessCode(ex));
+            turn.fail(errorContent, errorCode);
             result = TurnResult.fail(
                 turn.conversation().conversationId(),
                 turn.task().map(TaskMetadata::getTaskId).orElse(null),
                 errorContent
             );
+            result.setErrorCode(errorCode);
             result.setTraceId(RuntimeUtils.requireTraceId());
         }
 
+        // 出结果前收尾仍在进行的步骤，时间线与结果状态一致
+        stepEvents.finishAll(result.getStatus() == TurnStatus.FAILED, result.getErrorCode());
         TurnEvent resultEvent = TurnEvents.result(turn, result.getStatus(), result.getContent(),
-            result.getAllowedActions(), result.getSuggestions());
+            result.getAllowedActions(), result.getSuggestions(), result.getErrorCode());
 
         try {
             // 先把本轮改动刷新到 Redis，再以 Redis 当前状态为准落 MySQL。
@@ -130,5 +188,80 @@ public class ConversationServiceImpl implements ConversationService {
         // persist 失败仍发已构造的结果帧，避免客户端一直等收口
         eventPublisher.publish(resultEvent);
         return result;
+    }
+
+    @Override
+    public List<ChatConversationVo> listConversations() {
+        ChatConversationSelectDto select = ownerSelect();
+        select.setSorts(List.of("lastMessageTime,desc"));
+        return chatConversationService.selectSummaryList(select);
+    }
+
+    @Override
+    public List<ChatMessageVo> listMessages(String conversationId) {
+        Asserts.isTrue(Strings.isNotBlank(conversationId), SystemErrorCode.PARAM_REQUIRED, "conversationId");
+        ChatConversationSelectDto select = ownerSelect();
+        select.setConversationId(conversationId);
+        requireOwned(chatConversationService.selectSummaryList(select));
+
+        ChatMessageSelectDto messageSelect = new ChatMessageSelectDto();
+        messageSelect.setOrganId(PrincipalContextHolder.getOrganId());
+        messageSelect.setConversationId(conversationId);
+        messageSelect.setSorts(List.of("createdAtMs,asc", "id,asc"));
+        List<ChatMessageVo> messages = chatMessageService.selectList(messageSelect);
+        attachProgress(conversationId, messages);
+        return messages;
+    }
+
+    /**
+     * 按 traceId 把本轮执行步骤挂到最终回复上；排查信息 {@code extra} 不下发。
+     *
+     * @param conversationId 会话 id
+     * @param messages       会话消息
+     */
+    private void attachProgress(String conversationId, List<ChatMessageVo> messages) {
+        ChatProgressSelectDto progressSelect = new ChatProgressSelectDto();
+        progressSelect.setOrganId(PrincipalContextHolder.getOrganId());
+        progressSelect.setConversationId(conversationId);
+        progressSelect.setSorts(List.of("traceId,asc", "seq,asc"));
+        List<ChatProgressVo> steps = chatProgressService.selectList(progressSelect);
+        steps.forEach(step -> step.setExtra(null));
+        Map<String, List<ChatProgressVo>> byTrace = steps.stream()
+            .collect(Collectors.groupingBy(ChatProgressVo::getTraceId));
+        messages.stream()
+            .filter(message -> MessageType.AGENT_REPLY.name().equals(message.getMessageType()))
+            .filter(message -> Strings.isBlank(message.getNodeId()) && Strings.isNotBlank(message.getTraceId()))
+            .forEach(message -> message.setProgress(byTrace.get(message.getTraceId())));
+    }
+
+    @Override
+    public int deleteConversation(String conversationId) {
+        Asserts.isTrue(Strings.isNotBlank(conversationId), SystemErrorCode.PARAM_REQUIRED, "conversationId");
+        ChatConversationSelectDto select = ownerSelect();
+        select.setConversationId(conversationId);
+        List<ChatConversationVo> owned = chatConversationService.selectSummaryList(select);
+        requireOwned(owned);
+        return chatConversationService.delete(owned.getFirst().getId());
+    }
+
+    /**
+     * 当前主体的会话查询条件；主体不完整时拒绝。
+     */
+    private static ChatConversationSelectDto ownerSelect() {
+        Long organId = PrincipalContextHolder.getOrganId();
+        Long userId = PrincipalContextHolder.getUserId();
+        Asserts.isTrue(Objects.nonNull(organId) && Objects.nonNull(userId), SystemErrorCode.UNAUTHENTICATED);
+
+        ChatConversationSelectDto select = new ChatConversationSelectDto();
+        select.setOrganId(organId);
+        select.setUserId(userId);
+        return select;
+    }
+
+    /**
+     * 会话不存在或不属于当前主体时统一返回"无权访问该会话"，不区分两种情况。
+     */
+    private static void requireOwned(List<ChatConversationVo> owned) {
+        Asserts.isTrue(Collections.isNotEmpty(owned), RuntimeErrorCode.CONVERSATION_FORBIDDEN);
     }
 }

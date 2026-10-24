@@ -45,7 +45,7 @@ public class TaskInstanceController implements TaskInstanceApi {
     }
 
     @GetMapping("/by_task/{taskId}")
-    @Operation(summary = "按任务标识查完整任务", description = "含 request/shared/record 等大字段")
+    @Operation(summary = "按任务标识查完整任务", description = "含 request/shared/taskRecord 等大字段")
     public Result<TaskInstanceVo> getByTaskId(@Parameter(description = "任务业务标识") @PathVariable String taskId) {
         return Result.success(taskInstanceService.getByTaskId(taskId));
     }

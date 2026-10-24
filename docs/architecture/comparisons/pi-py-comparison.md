@@ -215,7 +215,7 @@ g2rain 的模块主要按平台服务工程组织。模型适配、能力装载�
 - [DefaultNodeRunner](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/graph/DefaultNodeRunner.java)
 - [DefaultReActLoop](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/react/DefaultReActLoop.java)
 - [DefaultToolInvoker](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/DefaultToolInvoker.java)
-- [DefaultFinishPolicy](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/policy/DefaultFinishPolicy.java)
+- [DefaultFinishPolicy](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/finish/DefaultFinishPolicy.java)
 - [ControlBuiltinTools](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/builtin/ControlBuiltinTools.java)
 - [NodeBuiltinTools](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/builtin/NodeBuiltinTools.java)
 - [TurnScope](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/state/TurnScope.java)

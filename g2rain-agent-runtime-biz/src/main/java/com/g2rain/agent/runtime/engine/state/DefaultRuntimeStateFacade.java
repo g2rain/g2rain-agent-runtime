@@ -173,6 +173,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             // 热态已 flush；交互历史再落 MySQL，失败则整轮 begin 作废
             conversations.insertMessage(turn.conversation().conversationId(), user.getTaskId(), user, request.getChannel());
         } catch (RuntimeException e) {
+            log.error("failed to begin", e);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
 
@@ -295,13 +296,13 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
      * @return 原结论
      */
     private PrewriteResult adopt(DefaultNodeScope node, ToolCall call, PrewriteResult result) {
-        if (!(result instanceof PrewriteResult.Reused reused)
-            || node.evidence().stream().anyMatch(head -> Objects.equals(head.evidenceId(), reused.evidenceId()))) {
+        if (!(result instanceof PrewriteResult.Reused(String evidenceId))
+            || node.evidence().stream().anyMatch(head -> Objects.equals(head.evidenceId(), evidenceId))) {
             return result;
         }
 
         String taskId = node.turn().task().map(TaskMetadata::getTaskId).orElse(null);
-        JsonNode body = Strings.isBlank(taskId) ? NullNode.getInstance() : payload(node.turn(), taskId, reused.evidenceId());
+        JsonNode body = Strings.isBlank(taskId) ? NullNode.getInstance() : payload(node.turn(), taskId, evidenceId);
         evidenceFlow.record(node, call, new ToolResult(EvidenceStatus.SUCCESS, body, null, null, Map.of(),
             FailureKind.NONE, null, ModelHint.WRITE_REUSED.text(), null, 0L));
         return result;
@@ -484,8 +485,9 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     private void persistOnce(DefaultTurnScope scope) {
         scope.task().ifPresent(_ -> entityExtractor.collect(scope));
         persistence.persistTurn(scope);
-        // 标记后 pending 交互历史不再二次落库
+        // 标记后 pending 交互历史与执行步骤不再二次落库
         scope.markDialoguePersisted();
+        scope.progress().markPersisted();
     }
 
     /**
