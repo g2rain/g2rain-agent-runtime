@@ -52,7 +52,6 @@ public enum RuntimeMessage {
     STEP_VERIFY_MET("step.verify.met", "目标达成"),
     STEP_VERIFY_UNMET("step.verify.unmet", "目标未完全达成"),
     STEP_VERIFY_FAILED("step.verify.failed", "校验未完成，已整理现有结果"),
-    STEP_MODEL_TOKENS("step.model.tokens", "{tokens} tokens"),
     STEP_TOOL("step.tool", "调用 {name}"),
     STEP_TOOL_DEFAULT("step.tool.default", "调用工具"),
     STEP_TOOL_OK("step.tool.ok", "成功"),

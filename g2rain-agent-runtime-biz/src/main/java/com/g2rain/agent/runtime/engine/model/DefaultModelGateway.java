@@ -96,7 +96,7 @@ public class DefaultModelGateway implements ModelGateway {
     @Override
     public ChatCompletionResponse chat(ModelUse use, @Nullable String model, ChatCompletionRequest request) {
         long start = System.nanoTime();
-        // 模型步骤只显示用途、耗时与 token，不显示模型名
+        // 模型步骤只显示用途与耗时，不显示模型名与 token 用量
         String stepId = stepEvents.start(StepStage.MODEL, RuntimeMessage.valueOf("MODEL_" + use.name()).text());
         // 本轮指定了模型才写入，未指定保持请求原值
         if (Strings.isNotBlank(model)) {
@@ -106,27 +106,13 @@ public class DefaultModelGateway implements ModelGateway {
             // POST /v1/chat/completions
             var rsp = exchange("/v1/chat/completions", request, ChatCompletionResponse.class);
             traceCall(use, request, rsp, elapsedMs(start));
-            stepEvents.done(stepId, tokensOf(rsp), usageOf(use, rsp));
+            stepEvents.done(stepId, null, usageOf(use, rsp));
             return rsp;
         } catch (RuntimeException ex) {
             traceFailure(use, request, ex, elapsedMs(start));
             stepEvents.fail(stepId, ex);
             throw ex;
         }
-    }
-
-    /**
-     * 模型步骤说明：总 token 数；没有用量时为空。
-     *
-     * @param response 模型响应
-     * @return 步骤说明
-     */
-    private static @Nullable String tokensOf(ChatCompletionResponse response) {
-        ChatCompletionUsage usage = response.getUsage();
-        if (Objects.isNull(usage) || Objects.isNull(usage.getTotalTokens())) {
-            return null;
-        }
-        return RuntimeMessage.STEP_MODEL_TOKENS.text("tokens", "%,d".formatted(usage.getTotalTokens()));
     }
 
     /**
