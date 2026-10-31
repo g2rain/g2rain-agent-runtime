@@ -4,7 +4,7 @@ package com.g2rain.agent.runtime.engine.model;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;

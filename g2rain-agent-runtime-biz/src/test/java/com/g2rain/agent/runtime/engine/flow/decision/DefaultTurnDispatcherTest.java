@@ -6,7 +6,7 @@ import com.g2rain.agent.runtime.domain.decision.TurnScene;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;

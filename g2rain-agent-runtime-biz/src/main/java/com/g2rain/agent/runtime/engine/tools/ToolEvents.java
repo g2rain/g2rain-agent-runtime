@@ -8,7 +8,7 @@ import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.mcp.McpToolCallback;

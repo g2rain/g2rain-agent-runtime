@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.support.prompt;
+package com.g2rain.agent.runtime.support;
 
 
 import com.g2rain.common.utils.Strings;
@@ -15,7 +15,14 @@ import java.util.Locale;
  * @author alpha
  * @since 2026/10/31
  */
-public final class ReplyLanguage {
+public final class RequestLocale {
+
+    /**
+     * 常量持有者；禁止实例化。
+     */
+    private RequestLocale() {
+
+    }
 
     /**
      * 当前请求的回复语言 BCP-47 标签（如 {@code ja}、{@code en-US}）。
@@ -24,13 +31,10 @@ public final class ReplyLanguage {
      */
     public static String tag() {
         String lang = PrincipalContextHolder.getAcceptLanguage();
-        return Strings.isBlank(lang) ? Locale.getDefault().toLanguageTag() : lang;
-    }
+        if (Strings.isNotBlank(lang)) {
+            return lang;
+        }
 
-    /**
-     * 常量持有者；禁止实例化。
-     */
-    private ReplyLanguage() {
-
+        return Locale.getDefault().toLanguageTag();
     }
 }

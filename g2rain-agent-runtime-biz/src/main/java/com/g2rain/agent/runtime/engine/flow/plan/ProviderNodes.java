@@ -13,7 +13,7 @@ import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.utils.Collections;

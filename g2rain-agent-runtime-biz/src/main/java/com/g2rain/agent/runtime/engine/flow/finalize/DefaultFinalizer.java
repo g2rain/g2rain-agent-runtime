@@ -16,7 +16,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.engine.TurnResult;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;

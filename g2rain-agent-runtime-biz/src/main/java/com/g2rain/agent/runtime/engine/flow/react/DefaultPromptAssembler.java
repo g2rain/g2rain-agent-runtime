@@ -3,7 +3,7 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.support.prompt.ReactPrompt;
-import com.g2rain.agent.runtime.support.prompt.ReplyLanguage;
+import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -65,7 +65,7 @@ public class DefaultPromptAssembler implements PromptAssembler {
     @Override
     public ChatCompletionRequest assemble(PromptAssembleRequest request) {
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessages.system(ReactPrompt.TEXT.formatted(ReplyLanguage.tag())));
+        messages.add(ChatMessages.system(ReactPrompt.TEXT.formatted(RequestLocale.tag())));
         String user = projectUser(request);
         messages.add(ChatMessages.user(user));
 
