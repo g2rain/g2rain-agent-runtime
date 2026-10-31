@@ -9,7 +9,7 @@
  * 调模型入口（system → user）：
  *
  * 1. 意图分类
- *    system: IntentPrompt.SYSTEM
+ *    system: IntentPrompt.SYSTEM（填入 ReplyLanguage.tag()）
  *    user:   IntentPrompt.USER（填入场景、IntentRequest JSON、用户原文）
  *
  * 2. 技能候选筛选
@@ -21,11 +21,11 @@
  *    user:   PlanPrompt.USER（填入 DefaultPlanner.PlanView JSON）
  *
  * 4. ReAct 节点执行
- *    system: ReactPrompt.TEXT
+ *    system: ReactPrompt.TEXT（填入 ReplyLanguage.tag()）
  *    user:   带标签的 JSON 块（+ history + tools[]）
  *
  * 5. 最终答复整理
- *    system: GoalGatePrompt.SYSTEM
+ *    system: GoalGatePrompt.SYSTEM（填入 ReplyLanguage.tag()）
  *    user:   GoalGatePrompt.USER（填入 DefaultGoalGate.GoalGateView JSON）
  * </pre>
  *
