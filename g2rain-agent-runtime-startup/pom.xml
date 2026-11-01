@@ -68,13 +68,19 @@
                         <image>docker://eclipse-temurin:25.0.4.1_1-jre</image>
                     </from>
                     <to>
-                        <image>g2rain/g2rain-agent-runtime:${project.version}</image>
+                        <image>ghcr.io/g2rain/g2rain-agent-runtime:${project.version}</image>
                     </to>
                     <container>
                         <mainClass>com.g2rain.agent.runtime.Application</mainClass>
                         <ports>
                             <port>8080</port>
                         </ports>
+                        <labels>
+                            <org.opencontainers.image.source>https://github.com/g2rain/g2rain-agent-runtime</org.opencontainers.image.source>
+                            <org.opencontainers.image.licenses>Apache-2.0</org.opencontainers.image.licenses>
+                            <org.opencontainers.image.title>g2rain-agent-runtime</org.opencontainers.image.title>
+                            <org.opencontainers.image.version>${project.version}</org.opencontainers.image.version>
+                        </labels>
                     </container>
                 </configuration>
             </plugin>

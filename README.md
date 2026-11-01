@@ -4,7 +4,7 @@
 
 # g2rain-agent-runtime
 
-> 下一代AI软件开发范式，AI原生Agent平台，开源的企业级SaaS底座。
+> G2rain（谷雨）开源智能体平台中的 Agent 运行时执行服务，不是完整平台发行版。
 
 谷雨 Agent 的运行时执行服务。它把 Agent 配置、用户输入、模型能力和工具能力组织为可追踪、可恢复的任务执行过程，并通过 SSE 持续返回对话进度与最终结果。
 
@@ -12,7 +12,9 @@
 
 ## 平台定位
 
-`g2rain-agent-runtime` 位于谷雨 AI Agent 平台的执行层：它加载 Agent Studio 管理的 Agent 与技能配置，经 Model Nexus 调用模型、经 MCP Registry 调用工具，并把可追踪的任务状态和流式结果提供给上游应用。
+G2rain（谷雨）是面向企业的开源智能体平台，连接模型、知识与业务工具，让智能体在明确的身份和权限边界内执行任务。当前智能体平台与智能客服已开发完成并开源；平台的 SaaS 基座、知识库、部署编排、身份权限、前端应用与商业化规划分别由其他组件和文档负责。
+
+`g2rain-agent-runtime` 仅位于其中的执行层：它加载 Agent Studio 管理的 Agent 与技能配置，经 Model Nexus 调用模型、经 MCP Registry 调用工具，并把可追踪的任务状态和流式结果提供给上游应用。
 
 ## 功能概览
 
@@ -80,7 +82,16 @@ mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.prof
 | 目标 | 命令 | 说明 |
 | --- | --- | --- |
 | 构建与验证 | `mvn clean verify` | 执行 Maven 验证生命周期。 |
-| 构建本地镜像 | `./build.sh <tag>` | 使用 Jib 构建 `g2rain/g2rain-agent-runtime:<tag>`。 |
+| 构建本地镜像 | `./build.sh 1.0.0` | 先执行完整 Maven 构建与测试，再用 Jib 构建并载入本地 Docker。需要 Docker daemon。 |
+
+## GHCR 镜像
+
+- 镜像：`ghcr.io/g2rain/g2rain-agent-runtime`
+- 稳定版 tag 为 Maven 版本，例如 `1.0.0`；同一次发布同时推送不可变的 `sha-<完整 Git 提交 SHA>`。不推送 `latest`。
+- 拉取示例：`docker pull ghcr.io/g2rain/g2rain-agent-runtime:1.0.0`
+- 仅当已进入 `main` 的提交被推送为精确 `v<major>.<minor>.<patch>` Git tag、同名发布说明存在且 Maven 版本匹配时，GitHub Actions 才会构建、测试并推送。普通分支、Pull Request 和手动触发不会发布。
+
+完整的权限、构建、推送、镜像内容、公开包设置和部署前检查见[构建与部署](docs/operations/deployment.md)。镜像发布不代表在线演示可用，也不代表已在目标环境完成部署验证。
 
 ## 接口说明
 
