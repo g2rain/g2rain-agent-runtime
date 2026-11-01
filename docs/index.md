@@ -42,7 +42,7 @@
 - [安全边界](security/security-boundaries.md)
 - [配置说明](operations/configuration.md)
 - [构建与部署](operations/deployment.md)
-- [v1.0.0 发布说明](releases/v1.0.0.md)
+- [发布记录](releases/README.md)
 - [可观测性](operations/observability.md)
 - [故障排查](operations/troubleshooting.md)
 - [已知问题](KNOWN_ISSUES.md)
