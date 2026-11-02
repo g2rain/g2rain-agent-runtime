@@ -154,11 +154,12 @@ DefaultFinalizer（收口，不改动）
 public final class IntentPrompt {
 
     /**
-     * 身份与职责。
+     * 身份与职责。占位符为回复语言 BCP-47 标签（如 ja、en-US）。
      */
     public static final String SYSTEM = """
         你是企业智能助手的意图路由器，负责判断用户本轮输入如何推进任务，并选择执行的数字员工。
         只依据给定信息判断，不得臆造。
+        给用户看的文字（userReply）一律使用语言标签 %s（BCP-47），优先于用户输入语种与历史对话语种。
         """;
 
     /**
@@ -202,7 +203,7 @@ public final class IntentPrompt {
         【userReply】
         - REPLY_ONLY：给用户的简短回复。
         - 无法匹配数字员工：说明可以办理的事项。
-        - 其它情况为 null。使用与用户输入相同的语言。
+        - 其它情况为 null。
 
         【会话上下文】
         %s
@@ -241,7 +242,7 @@ public final class IntentPrompt {
 | `engine.flow.decision.DefaultTurnDispatcher` | 场景、候选收窄、`settle()`、`decisionOf()`、确认文案写入；删除 `remember()`、`postValidate()` |
 | `engine.flow.decision.DefaultAgentResolver` | 按最终模式判断是否选人；删除"无法匹配即失败"分支 |
 | `engine.flow.entry.DefaultTurnEntryGuard` | FOLLOW_UP 断点默认 REPLY 续跑 |
-| `enums.RuntimeMessage` | `ROUTE_UNCERTAIN` 只改文案，不改名 |
+| `i18n.RuntimeMessage` | `ROUTE_UNCERTAIN` 只改文案，不改名；用户可见文案按请求语言从 Infra 的 `AGENT_RUNTIME` 消息集中读取，缺失时回退中文 |
 
 `IntentResult.useContinuity` 保留，由 mode 推导；现有读取方不受影响。`DefaultFinalizer` 不改动：它对 UNCERTAIN / REPLY_ONLY 本就优先输出 `IntentResult.userReply`。
 
@@ -426,7 +427,7 @@ public @Nullable IntentResult classify(IntentRequest request) {
         );
 
         ChatMessage assistant = OpenAiChatClientConverter.firstMessage(modelGateway.chat(ModelUse.INTENT,
-            ChatCompletionRequests.of().system(IntentPrompt.SYSTEM).user(user).build()
+            ChatCompletionRequests.of().system(IntentPrompt.SYSTEM.formatted(RequestLocale.tag())).user(user).build()
         ));
 
         // 空正文或无法解析都返回 null，由调度器按场景兜底
@@ -636,6 +637,8 @@ if (Objects.isNull(request.getAction())) {
 ```
 
 ### 5.9 RuntimeMessage
+
+`RuntimeMessage` 位于 `biz` 的 `i18n` 包，保存 message code 与中文兜底文案。`RuntimeMessages` 在应用启动时从 Infra 加载 `UI_MESSAGE` / `AGENT_RUNTIME` 文案；处理请求时由 `RequestLocale` 提供当前请求语言，`RuntimeMessageRegistry` 优先匹配完整 locale，再按语言回退。具名占位符在本地替换。
 
 ```java
 ROUTE_UNCERTAIN("route.uncertain", "还有一项操作等待您确认，请确认是否继续执行。"),

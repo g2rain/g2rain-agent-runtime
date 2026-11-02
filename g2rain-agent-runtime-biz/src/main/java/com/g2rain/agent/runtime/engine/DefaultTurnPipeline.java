@@ -19,7 +19,7 @@ import com.g2rain.agent.runtime.engine.flow.finalize.Finalizer;
 import com.g2rain.agent.runtime.engine.flow.hydrate.Hydrator;
 import com.g2rain.agent.runtime.engine.flow.lifecycle.TaskLifecycle;
 import com.g2rain.agent.runtime.engine.flow.plan.Planner;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;

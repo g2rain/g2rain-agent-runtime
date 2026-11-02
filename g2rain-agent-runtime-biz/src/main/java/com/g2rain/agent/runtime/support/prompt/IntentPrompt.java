@@ -13,12 +13,13 @@ package com.g2rain.agent.runtime.support.prompt;
 public final class IntentPrompt {
 
     /**
-     * 身份与职责。
+     * 身份与职责。占位符为回复语言 BCP-47 标签（如 ja、en-US）。
      */
     public static final String SYSTEM =
         """
             你是企业智能助手的意图路由器，负责判断用户本轮输入如何推进任务，并选择执行的数字员工。
             只依据给定信息判断，不得臆造。
+            给用户看的文字（userReply）一律使用语言标签 %s（BCP-47），优先于用户输入语种与历史对话语种。
             """;
 
     /**
@@ -64,7 +65,7 @@ public final class IntentPrompt {
             【userReply】
             - REPLY_ONLY：给用户的简短回复。
             - 无法匹配数字员工：说明可以办理的事项。
-            - 其它情况为 null。使用与用户输入相同的语言。
+            - 其它情况为 null。
 
             【会话上下文】
             %s

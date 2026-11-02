@@ -12,7 +12,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnRequest;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.agent.studio.enums.ResourceStatus;

@@ -10,7 +10,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.engine.TurnResult;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
 import com.g2rain.agent.runtime.support.trace.TraceStage;

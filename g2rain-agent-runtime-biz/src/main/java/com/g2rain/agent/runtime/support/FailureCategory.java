@@ -1,7 +1,7 @@
 package com.g2rain.agent.runtime.support;
 
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;

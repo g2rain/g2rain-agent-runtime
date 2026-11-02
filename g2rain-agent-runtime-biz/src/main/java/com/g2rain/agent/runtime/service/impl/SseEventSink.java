@@ -4,7 +4,7 @@ package com.g2rain.agent.runtime.service.impl;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.engine.TurnRequest;
 import com.g2rain.agent.runtime.engine.TurnResult;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.EventSink;
 import com.g2rain.agent.runtime.event.TurnEvent;
 import com.g2rain.agent.runtime.event.TurnEventType;
