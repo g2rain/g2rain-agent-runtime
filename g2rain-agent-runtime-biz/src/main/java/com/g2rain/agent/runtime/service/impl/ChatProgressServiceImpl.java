@@ -15,6 +15,7 @@ import com.g2rain.agent.runtime.dto.ChatProgressDto;
 import com.g2rain.agent.runtime.dto.ChatProgressSelectDto;
 import com.g2rain.agent.runtime.service.ChatProgressService;
 import com.g2rain.agent.runtime.vo.ChatProgressVo;
+import com.g2rain.common.web.PrincipalContextHolder;
 import com.g2rain.mybatis.pagination.PageContext;
 import com.g2rain.mybatis.pagination.model.Page;
 import jakarta.annotation.Resource;
@@ -68,6 +69,10 @@ public class ChatProgressServiceImpl implements ChatProgressService {
 
     @Override
     public Long save(ChatProgressDto dto) {
+        if (Objects.isNull(dto.getOrganId())) {
+            dto.setOrganId(PrincipalContextHolder.getOrganId());
+        }
+
         Validations.validateSave(dto);
 
         // 转换 DTO 为 PO

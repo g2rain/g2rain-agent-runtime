@@ -7,6 +7,7 @@ import com.g2rain.agent.runtime.engine.model.ModelUse;
 import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.IntentPrompt;
+import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -66,7 +67,7 @@ public final class DefaultIntentClassifier implements IntentClassifier {
             );
 
             ChatMessage assistant = OpenAiChatClientConverter.firstMessage(modelGateway.chat(ModelUse.INTENT, request.model(),
-                ChatCompletionRequests.of().system(IntentPrompt.SYSTEM).user(user).build()
+                ChatCompletionRequests.of().system(IntentPrompt.SYSTEM.formatted(RequestLocale.tag())).user(user).build()
             ));
 
             String content = Objects.isNull(assistant) ? null : assistant.getContent();

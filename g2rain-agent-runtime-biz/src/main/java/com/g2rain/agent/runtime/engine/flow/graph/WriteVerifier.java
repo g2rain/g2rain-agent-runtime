@@ -20,7 +20,7 @@ import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.state.DefaultNodeScope;
 import com.g2rain.agent.runtime.engine.state.EvidenceFlow;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;

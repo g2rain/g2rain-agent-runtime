@@ -32,7 +32,7 @@ import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;

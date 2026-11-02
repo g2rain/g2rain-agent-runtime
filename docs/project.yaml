@@ -50,7 +50,7 @@ commands:
   verify: mvn clean verify
   run: mvn -pl g2rain-agent-runtime-startup -am spring-boot:run
   codegen: mvn g2rain-crafter:bootstrap
-  image: ./build.sh <tag>
+  image: ./build.sh <version> [local|push]
 
 architectureRules:
   - 模块依赖方向固定为 startup -> biz -> api

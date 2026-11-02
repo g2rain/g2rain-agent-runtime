@@ -11,10 +11,11 @@ import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.prompt.GoalGatePrompt;
+import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.json.JsonCodec;
@@ -177,7 +178,8 @@ public final class DefaultGoalGate implements GoalGate {
     private @Nullable GoalGateAnswer verify(GoalEvidencePack pack, int maxChars, @Nullable String model) {
         GoalGateView view = GoalGateView.from(pack, maxChars);
         ChatMessage assistant = OpenAiChatClientConverter.firstMessage(modelGateway.chat(ModelUse.GOAL_GATE, model,
-            ChatCompletionRequests.of().system(GoalGatePrompt.SYSTEM).user(GoalGatePrompt.USER.formatted(JSON.obj2str(view))).build()
+            ChatCompletionRequests.of().system(GoalGatePrompt.SYSTEM.formatted(RequestLocale.tag()))
+                .user(GoalGatePrompt.USER.formatted(JSON.obj2str(view))).build()
         ));
         if (Objects.isNull(assistant) || Strings.isBlank(assistant.getContent())) {
             return null;

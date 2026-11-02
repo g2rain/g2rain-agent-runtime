@@ -4,15 +4,19 @@
 
 # g2rain-agent-runtime
 
-> 下一代AI软件开发范式，AI原生Agent平台，开源的企业级SaaS底座。
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-25-437291?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.4-586069?logo=spring&logoColor=white)](https://spring.io/projects/spring-cloud)
+[![Maven](https://img.shields.io/badge/build-Maven-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 
-谷雨 Agent 的运行时执行服务。它把 Agent 配置、用户输入、模型能力和工具能力组织为可追踪、可恢复的任务执行过程，并通过 SSE 持续返回对话进度与最终结果。
+G2rain（谷雨）是面向企业的开源智能体平台，连接模型、知识与业务工具，以 SaaS 基座和应用开发工具链支撑智能应用落地。智能体平台已开源，具体组件、版本与接入方式以各责任仓库的说明为准。`g2rain-agent-runtime` 是其中的 Agent 运行时执行服务：它把 Agent 配置、用户输入、模型能力和工具能力组织为可追踪、可恢复的任务执行过程，并通过 SSE 持续返回对话进度与最终结果；它不代表或替代整个平台能力。
 
-[官网](https://www.g2rain.com) · [Issues](https://github.com/g2rain/g2rain/issues) · [Discussions](https://github.com/g2rain/g2rain/discussions)
+[官网](https://www.g2rain.com) · [完整文档](docs/index.md) · [中央架构 Profile](https://github.com/g2rain/g2rain/tree/architecture-v1.0.0/docs/architecture/profiles/java-domain-service) · [架构说明](docs/architecture/overview.md) · [代码规范](docs/development/code-conventions.md) · [Issues](https://github.com/g2rain/g2rain/issues) · [Discussions](https://github.com/g2rain/g2rain/discussions)
 
-## 平台定位
+## 项目定位
 
-`g2rain-agent-runtime` 位于谷雨 AI Agent 平台的执行层：它加载 Agent Studio 管理的 Agent 与技能配置，经 Model Nexus 调用模型、经 MCP Registry 调用工具，并把可追踪的任务状态和流式结果提供给上游应用。
+`g2rain-agent-runtime` 位于平台 Agent 执行层：它加载 Agent Studio 管理的 Agent 与技能配置，经 Model Nexus 调用模型、经 MCP Registry 调用工具，并把可追踪的任务状态和流式结果提供给上游应用。平台的 SaaS 基座、知识库、部署编排、身份权限、前端应用与商业化规划分别由其他组件和文档负责。
 
 ## 功能概览
 
@@ -53,9 +57,35 @@ flowchart LR
 
 模块依赖方向固定为：`startup → biz → api`。
 
-## 本地启动
+## 技术栈
 
-前置条件：JDK 25、Maven，以及可用的 MySQL、Redis 与所依赖的服务。运行时默认使用 `nacos` 配置；本地联调可显式启用 `dev` profile，并在本机安全地配置数据源和依赖服务。
+| 类别 | 技术 |
+| --- | --- |
+| 运行时 | Java 25、Spring Boot 4.1.2、Spring Cloud 2025.1.4、Spring AI 2.0.2 |
+| 数据访问与状态 | MyBatis、MySQL、Redis、Redisson |
+| 平台集成 | Nacos、OpenFeign、MCP SDK、Agent Studio、Model Nexus、MCP Registry |
+| API 与文档 | Spring Web、Jakarta Validation、OpenAPI、SSE |
+| 构建与部署 | Maven、Jib、Docker |
+| 测试 | JUnit 5、Spring Boot Test |
+
+## 快速开始
+
+### 环境
+
+- JDK 25
+- Maven 3.9+
+- MySQL、Redis、Nacos
+- Agent Studio、Model Nexus、MCP Registry
+
+运行时默认使用 `nacos` 配置；本地联调可显式启用 `dev` profile，并在本机安全地配置数据源和依赖服务。
+
+### 构建与测试
+
+```bash
+mvn clean verify
+```
+
+### 启动服务
 
 ```powershell
 mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.profiles=dev"
@@ -80,7 +110,16 @@ mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.prof
 | 目标 | 命令 | 说明 |
 | --- | --- | --- |
 | 构建与验证 | `mvn clean verify` | 执行 Maven 验证生命周期。 |
-| 构建本地镜像 | `./build.sh <tag>` | 使用 Jib 构建 `g2rain/g2rain-agent-runtime:<tag>`。 |
+| 构建本地镜像 | `./build.sh 1.0.0` | 先执行完整 Maven 构建与测试，再用 Jib 构建并载入本地 Docker。需要 Docker daemon。 |
+
+## GHCR 镜像
+
+- 镜像地址：`ghcr.io/g2rain/g2rain-agent-runtime`。
+- 稳定版使用 `1.0.0` 这类版本标签，并同时发布 `sha-<完整提交 SHA>` 可追溯标签；不会更新 `latest`。
+- 包公开后可拉取：`docker pull ghcr.io/g2rain/g2rain-agent-runtime:1.0.0`。
+- 仅推送精确格式的 `v<major>.<minor>.<patch>` Git tag 才会触发发布；tag 提交必须在 `main` 历史中，并含同名发布说明和匹配的 Maven 版本。普通分支、Pull Request 和手动触发不会发布。
+
+完整的 GHCR 权限、首次公开、发布顺序、配置与部署说明见[构建与部署](docs/operations/deployment.md#ghcr-发布)。镜像发布不代表在线演示可用，也不代表已在目标环境完成部署验证。
 
 ## 接口说明
 
@@ -113,14 +152,19 @@ mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.prof
 - 工具调用可能产生外部副作用；恢复或重试前必须依据调用记录和幂等策略判定。
 - 服务无法启动时，优先检查激活的 profile、Nacos、MySQL、Redis，以及 Studio、Model Nexus、MCP Registry 的连通性。
 
-## 文档入口
+## 项目文档
 
-- [项目文档索引](docs/index.md)
-- [运行状态模型](docs/STATE_SPEC.md)
-- [SSE 事件约定](docs/SSE_EVENTS.md)
-- [技能使用指南](docs/SKILL_GUIDE.md)
-- [接口契约](docs/CONTRACT_SPEC.md)
-- [已知问题](docs/KNOWN_ISSUES.md)
+| 场景 | 入口 |
+| --- | --- |
+| 文档首页 | [docs/index.md](docs/index.md) |
+| 中央基线与项目差异 | [Java Domain Service 1.0.0](https://github.com/g2rain/g2rain/tree/architecture-v1.0.0/docs/architecture/profiles/java-domain-service) · [接入项](docs/architecture/deviations.md) |
+| 架构与模块职责 | [架构总览](docs/architecture/overview.md) · [模块职责](docs/architecture/modules.md) |
+| 运行状态与接口 | [状态模型](docs/STATE_SPEC.md) · [SSE 事件](docs/SSE_EVENTS.md) · [接口契约](docs/CONTRACT_SPEC.md) |
+| 本地开发与测试 | [本地开发](docs/development/local-development.md) · [测试策略](docs/development/testing.md) |
+| 配置、安全与运维 | [配置说明](docs/operations/configuration.md) · [安全边界](docs/security/security-boundaries.md) · [可观测性](docs/operations/observability.md) |
+| 镜像与部署 | [构建与部署](docs/operations/deployment.md) |
+| 发布记录 | [docs/releases/README.md](docs/releases/README.md) |
+| 已知问题 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
 
 ## 参与贡献
 

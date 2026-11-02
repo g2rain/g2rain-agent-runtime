@@ -1,10 +1,11 @@
-package com.g2rain.agent.runtime.enums;
+package com.g2rain.agent.runtime.i18n;
 
 
+import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.common.utils.Strings;
 
 /**
- * 用户可见文案：码 + zh-CN 默认句。后续可迁 i18n，业务只引用枚举。
+ * Agent Runtime 用户可见文案：维护稳定的 message code 和中文兜底句；多语言文案由 Infra 提供。
  *
  * @author alpha
  * @since 2026/10/3
@@ -52,7 +53,6 @@ public enum RuntimeMessage {
     STEP_VERIFY_MET("step.verify.met", "目标达成"),
     STEP_VERIFY_UNMET("step.verify.unmet", "目标未完全达成"),
     STEP_VERIFY_FAILED("step.verify.failed", "校验未完成，已整理现有结果"),
-    STEP_MODEL_TOKENS("step.model.tokens", "{tokens} tokens"),
     STEP_TOOL("step.tool", "调用 {name}"),
     STEP_TOOL_DEFAULT("step.tool.default", "调用工具"),
     STEP_TOOL_OK("step.tool.ok", "成功"),
@@ -98,7 +98,7 @@ public enum RuntimeMessage {
      * @return 文案
      */
     public String text() {
-        return zhCn;
+        return RuntimeMessageRegistry.resolve(code, RequestLocale.tag(), zhCn);
     }
 
     /**
@@ -110,8 +110,9 @@ public enum RuntimeMessage {
      */
     public String text(String name, String value) {
         if (Strings.isBlank(name)) {
-            return zhCn;
+            return text();
         }
-        return zhCn.replace("{" + name + "}", Strings.defaultIfBlank(value, ""));
+
+        return text().replace("{" + name + "}", Strings.defaultIfBlank(value, ""));
     }
 }

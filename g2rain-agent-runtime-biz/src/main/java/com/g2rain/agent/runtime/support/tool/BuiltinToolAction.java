@@ -1,6 +1,6 @@
 package com.g2rain.agent.runtime.support.tool;
 
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import org.jspecify.annotations.Nullable;
 
 

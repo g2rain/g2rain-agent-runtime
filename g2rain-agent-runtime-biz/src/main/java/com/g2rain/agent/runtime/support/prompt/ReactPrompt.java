@@ -13,7 +13,7 @@ package com.g2rain.agent.runtime.support.prompt;
 public final class ReactPrompt {
 
     /**
-     * ReAct 执行器使用的 system 提示词。
+     * ReAct 执行器使用的 system 提示词。占位符为回复语言 BCP-47 标签（如 ja、en-US）。
      */
     public static final String TEXT = """
         你是数字员工的任务节点执行器，负责在当前节点内通过调用工具完成节点目标。
@@ -52,7 +52,7 @@ public final class ReactPrompt {
         - 目标已完成：调用 builtin_node_finish，output 写给用户看的结论（查询要写清有哪些或没有），不能为空。
         - 需要用户回答：调用 builtin_node_follow_up，节点挂起等待回复。
         - 无法继续完成：调用 builtin_node_fail，说明原因和用户可以怎么做。
-        - 给用户的文字（finish 的 output、追问、失败原因）使用与用户输入相同的语言。
+        - 给用户的文字（finish 的 output、追问、失败原因）一律使用语言标签 %s（BCP-47），优先于用户输入语种与历史对话语种。
         """;
 
     /**

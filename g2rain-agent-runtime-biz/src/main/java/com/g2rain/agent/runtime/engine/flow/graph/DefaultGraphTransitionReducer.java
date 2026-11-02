@@ -11,7 +11,7 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;

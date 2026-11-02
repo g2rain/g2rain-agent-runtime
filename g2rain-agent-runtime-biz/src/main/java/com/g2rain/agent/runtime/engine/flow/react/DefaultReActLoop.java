@@ -27,7 +27,7 @@ import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.engine.tools.finish.NodeFinisher;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.enums.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
