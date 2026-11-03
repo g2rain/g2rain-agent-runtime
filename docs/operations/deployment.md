@@ -1,5 +1,17 @@
 # 构建、镜像与部署
 
+## Maven API 发布与双工作流顺序
+
+`publish-ghcr.yml` 在根目录执行 `mvn --batch-mode --no-transfer-progress clean install`，再在 Startup 模块执行 Jib 推送。镜像双标签成功后，`needs: publish` 的 job 调用本仓 `publish-maven.yml`；后者也支持手动 `workflow_dispatch`，所选提交必须属于 `origin/main` 历史，手动与自动调用通过同一并发组串行执行。
+
+Maven 发布使用 `-pl g2rain-agent-runtime-api -am clean deploy`，Reactor 仅选中父 POM `com.g2rain:g2rain-agent-runtime:1.0.0` 与 API `com.g2rain:g2rain-agent-runtime-api:1.0.0`（含 sources），不发布 Biz 或 Startup。目标仓库为 `https://maven.pkg.github.com/g2rain/g2rain-agent-runtime`。保留 flatten 的 `resolveCiFriendliesOnly` 配置以解析版本占位符。
+
+Maven 上传失败会使工作流失败，但先前推送的镜像不会回滚；两者不是事务。重复上传相同稳定版本可能冲突，不删除或覆盖既有版本，应按项目版本策略处理。
+
+消费者需在 POM 配置上述 repository，并在 Maven settings 的同名 server 中安全注入认证。跨仓库使用 `GITHUB_TOKEN` 读取须向消费仓库授予包访问权限；个人读取使用具备 `read:packages` 的 PAT classic，通过环境变量注入 settings，禁止提交 Token。GitHub Maven Packages 需要认证，区别于 Public GHCR 的匿名拉取。发布仓库还需具有 Maven 包写权限；维护者需检查包访问授权及组织 Packages 策略。
+
+本次本地离线 API verify 已确认 Reactor 范围，但在 `ModelHint.java` 编译时因当前解析到的 `g2rain-common` 缺少 `Strings.defaultIfBlank` 而失败；未运行远程 deploy，Maven 上传和消费者解析未验证。该失败需另行核对源码与依赖兼容性，不能由工作流变更解决。
+
 ## 构建与镜像边界
 
 | 操作 | 命令或位置 | 已覆盖的范围 | 不代表 |

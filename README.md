@@ -114,6 +114,8 @@ mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.prof
 
 ## GHCR 镜像
 
+镜像成功后自动调用 API Maven 发布工作流；也可手动运行 `publish-maven.yml`（所选提交须属于 `main`）。API 坐标为 `com.g2rain:g2rain-agent-runtime-api:1.0.0`，仓库为 `https://maven.pkg.github.com/g2rain/g2rain-agent-runtime`，消费认证见部署文档。
+
 - 镜像地址：`ghcr.io/g2rain/g2rain-agent-runtime`。
 - 稳定版使用 `1.0.0` 这类版本标签，并同时发布 `sha-<完整提交 SHA>` 可追溯标签；不会更新 `latest`。
 - 包公开后可拉取：`docker pull ghcr.io/g2rain/g2rain-agent-runtime:1.0.0`。
