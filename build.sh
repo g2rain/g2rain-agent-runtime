@@ -41,4 +41,4 @@ cd g2rain-agent-runtime-startup
 mvn --batch-mode --no-transfer-progress -DskipTests=true \
   compile "$JIB_GOAL" \
   "-Djib.to.image=${APP_IMAGE}:${TAG}" \
-  "${JIB_TAG_ARGS[@]}"
+  ${JIB_TAG_ARGS[@]+"${JIB_TAG_ARGS[@]}"}
