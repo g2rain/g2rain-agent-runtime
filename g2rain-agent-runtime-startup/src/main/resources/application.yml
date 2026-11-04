@@ -88,6 +88,10 @@ g2rain:
         timeout: 0
         ping-interval: 15s
 
+# g2rain-starter-spring-doc 已经实现, 但是未发版, 暂自行配置
+springdoc:
+  default-flat-param-object: true
+
 management:
   endpoints:
     web:
