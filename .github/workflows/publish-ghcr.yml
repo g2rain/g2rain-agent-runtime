@@ -77,7 +77,7 @@ jobs:
 
           RELEASE_NOTE="docs/releases/v${VERSION}.md"
           if ! git cat-file -e "${RELEASE_COMMIT}:${RELEASE_NOTE}" 2>/dev/null || \
-              [[ -z "$(git show "${RELEASE_COMMIT}:${RELEASE_NOTE}")" ]]; then
+              [[ -z "$(git show "${RELEASE_COMMIT}:${RELEASE_NOTE}" | tr -d '[:space:]')" ]]; then
             echo "Missing or empty release note at ${RELEASE_NOTE} in the tagged commit." >&2
             exit 1
           fi
@@ -131,3 +131,10 @@ jobs:
             echo "- \`${IMAGE}:${VERSION}\`"
             echo "- \`${IMAGE}:sha-${RELEASE_COMMIT}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  publish-api:
+    needs: publish
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-maven.yml
