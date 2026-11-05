@@ -73,8 +73,8 @@ public class DefaultGraphKernel implements GraphKernel {
             }
         }
 
-        // 按依赖把可跑节点推进到 READY，并取本波（当前按单节点调度）
-        List<TaskNode> wave = frame.graph().nextWave();
+        // 按依赖把可跑节点推进到 READY，并取本波（当前按单节点调度）；本轮焦点优先，唤醒的节点先执行
+        List<TaskNode> wave = frame.graph().nextWave(frame.currentNodeId());
         if (wave.isEmpty()) {
             // 没有可跑节点：交给空闲收口（挂起/失败/成功等）
             return new GraphStep.ResolveIdle();

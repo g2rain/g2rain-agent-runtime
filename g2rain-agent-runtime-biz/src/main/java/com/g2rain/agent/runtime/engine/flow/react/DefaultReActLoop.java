@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
+import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.react.ReActLoopContext;
@@ -13,6 +14,7 @@ import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
+import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -170,7 +172,7 @@ public class DefaultReActLoop implements ReActLoop {
             // 无 assistant：提醒并记停滞，超限则失败
             if (Objects.isNull(assistant)) {
                 if (nudged(history, stall, maxStall)) {
-                    return stalledFail();
+                    return stalledFail(context, stall);
                 }
 
                 continue;
@@ -186,7 +188,7 @@ public class DefaultReActLoop implements ReActLoop {
             // 有正文但无工具调用：同样提醒并记停滞
             if (Collections.isEmpty(toolCalls)) {
                 if (nudged(history, stall, maxStall)) {
-                    return stalledFail();
+                    return stalledFail(context, stall);
                 }
 
                 continue;
@@ -235,7 +237,7 @@ public class DefaultReActLoop implements ReActLoop {
                     skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_FINISH_REJECTED.text());
                     stall.recordStall();
                     if (stall.exceeded(maxStall)) {
-                        return stalledFail();
+                        return stalledFail(context, stall);
                     }
 
                     break;
@@ -243,12 +245,19 @@ public class DefaultReActLoop implements ReActLoop {
 
                 // 按结论类型推进：非成功都打断本波改下一轮，其中停滞类记一次无进展；成功清零
                 Outcome outcome = observation.outcome();
+                // 越界写被拒：该写操作归其他节点，本节点已做完自己的业务调用时直接交接收口
+                if (handOver(toolContext, toolName, observation)) {
+                    skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_NODE_EXITED.text());
+                    return exited(toolContext);
+                }
+
                 if (!outcome.advances()) {
                     skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_PREVIOUS_FAILED.text());
                     if (outcome.stalls()) {
-                        stall.recordStall();
+                        String errorCode = Objects.isNull(observation.errorCode()) ? null : observation.errorCode().code();
+                        stall.recordStall(toolLabel(context.contract(), toolName), errorCode);
                         if (stall.exceeded(maxStall)) {
-                            return stalledFail();
+                            return stalledFail(context, stall);
                         }
                     }
 
@@ -373,13 +382,77 @@ public class DefaultReActLoop implements ReActLoop {
     }
 
     /**
-     * 连续无进展失败回执。
+     * 越界写被拒后的交接收口：本节点已成功完成过业务调用时，以交接文案替模型 finish。
      *
+     * <p>结束门槛仍由 {@link NodeFinisher} 判定；未通过时清掉拒绝原因，循环照常回给模型。</p>
+     *
+     * @param ctx         节点执行现场
+     * @param toolName    被拒的写工具
+     * @param observation 本次观测
+     * @return 已收口为 {@code true}
+     */
+    private boolean handOver(ToolExecutionContext ctx, String toolName, Observation observation) {
+        if (observation.errorCode() != RuntimeErrorCode.WRITE_OUT_OF_SCOPE
+            || ctx.scope().evidence().stream().noneMatch(EvidenceHead::done)) {
+            return false;
+        }
+
+        TaskNode node = ctx.getGraph().find(ctx.getNodeId());
+        TaskNode owner = ctx.getGraph().targetOwner(toolName, ctx.getNodeId());
+        String output = RuntimeMessage.NODE_HANDED_OVER.text(
+            "step", titleOf(node), "owner", titleOf(owner)
+        );
+        if (nodeFinisher.finish(ctx, output)) {
+            Trace.at(TraceStage.NODE, "handed_over").kv("tool", toolName)
+                .kv("owner", Objects.isNull(owner) ? null : owner.getNodeId()).info();
+            return true;
+        }
+
+        ctx.clearFinishRejected();
+        return false;
+    }
+
+    /**
+     * 节点在提示中的名称：标题，空则目标，再空则节点 ID。
+     *
+     * @param node 节点；可空
+     * @return 名称；节点为空时为空串
+     */
+    private static String titleOf(@Nullable TaskNode node) {
+        if (Objects.isNull(node)) {
+            return "";
+        }
+
+        return Strings.defaultIfBlank(node.getTitle(), Strings.defaultIfBlank(node.getObjective(), node.getNodeId()));
+    }
+
+    /**
+     * 连续无进展失败回执：带步骤名称，最后一次无进展是工具调用时再带上工具名称与错误码。
+     *
+     * @param context 循环上下文
+     * @param stall   停滞跟踪
      * @return 失败结果
      */
-    private static ReActLoopResult stalledFail() {
-        Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.STALLED).error();
-        return new ReActLoopResult(NodeStatus.FAILED, RuntimeMessage.NODE_STALLED.text(), null, null);
+    private static ReActLoopResult stalledFail(ReActLoopContext context, StallTracker stall) {
+        Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.STALLED)
+            .kv("lastTool", stall.lastTool()).kv("lastErrorCode", stall.lastErrorCode()).error();
+        String message = RuntimeMessage.NODE_STALLED.text("step", titleOf(context.node()));
+        if (Strings.isNotBlank(stall.lastTool())) {
+            message += RuntimeMessage.NODE_STALLED_LAST.text("tool", stall.lastTool(), "code", stall.lastErrorCode());
+        }
+        return new ReActLoopResult(NodeStatus.FAILED, message, null, null);
+    }
+
+    /**
+     * 工具在提示中的名称：契约 label，缺省为注册名。
+     *
+     * @param contract 技能契约；可空
+     * @param toolName 工具注册名
+     * @return 工具名称
+     */
+    private static String toolLabel(@Nullable SkillContract contract, String toolName) {
+        ToolSpec spec = Objects.isNull(contract) ? null : contract.getTools().get(toolName);
+        return Objects.isNull(spec) ? toolName : Strings.defaultIfBlank(spec.getLabel(), toolName);
     }
 
     /**

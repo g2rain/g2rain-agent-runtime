@@ -6,7 +6,7 @@ import com.g2rain.common.utils.Strings;
 import java.util.Objects;
 
 /**
- * 给模型的纠偏/观察文案：码 + zh-CN 默认句。用户可见文案见 {@link RuntimeMessage}。
+ * 给模型的纠偏/观察文案：码 + zh-CN 默认句。
  *
  * <p>工具观测的非成功文案分两类：原因（说明发生了什么）与下一步（{@code NEXT_*}，说明模型该做什么），
  * 由观测统一拼成"原因。下一步：…"。例：{@code ARG_MISSING_REQUIRED} + {@code NEXT_FILL_ARGS}。</p>
@@ -37,6 +37,7 @@ public enum ModelHint {
 
     WRITE_NEED_APPROVAL("model.write.need_approval", "该写操作须经用户确认"),
     WRITE_REUSED("model.write.reused", "已复用历史写证据"),
+    WRITE_OUT_OF_SCOPE("model.write.out_of_scope", "[{tool}] 是步骤「{node}」的完成目标，由该步骤执行"),
 
     FINGERPRINT_TRIP("model.fingerprint.trip", "已连续用相同参数调用 [{tool}]，本节点已终止"),
 
@@ -76,6 +77,7 @@ public enum ModelHint {
     NEXT_STATE_KEY("model.next.state_key", "换一个未被保留的便签键"),
     NEXT_EVIDENCE_ID("model.next.evidence_id", "evidenceId 填工具结果中返回的证据 ID"),
     NEXT_DELEGATE("model.next.delegate", "skillKey 只能取可委派的技能：{skills}；没有合适的技能时调用 builtin_node_fail 说明原因"),
+    NEXT_FINISH_SCOPE("model.next.finish_scope", "不要调用该写工具；按 objective 完成本节点后调用 builtin_node_finish"),
     NEXT_NO_DELEGATE("model.next.no_delegate", "不要再委派；直接完成本节点，或调用 builtin_node_fail 说明原因"),
     NEXT_CALL_WRITE("model.next.call_write", "先直接调用写工具，被拦下要求确认后再调用 builtin_node_approval"),
     NEXT_APPROVAL_TOOL("model.next.approval_tool", "toolName 改填 {tool} 后重新申请"),
