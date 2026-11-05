@@ -254,7 +254,9 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     FOLLOW_UP_ANSWERED("agent_runtime.42247", "用户已回答该追问：{0:answer}"),
 
-    FOLLOW_UP_UNGROUNDED("agent_runtime.42248", "追问没有依据：{0:detail}");
+    FOLLOW_UP_UNGROUNDED("agent_runtime.42248", "追问没有依据：{0:detail}"),
+
+    WRITE_OUT_OF_SCOPE("agent_runtime.42249", "写操作不在本节点范围内：{0:toolName}");
 
     /**
      * 错误码字符串（如 {@code agent_runtime.40401}）；由 {@link #code()} 读出供全局异常处理器消费。

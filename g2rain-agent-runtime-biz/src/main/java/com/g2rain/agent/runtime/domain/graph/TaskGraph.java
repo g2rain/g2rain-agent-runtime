@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>按节点 dependsOn 自动补边</li>
  *   <li>按 ID 查找、找挂起节点、唤醒焦点</li>
- *   <li>{@link #nextWave()}：算出本波可跑节点（当前实现单节点调度）</li>
+ *   <li>{@link #nextWave(String)}：算出本波可跑节点，本轮焦点优先（当前实现单节点调度）</li>
  *   <li>{@link #resumeAwaiting()}：委派子节点终态后回醒父节点，不连锁失败</li>
  * </ul>
  * 方法均同步或依赖可变列表，多线程场景需外部串行化访问。
@@ -60,6 +60,27 @@ public class TaskGraph {
         node.getDependsOn().forEach(from -> edges.add(
             new TaskEdge(from, node.getNodeId())
         ));
+    }
+
+    /**
+     * 以该写工具为完成目标、尚未结束的其他节点。
+     *
+     * <p>规划把写操作分给了谁，就由谁执行；其他节点抢先调用会被写范围门拒绝。</p>
+     *
+     * @param toolName     写工具注册名
+     * @param exceptNodeId 当前节点 ID，不计入
+     * @return 第一个匹配节点；没有则 null
+     */
+    public @Nullable TaskNode targetOwner(String toolName, String exceptNodeId) {
+        if (Collections.isEmpty(nodes)) {
+            return null;
+        }
+
+        return nodes.stream()
+            .filter(node -> !node.getNodeId().equals(exceptNodeId))
+            .filter(node -> toolName.equals(node.getTarget()) && !node.getStatus().isTerminal())
+            .findFirst()
+            .orElse(null);
     }
 
     /**
@@ -206,13 +227,15 @@ public class TaskGraph {
      * 计算下一波可执行节点，并在必要时把 PENDING 升为 READY。
      * <p>
      * 步骤：先 {@link #resumeAwaiting()}；再收集已 unlocksDownstream 的节点 ID；
-     * 遍历节点，跳过不可调度的，依赖未齐的也跳过；依赖齐的 PENDING 升 READY 后加入波。
+     * 焦点节点排在最前，其余按列表顺序遍历，跳过不可调度的，依赖未齐的也跳过；依赖齐的 PENDING 升 READY 后加入波。
      * 当前实现在加入第一个节点后 break（单节点调度）；要同级并行时去掉该 break。
+     * 焦点优先保证本轮唤醒的节点（确认审批、回答追问）先执行，而不是被列表中靠前的其他节点抢先。
      * </p>
      *
+     * @param focusNodeId 本轮焦点节点 ID；可空
      * @return 本波节点列表；图空则为空列表（不可变）
      */
-    public List<TaskNode> nextWave() {
+    public List<TaskNode> nextWave(@Nullable String focusNodeId) {
         if (Collections.isEmpty(this.nodes)) {
             return List.of();
         }
@@ -228,7 +251,7 @@ public class TaskGraph {
 
         // 收集本波可跑节点
         List<TaskNode> wave = new ArrayList<>();
-        for (TaskNode node : this.nodes) {
+        for (TaskNode node : focusFirst(focusNodeId)) {
             NodeStatus status = node.getStatus();
             // RUNNING / SUSPENDED / 终态等一律不入波
             if (status.isNotSchedulable()) {
@@ -257,6 +280,24 @@ public class TaskGraph {
 
         // 交出本波列表（可能空）
         return wave;
+    }
+
+    /**
+     * 取波遍历顺序：焦点节点在前，其余保持列表顺序。
+     *
+     * @param focusNodeId 本轮焦点节点 ID；可空或不在图中时直接返回原列表
+     * @return 遍历顺序
+     */
+    private List<TaskNode> focusFirst(@Nullable String focusNodeId) {
+        TaskNode focus = Strings.isBlank(focusNodeId) ? null : find(focusNodeId);
+        if (Objects.isNull(focus)) {
+            return nodes;
+        }
+
+        List<TaskNode> ordered = new ArrayList<>(nodes.size());
+        ordered.add(focus);
+        nodes.stream().filter(node -> node != focus).forEach(ordered::add);
+        return ordered;
     }
 
     /**

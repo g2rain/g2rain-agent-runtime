@@ -27,6 +27,7 @@ public enum RuntimeMessage {
     REPLY_NEED_INPUT("reply.need_input", "还需要您补充一些信息。"),
     REPLY_CANCELLED("reply.cancelled", "已取消。"),
     REPLY_REJECTED("reply.rejected", "已取消，未执行：{action}。如需换个做法，直接告诉我。"),
+    REPLY_REJECTED_DONE("reply.rejected_done", "已完成：{steps}。"),
     ERROR_GENERIC("error.generic", "处理没有成功，请稍后再试。"),
     ERROR_MODEL_QUOTA("error.model_quota", "模型服务额度不足，请联系管理员。"),
     ERROR_MODEL_AUTH("error.model_auth", "模型访问密钥无效，请联系管理员。"),
@@ -39,7 +40,9 @@ public enum RuntimeMessage {
     STEP_WAITING("step.waiting", "等您回复"),
     STEP_CANCELLED("step.cancelled", "已取消"),
     STEP_FAILED("step.failed", "未完成"),
-    NODE_STALLED("node.stalled", "连续多轮没有进展，已停止处理。"),
+    NODE_STALLED("node.stalled", "「{step}」连续多轮没有进展，已停止处理。"),
+    NODE_STALLED_LAST("node.stalled_last", "最后一次：{tool}未成功（{code}）。"),
+    NODE_HANDED_OVER("node.handed_over", "已完成「{step}」，「{owner}」由后续步骤执行。"),
     VERIFY_ASK("verify.ask", "上次的写操作结果不确定，请确认是否已经完成。"),
     STATUS_WORKING("status.working", "正在处理"),
     STEP_TITLE_DEFAULT("step.title.default", "处理您的请求"),
@@ -114,5 +117,26 @@ public enum RuntimeMessage {
         }
 
         return text().replace("{" + name + "}", Strings.defaultIfBlank(value, ""));
+    }
+
+    /**
+     * 替换多组具名占位符：{@code name, value, name, value, ...}。
+     *
+     * @param named 占位名与替换值交替排列
+     * @return 文案
+     */
+    public String text(String... named) {
+        String out = text();
+        if (named.length < 2) {
+            return out;
+        }
+
+        for (int i = 0; i + 1 < named.length; i += 2) {
+            if (Strings.isNotBlank(named[i])) {
+                out = out.replace("{" + named[i] + "}", Strings.defaultIfBlank(named[i + 1], ""));
+            }
+        }
+
+        return out;
     }
 }

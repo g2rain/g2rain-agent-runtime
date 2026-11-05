@@ -304,7 +304,7 @@
 | `title` | String? | 节点标题，用作过程提示 |
 | `objective` | String? | 节点目标 |
 | `skillKey` | String? | 执行的技能 |
-| `target` | String? | 完成目标：要完成的写工具；取值顺序为规划输出 → 契约 `target` → 首个实际写调用，见契约规范第 10 节 |
+| `target` | String? | 完成目标：要完成的写工具；取值顺序为规划输出 → 契约 `target` → 首个实际写调用（该工具已是其他未结束节点的目标时不认领），见契约规范第 10 节 |
 | `targetClaimed` | boolean | 完成目标是否由首个写调用自动记录；为 true 时 GoalGate 不直接采用节点结论，交模型核验 |
 | `result` | String? | 节点结论：完成时 finish 的 output，GoalGate 据此核验目标并合成答复 |
 | `status` | NodeStatus | 节点状态，默认 `PENDING` |
@@ -741,7 +741,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 检测到不确定写操作且需用户核实 | → `SUSPENDED` |
 | 本轮异常 | 当前节点和运行中的节点 → `FAILED` |
 
-调度规则：每次只执行一个可调度节点。
+调度规则：每次只执行一个可调度节点；本轮焦点节点（被唤醒的节点）可调度且依赖满足时优先执行，其余按列表顺序（见 [节点写操作范围约束](design/node-write-scope.md) 第 10 节）。
 
 ---
 
