@@ -229,12 +229,14 @@ public final class ToolExecutionContext {
 
     /**
      * 节点尚无完成目标时，把本次实际发起的写调用记为目标；之后 finish 须等它成功。
+     * <p>该写工具已是其他未结束节点的目标时不认领，交写范围门拒绝。</p>
      *
      * @param toolName 本次调用的工具注册名
      * @return 本次记为目标时为 {@code true}
      */
     public boolean claimTarget(String toolName) {
-        if (Strings.isNotBlank(node.getTarget()) || Objects.isNull(skill) || !skill.writeTools().contains(toolName)) {
+        if (Strings.isNotBlank(node.getTarget()) || Objects.isNull(skill) || !skill.writeTools().contains(toolName)
+            || Objects.nonNull(getGraph().targetOwner(toolName, node.getNodeId()))) {
             return false;
         }
 
