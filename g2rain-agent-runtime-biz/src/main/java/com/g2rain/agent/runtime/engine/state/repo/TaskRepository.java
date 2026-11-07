@@ -129,6 +129,7 @@ public class TaskRepository {
             }
             TaskCheckpoint checkpoint = new TaskCheckpoint();
             checkpoint.setCheckpointId(vo.getCheckpointId());
+            checkpoint.setNodeId(vo.getNodeId());
             checkpoint.setType(CheckpointType.valueOf(vo.getType()));
             checkpoint.setQuestion(vo.getQuestion());
             checkpoint.setExpectedFields(parseStringList(vo.getExpectedFields()));
@@ -285,9 +286,7 @@ public class TaskRepository {
             }
 
             dto.setTaskId(taskId);
-            if (Objects.nonNull(metadata)) {
-                dto.setNodeId(metadata.getCurrentNodeId());
-            }
+            dto.setNodeId(checkpoint.getNodeId());
             dto.setType(checkpoint.getType().name());
             dto.setQuestion(checkpoint.getQuestion());
             dto.setExpectedFields(RepoSupport.toJson(checkpoint.getExpectedFields()));
@@ -309,8 +308,9 @@ public class TaskRepository {
      * @param taskId    任务 id
      * @param action    本次恢复动作
      * @param messageId 触发恢复的消息 id
+     * @param actedAt   恢复动作发生时间（epoch ms）
      */
-    public void consumeCheckpoint(String taskId, ResumeAction action, String messageId) {
+    public void consumeCheckpoint(String taskId, ResumeAction action, String messageId, long actedAt) {
         if (Strings.isBlank(taskId)) {
             return;
         }
@@ -327,7 +327,7 @@ public class TaskRepository {
             dto.setCheckpointId(checkpoint.getCheckpointId());
             dto.setMessageId(Strings.blankToNull(messageId));
             dto.setResumeAction(action.name());
-            dto.setActedAt(Moments.now());
+            dto.setActedAt(RuntimeUtils.timeOf(actedAt));
             taskResumeRecordService.save(dto);
             if (Objects.nonNull(checkpoint.getId())) {
                 taskCheckpointService.delete(checkpoint.getId());

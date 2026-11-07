@@ -62,11 +62,6 @@ public class TaskResumeRecordPo extends BasePo {
     private LocalDateTime actedAt;
 
     /**
-     * 动作载荷
-     */
-    private String payload;
-
-    /**
      * 删除标识[0:未删除, 1:已删除]
      */
     private Boolean deleteFlag;

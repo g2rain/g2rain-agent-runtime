@@ -130,6 +130,13 @@ public interface TurnScope {
     Optional<DialogueMessage> reply();
 
     /**
+     * 记下本轮实际调用的模型，最终回复按最后一次调用落库。
+     *
+     * @param model 模型服务返回的模型名；空白忽略
+     */
+    void recordModel(@Nullable String model);
+
+    /**
      * @return 本轮执行过程
      */
     TurnProgress progress();

@@ -37,6 +37,13 @@ public enum BuiltinToolAction {
     FINISH(RuntimeMessage.STEP_FINISH),
 
     /**
+     * 跳过
+     * <p>
+     * 查询结果表明本节点的写操作不需要执行，节点以 SKIPPED 结束。
+     */
+    SKIP(RuntimeMessage.STEP_SKIP),
+
+    /**
      * 人工批准
      * <p>
      * 高风险操作先挂起，等人确认后再执行目标工具。

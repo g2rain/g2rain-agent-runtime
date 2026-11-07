@@ -113,6 +113,17 @@ public class StepEvents {
     }
 
     /**
+     * 记下本轮实际调用的模型；未绑定本轮时跳过。
+     *
+     * @param model 模型服务返回的模型名；可空
+     */
+    public void recordModel(@Nullable String model) {
+        if (TURN.isBound()) {
+            TURN.get().recordModel(model);
+        }
+    }
+
+    /**
      * 结束全部进行中的步骤；本轮出结果前调用，保证时间线完整。
      *
      * @param failed    本轮是否失败

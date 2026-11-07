@@ -25,6 +25,12 @@ public enum NodeEvent {
     LOOP_DONE,
 
     /**
+     * 循环跳过。
+     * <p>本节点的写操作不需要执行，节点进入 {@link NodeStatus#SKIPPED}。</p>
+     */
+    LOOP_SKIPPED,
+
+    /**
      * 循环挂起。
      * <p>需要追问或审批，节点进入 {@link NodeStatus#SUSPENDED}。</p>
      */

@@ -14,10 +14,12 @@ class TurnSceneTest {
 
     @Test
     void ofResolvesSceneFromRuntimeState() {
-        assertThat(TurnScene.of(false, false)).isEqualTo(TurnScene.FRESH);
-        assertThat(TurnScene.of(false, true)).isEqualTo(TurnScene.CONTINUITY);
-        assertThat(TurnScene.of(true, false)).isEqualTo(TurnScene.ACTIVE_TASK);
-        assertThat(TurnScene.of(true, true)).isEqualTo(TurnScene.ACTIVE_TASK);
+        assertThat(TurnScene.of(false, false, false)).isEqualTo(TurnScene.FRESH);
+        assertThat(TurnScene.of(false, true, false)).isEqualTo(TurnScene.CONTINUITY);
+        assertThat(TurnScene.of(true, false, false)).isEqualTo(TurnScene.ACTIVE_TASK);
+        assertThat(TurnScene.of(true, true, false)).isEqualTo(TurnScene.ACTIVE_TASK);
+        assertThat(TurnScene.of(true, true, true)).isEqualTo(TurnScene.WRITE_PENDING);
+        assertThat(TurnScene.of(false, true, true)).isEqualTo(TurnScene.CONTINUITY);
     }
 
     @Test
@@ -32,6 +34,12 @@ class TurnSceneTest {
     void lockedAgentCannotSwitch() {
         assertThat(TurnScene.ACTIVE_TASK.modes(false)).contains(TurnMode.SWITCH_AGENT);
         assertThat(TurnScene.ACTIVE_TASK.modes(true)).doesNotContain(TurnMode.SWITCH_AGENT)
+            .containsExactly(TurnMode.CANCEL_TASK, TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY);
+    }
+
+    @Test
+    void writePendingPutsInterruptionsBeforeContinue() {
+        assertThat(TurnScene.WRITE_PENDING.modes(true))
             .containsExactly(TurnMode.CANCEL_TASK, TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY);
     }
 

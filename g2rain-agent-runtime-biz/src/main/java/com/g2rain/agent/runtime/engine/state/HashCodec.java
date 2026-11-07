@@ -34,6 +34,11 @@ public final class HashCodec {
     public static final String GRAPH_EDGES = "_edges";
 
     /**
+     * 任务图节点顺序在 Hash 中使用的 field 名称；Hash 本身无序，恢复时按此还原规划顺序。
+     */
+    public static final String GRAPH_ORDER = "_order";
+
+    /**
      * 属性与嵌套 JSON 编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
@@ -42,6 +47,13 @@ public final class HashCodec {
      * 边列表反序列化类型。
      */
     private static final TypeReference<List<TaskEdge>> EDGES = new TypeReference<>() {
+
+    };
+
+    /**
+     * 节点顺序反序列化类型。
+     */
+    private static final TypeReference<List<String>> ORDER = new TypeReference<>() {
 
     };
 
@@ -127,7 +139,7 @@ public final class HashCodec {
     }
 
     /**
-     * 任务图 → Hash：field = nodeId，另有 {@link #GRAPH_EDGES}。
+     * 任务图 → Hash：field = nodeId，另有 {@link #GRAPH_EDGES} 与 {@link #GRAPH_ORDER}。
      *
      * @param graph 任务图
      * @return Hash
@@ -136,6 +148,7 @@ public final class HashCodec {
         Map<String, String> hash = new LinkedHashMap<>();
         graph.getNodes().forEach(node -> hash.put(node.getNodeId(), JSON.obj2str(node)));
         hash.put(GRAPH_EDGES, JSON.obj2str(graph.getEdges()));
+        hash.put(GRAPH_ORDER, JSON.obj2str(graph.getNodes().stream().map(TaskNode::getNodeId).toList()));
         return hash;
     }
 
@@ -150,16 +163,24 @@ public final class HashCodec {
             return null;
         }
         TaskGraph graph = new TaskGraph();
-        List<TaskNode> nodes = new ArrayList<>();
+        Map<String, TaskNode> byId = new LinkedHashMap<>();
         hash.forEach((field, raw) -> {
-            if (Objects.equals(field, GRAPH_EDGES) || Strings.isBlank(raw)) {
+            if (Objects.equals(field, GRAPH_EDGES) || Objects.equals(field, GRAPH_ORDER) || Strings.isBlank(raw)) {
                 return;
             }
             TaskNode node = JSON.str2obj(raw, TaskNode.class);
             if (Objects.nonNull(node)) {
-                nodes.add(node);
+                byId.put(node.getNodeId(), node);
             }
         });
+        // 按记下的规划顺序还原，顺序表之外的节点追加在后
+        List<TaskNode> nodes = new ArrayList<>();
+        String order = hash.get(GRAPH_ORDER);
+        if (Strings.isNotBlank(order)) {
+            List<String> nodeIds = Objects.requireNonNullElse(JSON.str2obj(order, ORDER), List.of());
+            nodeIds.stream().map(byId::remove).filter(Objects::nonNull).forEach(nodes::add);
+        }
+        nodes.addAll(byId.values());
         graph.setNodes(nodes);
         String edges = hash.get(GRAPH_EDGES);
         if (Strings.isBlank(edges)) {
