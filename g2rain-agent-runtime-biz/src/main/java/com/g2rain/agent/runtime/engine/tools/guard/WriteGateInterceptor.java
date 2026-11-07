@@ -99,7 +99,7 @@ public class WriteGateInterceptor implements ToolInterceptor {
             if (!request.context().approvedWrite()) {
                 // 记下被拦下的调用：审批只认这一次，待批参数取已过绑定与契约校验的值
                 request.context().scope().note(NodeNoteKey.GATED_WRITE,
-                    new PendingAction(request.toolName(), request.arguments(), RuntimeUtils.argsHash(args)));
+                    new PendingAction(request.toolName(), args, RuntimeUtils.argsHash(args)));
                 // 写调用本身正当，须先由模型申请确认：推迟，并在提示里给出下一步与工具名
                 return Optional.of(Observation.deferred(
                     RuntimeErrorCode.APPROVAL_REQUIRED,

@@ -2,6 +2,7 @@ package com.g2rain.agent.runtime.domain.state.task;
 
 
 import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 待确认的工具动作快照。
@@ -13,20 +14,20 @@ import org.jspecify.annotations.Nullable;
  * 本身不会执行工具，也不会因用户确认而自动改变状态。</p>
  *
  * @param toolName 待执行的工具名
- * @param args     工具参数（通常为序列化后的 JSON 字符串）
+ * @param args     工具参数 JSON 对象
  * @param argsHash 业务入参摘要；确认执行时须与现参一致
  * @author alpha
  * @since 2026/9/9
  */
-public record PendingAction(String toolName, String args, @Nullable String argsHash) {
+public record PendingAction(String toolName, JsonNode args, @Nullable String argsHash) {
 
     /**
      * 创建尚未计算参数摘要的待确认动作。
      *
      * @param toolName 工具名
-     * @param args     工具参数 JSON
+     * @param args     工具参数 JSON 对象
      */
-    public PendingAction(String toolName, String args) {
+    public PendingAction(String toolName, JsonNode args) {
         this(toolName, args, null);
     }
 }

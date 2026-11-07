@@ -85,11 +85,16 @@ public interface NodeScope {
     }
 
     /**
-     * 累加本节点 ReAct 轮次与 token。
-     *
-     * @param tokens 本轮消耗的 token
+     * 进入本节点下一 ReAct 轮次。
      */
-    void round(int tokens);
+    void round();
+
+    /**
+     * 累加本节点消耗的 token。
+     *
+     * @param tokens 本次模型调用消耗的 token；非负
+     */
+    void spend(long tokens);
 
     /**
      * @return 已累计的 ReAct 轮次（与 EvidenceHead.round / DialogueMessage.round 使用同一计数）

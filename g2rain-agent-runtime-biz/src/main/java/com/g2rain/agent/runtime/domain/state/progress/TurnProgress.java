@@ -42,7 +42,7 @@ public class TurnProgress {
      * @param title  标题
      * @param taskId 所属任务；可空
      * @param nodeId 所属节点；可空
-     * @param round  ReAct 轮次；可空
+     * @param round  ReAct 轮次；可空，为空时沿用上级步骤的轮次
      * @return 新步骤与因此自动完成的同环节步骤（先旧后新）
      */
     public List<ProgressStep> start(StepStage stage, String title, @Nullable String taskId,
@@ -61,7 +61,8 @@ public class TurnProgress {
         step.setTitle(title);
         step.setTaskId(taskId);
         step.setNodeId(nodeId);
-        step.setRound(round);
+        // 轮内的模型、工具步骤未给轮次时沿用所在轮次
+        step.setRound(Objects.nonNull(round) || Objects.isNull(parent) ? round : parent.getRound());
         step.setStartedAt(System.currentTimeMillis());
         steps.put(step.getStepId(), step);
         open.push(step);
@@ -93,9 +94,10 @@ public class TurnProgress {
             boolean self = step == target;
             step.setStatus(status);
             step.setElapsedMs(Math.toIntExact(Math.max(0, now - step.getStartedAt())));
+            // 连带结束的子步骤与目标同为失败时一并带上错误码
+            step.setErrorCode(status == StepStatus.FAILED ? errorCode : null);
             if (self) {
                 step.setDetail(detail);
-                step.setErrorCode(status == StepStatus.FAILED ? errorCode : null);
                 step.setExtra(extra);
             }
             changed.add(step);

@@ -74,12 +74,6 @@ public class TaskResumeRecordVo extends BaseVo {
     private LocalDateTime actedAt;
 
     /**
-     * 动作载荷
-     */
-    @Schema(description = "动作载荷")
-    private String payload;
-
-    /**
      * 删除标识[0:未删除, 1:已删除]
      */
     @Schema(description = "删除标识（0 未删除，1 已删除）", example = "false")

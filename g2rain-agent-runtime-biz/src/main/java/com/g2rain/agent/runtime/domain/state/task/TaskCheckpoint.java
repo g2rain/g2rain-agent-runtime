@@ -33,6 +33,11 @@ public class TaskCheckpoint {
     private @Nullable String checkpointId;
 
     /**
+     * 挂起的节点；恢复动作只作用于该节点。
+     */
+    private @Nullable String nodeId;
+
+    /**
      * 向用户展示的追问/确认文案。
      */
     private @Nullable String question;

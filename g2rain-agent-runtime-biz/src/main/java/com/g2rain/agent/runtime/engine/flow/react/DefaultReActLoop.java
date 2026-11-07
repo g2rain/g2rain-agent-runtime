@@ -41,6 +41,7 @@ import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.model.nexus.dto.ChatCompletionRequest;
+import com.g2rain.model.nexus.schema.ChatCompletionUsage;
 import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.schema.ChatToolCall;
 import com.g2rain.model.nexus.schema.ChatToolCallFunction;
@@ -142,10 +143,11 @@ public class DefaultReActLoop implements ReActLoop {
         StallTracker stall = new StallTracker();
 
         for (int round = 0; round < maxRounds; round++) {
-            // 下一轮开始时上一轮自动完成，节点结束时最后一轮随之结束
-            stepEvents.start(StepStage.ROUND, RuntimeMessage.STEP_ROUND.text("n", String.valueOf(round + 1)),
-                context.nodeId(), round + 1);
-            context.scope().round(0);
+            // 轮次按节点累计（跨轮续跑接着数），与消息、工具调用记录同一计数；下一轮开始时上一轮自动完成
+            context.scope().round();
+            int nodeRound = context.scope().rounds();
+            stepEvents.start(StepStage.ROUND, RuntimeMessage.STEP_ROUND.text("n", String.valueOf(nodeRound)),
+                context.nodeId(), nodeRound);
             // 调模型前先刷热态，崩溃后能按当前轮次恢复
             stateFacade.flush(context.frame().turn());
 
@@ -167,6 +169,7 @@ public class DefaultReActLoop implements ReActLoop {
                 .info();
 
             ChatCompletionResponse response = modelGateway.chat(ModelUse.REACT, context.frame().model(), request);
+            context.scope().spend(tokensOf(response));
             ChatMessage assistant = OpenAiChatClientConverter.firstMessage(response);
 
             // 无 assistant：提醒并记停滞，超限则失败
@@ -437,10 +440,22 @@ public class DefaultReActLoop implements ReActLoop {
         Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.STALLED)
             .kv("lastTool", stall.lastTool()).kv("lastErrorCode", stall.lastErrorCode()).error();
         String message = RuntimeMessage.NODE_STALLED.text("step", titleOf(context.node()));
-        if (Strings.isNotBlank(stall.lastTool())) {
-            message += RuntimeMessage.NODE_STALLED_LAST.text("tool", stall.lastTool(), "code", stall.lastErrorCode());
+        String tool = stall.lastTool();
+        if (Objects.nonNull(tool) && !tool.isBlank()) {
+            message += RuntimeMessage.NODE_STALLED_LAST.text("tool", tool, "code", Objects.toString(stall.lastErrorCode(), "-"));
         }
         return new ReActLoopResult(NodeStatus.FAILED, message, null, null);
+    }
+
+    /**
+     * 本次模型调用消耗的 token；响应未带用量时为 0。
+     *
+     * @param response 模型响应
+     * @return token 数
+     */
+    private static long tokensOf(ChatCompletionResponse response) {
+        ChatCompletionUsage usage = response.getUsage();
+        return Objects.isNull(usage) || Objects.isNull(usage.getTotalTokens()) ? 0 : usage.getTotalTokens();
     }
 
     /**
@@ -485,7 +500,7 @@ public class DefaultReActLoop implements ReActLoop {
         NodeStatus status = ctx.getNodeStatus();
         String message = switch (status) {
             case SUSPENDED -> ctx.getQuestion();
-            case DONE -> finishOutputText(ctx.getOutput());
+            case DONE, SKIPPED -> finishOutputText(ctx.getOutput());
             default -> ctx.getFailReason();
         };
         Trace.at(TraceStage.REACT, "exited")

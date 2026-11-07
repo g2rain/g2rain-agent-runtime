@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.node.StringNode;
 
 import java.io.IOException;
@@ -60,6 +61,11 @@ public class DefaultToolInvoker implements ToolInvoker {
      * 轨迹中工具入参摘要的字符数上限。
      */
     private static final int ARGS_BRIEF_MAX_CHARS = 200;
+
+    /**
+     * 响应信封中对模型无意义的字段。
+     */
+    private static final List<String> ENVELOPE_NOISE = List.of("requestId", "requestTime");
 
     /**
      * 按执行顺序排列的调用前后拦截器；构造时完成排序，调用期间只读。
@@ -194,17 +200,81 @@ public class DefaultToolInvoker implements ToolInvoker {
             String result = callback.call(request.arguments(), ctx);
             return successOf(result);
         } catch (RuntimeException ex) {
-            log.error("failed to doInvoke", ex);
+            logFailure(request, ex);
             // 不把原始异常抛出编排层，按原因收成失败观测
             return observationOf(request, ex);
         }
     }
 
     /**
+     * 按异常性质记录调用失败。
+     *
+     * <ul>
+     *   <li>内置工具的规则拒绝（{@link ToolRejectedException}）属正常控流，工具轨迹已记 REJECTED 与错误码，不再记录；</li>
+     *   <li>业务失败（{@link BusinessException}，且不是超时或连接失败）记 WARN，不带堆栈；</li>
+     *   <li>其余异常记 ERROR 并带堆栈。</li>
+     * </ul>
+     *
+     * @param request 当前工具调用请求
+     * @param ex      工具调用抛出的异常
+     */
+    private static void logFailure(ToolInvokeRequest request, RuntimeException ex) {
+        BusinessException business = businessOf(ex);
+        if (business instanceof ToolRejectedException && ToolCallbacks.isBuiltin(request.toolCallback())) {
+            return;
+        }
+
+        if (Objects.nonNull(business) && !transportFailure(ex)) {
+            log.warn("tool business failure tool={} errorCode={} message={}",
+                request.toolName(), business.getErrorCode(), business.getMessage());
+            return;
+        }
+
+        log.error("failed to doInvoke tool={}", request.toolName(), ex);
+    }
+
+    /**
+     * 异常链上是否有超时或连接失败。
+     *
+     * @param ex 工具调用抛出的异常
+     * @return 超时或连接失败时为 {@code true}
+     */
+    private static boolean transportFailure(Throwable ex) {
+        Throwable cause = ex;
+        while (Objects.nonNull(cause)) {
+            if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException
+                || cause instanceof ConnectException) {
+                return true;
+            }
+
+            cause = cause.getCause();
+        }
+
+        return false;
+    }
+
+    /**
+     * 去掉响应信封噪声后的文本；不是对象或没有噪声字段时原样返回。
+     *
+     * @param text 工具返回原文
+     * @param data 解析后的 JSON
+     * @return 给模型的文本
+     */
+    private static String withoutEnvelope(String text, @Nullable JsonNode data) {
+        if (!(data instanceof ObjectNode object) || ENVELOPE_NOISE.stream().noneMatch(object::has)) {
+            return text;
+        }
+        ObjectNode trimmed = object.deepCopy();
+        ENVELOPE_NOISE.forEach(trimmed::remove);
+        return JSON.obj2str(trimmed);
+    }
+
+    /**
      * 把工具返回文本转换为成功观测。
      *
      * <p>优先把返回值解析为 JSON；部分工具只返回普通文本时，文本会被包装成 JSON
-     * 字符串节点，仍然按成功处理，不会因为返回格式不是 JSON 而误判工具失败。</p>
+     * 字符串节点，仍然按成功处理，不会因为返回格式不是 JSON 而误判工具失败。
+     * 给模型的文本去掉响应信封里的请求标识与时间，结构化数据保持原样。</p>
      *
      * @param result 工具返回文本；允许为空
      * @return 包含文本摘要和结构化数据的成功观测
@@ -212,7 +282,8 @@ public class DefaultToolInvoker implements ToolInvoker {
     private Observation successOf(String result) {
         String text = Objects.toString(result, "");
         try {
-            return Observation.success(text, JSON.str2node(text));
+            JsonNode data = JSON.str2node(text);
+            return Observation.success(withoutEnvelope(text, data), data);
         } catch (RuntimeException _) {
             // 工具已执行成功；非 JSON 一律按文本节点记 SUCCESS
             StringNode data = JsonNodeFactory.instance.stringNode(text);

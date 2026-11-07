@@ -71,7 +71,6 @@ g2rain:
         sentinel-gap: 10m
         payload-inline-max-bytes: 524288
         payload-done-ttl: 1h
-        evidence-entities-max-chars: 2048
         state-size-log-enabled: true
         space-field-max-bytes: 65536
         message-max-bytes: 4096

@@ -55,7 +55,7 @@ public class NodeToolset {
     /**
      * 组装本节点可用工具：内置工具 + 技能声明的 MCP 工具。
      *
-     * <p>业务 MCP 按 {@code skill.toolNames()} 挂载；内置控流始终保留。
+     * <p>业务 MCP 按 {@code skill.toolNames()} 挂载；内置控流按需提供（委派、写产出、跳过）。
      * 节点完成目标（target）只供完成判定锚定，不收窄可见工具。
      *
      * @param node  当前节点
@@ -112,6 +112,10 @@ public class NodeToolset {
         }
         if (ToolCallbacks.is(tool, BuiltinToolAction.OUTPUT)) {
             return outputsUsed(node, frame);
+        }
+        // 跳过只给规划指定了写操作目标的节点：认领的目标已经写过，无可跳过
+        if (ToolCallbacks.is(tool, BuiltinToolAction.SKIP)) {
+            return Strings.isNotBlank(node.getTarget()) && !node.isTargetClaimed();
         }
         return true;
     }

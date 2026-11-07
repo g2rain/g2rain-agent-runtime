@@ -132,20 +132,6 @@ public class TaskGraphNodeDto extends BaseDto {
     private LocalDateTime finishedTime;
 
     /**
-     * 输入（带来源）
-     */
-    @Size(max = 1073741824)
-    @Schema(description = "输入（带来源）", maxLength = 1073741824)
-    private String inputs;
-
-    /**
-     * 输出（带来源）
-     */
-    @Size(max = 1073741824)
-    @Schema(description = "输出（带来源）", maxLength = 1073741824)
-    private String outputs;
-
-    /**
      * 节点空间（便签、轮次、动作）
      */
     @Size(max = 1073741824)

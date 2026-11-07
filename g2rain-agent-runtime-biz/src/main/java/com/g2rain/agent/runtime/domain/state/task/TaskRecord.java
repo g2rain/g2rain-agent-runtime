@@ -17,6 +17,9 @@ import java.util.Map;
  * @param goal      目标简述
  * @param status    终态
  * @param summary   finalMessage 前 500 字
+ * @param request   开任务时的用户原文（截断）；摘要会丢失的细节由此还原
+ * @param rejected  以拒绝结束时被拒绝的待批动作；否则为空
+ * @param goalMet   目标核验结论；未核验为空
  * @param entities  本任务抽出的会话记忆实体
  * @param artifacts {taskId, evidenceId} 列表
  * @param closedAt  结束时间毫秒
@@ -24,7 +27,8 @@ import java.util.Map;
  * @since 2026/10/3
  */
 public record TaskRecord(String taskId, String agentId, @Nullable String goal, TaskStatus status,
-                         @Nullable String summary, Map<String, EntityEntry> entities,
+                         @Nullable String summary, @Nullable String request, @Nullable RejectedAction rejected,
+                         @Nullable Boolean goalMet, Map<String, EntityEntry> entities,
                          List<Map<String, String>> artifacts, long closedAt) {
 
     /**

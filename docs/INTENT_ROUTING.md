@@ -49,7 +49,7 @@ DefaultTurnEntryGuard（入口，确定性规则，不调用模型）
  └─ 无挂起任务                                   → 交给调度器
 
 DefaultTurnDispatcher（调度器）
- ├─ 场景  scene = TurnScene.of(有活动任务, 有任务前情)
+ ├─ 场景  scene = TurnScene.of(有活动任务, 有任务前情, 有待确认写操作)
  ├─ 候选  指定 agentId 时只保留该员工，技能目录不截断
  ├─ 分类  DefaultIntentClassifier：SYSTEM + USER（完整模板，填入场景、上下文、用户原话）
  └─ 校正  settle()
@@ -71,10 +71,11 @@ DefaultFinalizer（收口，不改动）
 |---|---|---|---|
 | `FRESH` | 无活动任务，无前情 | START_FRESH、REPLY_ONLY | START_FRESH |
 | `CONTINUITY` | 无活动任务，有前情 | START_WITH_CONTEXT、START_FRESH、REPLY_ONLY | START_FRESH |
-| `ACTIVE_TASK` | 有 RUNNING / SUSPENDED 任务 | CANCEL_TASK、SWITCH_AGENT¹、REPLACE_TASK、CONTINUE_TASK、REPLY_ONLY | CONTINUE_TASK² |
+| `ACTIVE_TASK` | 有 RUNNING / SUSPENDED 任务，无待确认写操作 | CANCEL_TASK、SWITCH_AGENT¹、REPLACE_TASK、CONTINUE_TASK、REPLY_ONLY | CONTINUE_TASK |
+| `WRITE_PENDING` | 有 RUNNING / SUSPENDED 任务，断点上有待确认写操作 | CANCEL_TASK、REPLACE_TASK、SWITCH_AGENT¹、CONTINUE_TASK、REPLY_ONLY | CONTINUE_TASK² |
 
 ¹ 指定 agentId 时不可选。
-² 有待确认写操作时，经校正第 ② 步变为 UNCERTAIN。
+² 经校正第 ② 步变为 UNCERTAIN。WRITE_PENDING 单列规则、打断类在前：2026-11-07 联调中，用户在审批卡挂起时说「算了，不撤了」「先别改了，问个别的」，混在 ACTIVE_TASK 规则里被判为 CONTINUE_TASK，重弹同一张卡（见 [design/scenario-fixes.md](design/scenario-fixes.md) §4）。
 
 `UNCERTAIN` 不在任何场景的可选模式中，意图模型不输出它，只由校正第 ② 步产生。
 
@@ -193,6 +194,13 @@ public final class IntentPrompt {
         - 仍在推进当前任务，包括回答它的提问 → CONTINUE_TASK
         - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
 
+        WRITE_PENDING（有进行中的任务，且有一项操作等待用户确认，见 activeTask）：
+        - 不执行待确认的操作，也没有提出别的事项 → CANCEL_TASK
+        - 不执行待确认的操作，改办别的事（包括提出新的问题或要求）→ REPLACE_TASK
+        - 明确要求换一个数字员工 → SWITCH_AGENT（agentLocked=true 时不可用）
+        - 同意执行、回答确认问题，或要求修改待确认的操作 → CONTINUE_TASK
+        - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
+
         【选人规则】
         - 只有 START_FRESH、START_WITH_CONTEXT、SWITCH_AGENT 需要选人，从 agentCandidates 中选一个 agentId；其它模式 agentId 为 null。
         - 按候选职责和 skillCatalog 做语义匹配；表达口语化或模糊时选最贴近者，难以区分时选排在前面的；只有一个候选时直接选它。
@@ -260,7 +268,7 @@ import java.util.List;
  * 提示词中的场景规则与 {@link #modes(boolean)} 保持一致，调度器据此校正模型结论。</p>
  *
  * <pre>{@code
- * TurnScene scene = TurnScene.of(false, true);   // CONTINUITY
+ * TurnScene scene = TurnScene.of(false, true, false);   // CONTINUITY
  * scene.modes(false);                             // [START_WITH_CONTEXT, START_FRESH, REPLY_ONLY]
  * scene.fallback();                               // START_FRESH
  * }</pre>
@@ -285,7 +293,13 @@ public enum TurnScene {
      * 任务进行中：存在运行或挂起中的任务。
      */
     ACTIVE_TASK(TurnMode.CONTINUE_TASK, List.of(TurnMode.CANCEL_TASK, TurnMode.SWITCH_AGENT,
-        TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY));
+        TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY)),
+
+    /**
+     * 等待确认：任务进行中，且断点上有待确认的写操作。打断类模式排在前面。
+     */
+    WRITE_PENDING(TurnMode.CONTINUE_TASK, List.of(TurnMode.CANCEL_TASK, TurnMode.REPLACE_TASK,
+        TurnMode.SWITCH_AGENT, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY));
 
     /**
      * 模型无有效结论时的兜底模式。
@@ -303,15 +317,16 @@ public enum TurnScene {
     }
 
     /**
-     * 由运行态得出场景；有活动任务时优先视为任务进行中。
+     * 由运行态得出场景；有活动任务时优先视为任务进行中，其中有待确认写操作时为等待确认。
      *
-     * @param activeTask 是否存在运行或挂起中的任务
-     * @param continuity 是否存在存活的任务前情
+     * @param activeTask   是否存在运行或挂起中的任务
+     * @param continuity   是否存在存活的任务前情
+     * @param writePending 是否存在待确认的写操作
      * @return 本轮场景
      */
-    public static TurnScene of(boolean activeTask, boolean continuity) {
+    public static TurnScene of(boolean activeTask, boolean continuity, boolean writePending) {
         if (activeTask) {
-            return ACTIVE_TASK;
+            return writePending ? WRITE_PENDING : ACTIVE_TASK;
         }
         return continuity ? CONTINUITY : FRESH;
     }
@@ -472,7 +487,7 @@ private TurnDecision decideMode(TurnContext ctx, EntryResult entry) {
 
     TurnScope turn = ctx.getTurn();
     boolean write = writePending(turn);
-    TurnScene scene = TurnScene.of(hasActiveTask(turn), !turn.records().isEmpty());
+    TurnScene scene = TurnScene.of(hasActiveTask(turn), !turn.records().isEmpty(), write);
     Long lockedAgentId = entry.explicitAgentId();
 
     IntentResult intent = intentClassifier.classify(buildIntentRequest(ctx, scene, lockedAgentId, write));
@@ -563,7 +578,7 @@ private IntentRequest buildIntentRequest(TurnContext ctx, TurnScene scene, @Null
         IntentRequest.DialogueWindow.from(turn.dialogue(DIALOGUE_LIMIT)),
         null,
         resolveSkillCatalog(catalog, locked),
-        activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK, writePending)
+        activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK || scene == TurnScene.WRITE_PENDING, writePending)
     );
 }
 
@@ -660,8 +675,9 @@ ROUTE_UNCERTAIN("route.uncertain", "还有一项操作等待您确认，请确�
 | 6 | 指定 agentId，模型返回空 | 任意 | 兜底 START_FRESH | 绑定指定员工 |
 | 7 | 上一任务已结束 | "那退款进度呢" | CONTINUITY → START_WITH_CONTEXT | 优先前情员工，带前情建任务 |
 | 8 | FOLLOW_UP 挂起 | "上海" | 入口按 REPLY 续跑 | 不调用意图模型 |
-| 9 | APPROVAL 挂起 | "好的，继续" | ACTIVE_TASK → CONTINUE_TASK → UNCERTAIN | ROUTE_UNCERTAIN 确认文案，不执行写操作 |
-| 10 | APPROVAL 挂起 | "算了，不办了" | ACTIVE_TASK → CANCEL_TASK | 取消任务 |
+| 9 | APPROVAL 挂起 | "好的，继续" | WRITE_PENDING → CONTINUE_TASK → UNCERTAIN | ROUTE_UNCERTAIN 确认文案，不执行写操作 |
+| 10 | APPROVAL 挂起 | "算了，不办了" | WRITE_PENDING → CANCEL_TASK | 取消任务 |
+| 10a | APPROVAL 挂起 | "先别改了，测试空间有几篇文章？" | WRITE_PENDING → REPLACE_TASK | 取消原任务，按新问题建任务 |
 | 11 | APPROVAL 挂起 | 点击确认（action=CONFIRM） | 入口硬协议续跑 | 执行写操作，不调用意图模型 |
 | 12 | VERIFY 挂起，模型返回空 | 任意文字 | 兜底 CONTINUE_TASK → UNCERTAIN | VERIFY_ASK |
 | 13 | 模型输出 `"start_fresh"` | — | `TurnMode.of` 识别 | 正常生效 |

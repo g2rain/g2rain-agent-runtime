@@ -106,6 +106,7 @@ public class DefaultModelGateway implements ModelGateway {
             // POST /v1/chat/completions
             var rsp = exchange("/v1/chat/completions", request, ChatCompletionResponse.class);
             traceCall(use, request, rsp, elapsedMs(start));
+            stepEvents.recordModel(rsp.getModel());
             stepEvents.done(stepId, null, usageOf(use, rsp));
             return rsp;
         } catch (RuntimeException ex) {

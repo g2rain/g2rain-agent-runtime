@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.react;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.hydrate.ExecutionMode;
 import com.g2rain.agent.runtime.domain.hydrate.OutputType;
 import com.g2rain.agent.runtime.domain.hydrate.ShareScope;
@@ -153,7 +154,23 @@ public final class ReactProjection {
      * 任务前情里一条历史任务的最小展示视图。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record PriorTaskView(String taskId, @Nullable String goal, TaskStatus status, @Nullable String summary) {
+    public record PriorTaskView(String taskId, @Nullable String goal, TaskStatus status, @Nullable String summary,
+                                @Nullable String request, @Nullable RejectedView rejected) {
+
+    }
+
+    /**
+     * {@code task_plan}：任务内一个步骤；{@code current} 仅当前节点为 true。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record PlanStepView(@Nullable String title, NodeStatus status, @Nullable Boolean current) {
+
+    }
+
+    /**
+     * 前情任务中被用户拒绝的待批动作。
+     */
+    public record RejectedView(String tool, JsonNode args) {
 
     }
 

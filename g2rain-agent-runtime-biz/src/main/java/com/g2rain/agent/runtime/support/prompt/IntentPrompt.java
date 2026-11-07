@@ -37,7 +37,7 @@ public final class IntentPrompt {
             %s
 
             【推进规则】
-            按当前场景对应的一组规则判断，从上到下取第一条符合的。mode 取箭头右侧的值（如 START_FRESH），FRESH、CONTINUITY、ACTIVE_TASK 是场景名，不能作为 mode。
+            按当前场景对应的一组规则判断，从上到下取第一条符合的。mode 取箭头右侧的值（如 START_FRESH），FRESH、CONTINUITY、ACTIVE_TASK、WRITE_PENDING 是场景名，不能作为 mode。
 
             FRESH（新对话）：
             - 需要办理事项 → START_FRESH
@@ -53,6 +53,13 @@ public final class IntentPrompt {
             - 明确要求换一个数字员工 → SWITCH_AGENT（agentLocked=true 时不可用）
             - 放弃当前任务、改办别的事 → REPLACE_TASK
             - 仍在推进当前任务，包括回答它的提问 → CONTINUE_TASK
+            - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
+
+            WRITE_PENDING（有进行中的任务，且有一项操作等待用户确认，见 activeTask）：
+            - 不执行待确认的操作，也没有提出别的事项 → CANCEL_TASK
+            - 不执行待确认的操作，改办别的事（包括提出新的问题或要求）→ REPLACE_TASK
+            - 明确要求换一个数字员工 → SWITCH_AGENT（agentLocked=true 时不可用）
+            - 同意执行、回答确认问题，或要求修改待确认的操作 → CONTINUE_TASK
             - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
 
             【选人规则】

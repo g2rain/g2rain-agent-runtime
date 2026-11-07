@@ -9,7 +9,7 @@ import java.util.List;
  * 意图提示词中的场景规则与 {@link #modes(boolean)} 保持一致，调度器据此校正模型结论。</p>
  *
  * <pre>{@code
- * TurnScene scene = TurnScene.of(false, true);   // CONTINUITY
+ * TurnScene scene = TurnScene.of(false, true, false);   // CONTINUITY
  * scene.modes(false);                             // [START_WITH_CONTEXT, START_FRESH, REPLY_ONLY]
  * scene.fallback();                               // START_FRESH
  * }</pre>
@@ -32,7 +32,12 @@ public enum TurnScene {
     /**
      * 任务进行中：存在运行或挂起中的任务。
      */
-    ACTIVE_TASK(TurnMode.CONTINUE_TASK, List.of(TurnMode.CANCEL_TASK, TurnMode.SWITCH_AGENT, TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY));
+    ACTIVE_TASK(TurnMode.CONTINUE_TASK, List.of(TurnMode.CANCEL_TASK, TurnMode.SWITCH_AGENT, TurnMode.REPLACE_TASK, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY)),
+
+    /**
+     * 等待确认：任务进行中，且断点上有待确认的写操作。打断类模式排在前面，避免用户的取消、改办别的事被当作续跑。
+     */
+    WRITE_PENDING(TurnMode.CONTINUE_TASK, List.of(TurnMode.CANCEL_TASK, TurnMode.REPLACE_TASK, TurnMode.SWITCH_AGENT, TurnMode.CONTINUE_TASK, TurnMode.REPLY_ONLY));
 
     /**
      * 模型无有效结论时的兜底模式。
@@ -50,15 +55,16 @@ public enum TurnScene {
     }
 
     /**
-     * 由运行态得出场景；有活动任务时优先视为任务进行中。
+     * 由运行态得出场景；有活动任务时优先视为任务进行中，其中有待确认写操作时为等待确认。
      *
-     * @param activeTask 是否存在运行或挂起中的任务
-     * @param continuity 是否存在存活的任务前情
+     * @param activeTask   是否存在运行或挂起中的任务
+     * @param continuity   是否存在存活的任务前情
+     * @param writePending 是否存在待确认的写操作
      * @return 本轮场景
      */
-    public static TurnScene of(boolean activeTask, boolean continuity) {
+    public static TurnScene of(boolean activeTask, boolean continuity, boolean writePending) {
         if (activeTask) {
-            return ACTIVE_TASK;
+            return writePending ? WRITE_PENDING : ACTIVE_TASK;
         }
 
         return continuity ? CONTINUITY : FRESH;
