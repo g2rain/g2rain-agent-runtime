@@ -97,16 +97,6 @@ public class TaskGraphNodePo extends BasePo {
     private LocalDateTime finishedTime;
 
     /**
-     * 输入（带来源）
-     */
-    private String inputs;
-
-    /**
-     * 输出（带来源）
-     */
-    private String outputs;
-
-    /**
      * 节点空间（便签、轮次、动作）
      */
     private String state;

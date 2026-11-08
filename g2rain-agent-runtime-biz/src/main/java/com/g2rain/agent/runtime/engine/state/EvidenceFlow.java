@@ -246,7 +246,7 @@ public class EvidenceFlow {
             .findFirst()
             .orElseThrow(() -> new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED));
         String entities = Strings.isNotBlank(result.entities()) ? result.entities() : current.entities();
-        EvidenceHead settled = current.withResult(result, clipBrief(result.resultBrief()), clipEntities(entities),
+        EvidenceHead settled = current.withResult(result, clipBrief(result.resultBrief()), entities,
             detailOf(result));
         persistPayload(node, settled, result);
         persistCallBody(node, settled, result);
@@ -262,7 +262,7 @@ public class EvidenceFlow {
      */
     public String record(DefaultNodeScope node, ToolCall call, ToolResult result) {
         EvidenceHead head = startedOf(node, call)
-            .withResult(result, clipBrief(result.resultBrief()), clipEntities(result.entities()), detailOf(result));
+            .withResult(result, clipBrief(result.resultBrief()), result.entities(), detailOf(result));
         persistPayload(node, head, result);
         try {
             String body = json(result.payload());
@@ -370,16 +370,6 @@ public class EvidenceFlow {
      */
     private @Nullable String clipBrief(@Nullable String text) {
         return RuntimeUtils.clip(text, properties.getReact().getBriefMaxChars());
-    }
-
-    /**
-     * 按实体字段上限裁剪证据实体 JSON。
-     *
-     * @param text 原文；可空
-     * @return 裁剪后文本；空白入参原样返回
-     */
-    private @Nullable String clipEntities(@Nullable String text) {
-        return RuntimeUtils.clip(text, properties.getState().getEvidenceEntitiesMaxChars());
     }
 
     /**

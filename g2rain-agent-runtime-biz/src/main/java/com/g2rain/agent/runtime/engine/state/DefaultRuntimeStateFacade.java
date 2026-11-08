@@ -141,6 +141,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         DefaultTurnScope turn = hydrate.load(request);
         // 本轮租户/用户快照挂上，后续契约绑定从平台字段取，不写会话记忆
         turn.attachPlatform(platformCatalog.capture(PrincipalContextHolder.get()));
+        turn.attachChannel(request.getChannel());
         // 中断规整的 STARTED→UNKNOWN 先落 Redis，避免本轮崩溃后仍显示进行中
         flushPlan.apply(turn, false);
         if (Strings.isBlank(request.getUserInput())) {
@@ -462,15 +463,11 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         // 库表已成功：才从热态摘已关闭任务，避免 Redis 先丢权威记录
         scope.closedTasks().forEach(closed -> {
             TaskMetadata task = closed.metadata();
-            TaskRecord record = new TaskRecord(task.getTaskId(),
-                Objects.toString(task.getAgentId(), ""), task.getGoalSummary(), task.getStatus(),
-                task.getFinalMessage(), scope.entities(), List.of(), System.currentTimeMillis());
+            TaskRecord record = TaskRecords.of(task, scope);
             flushPlan.dropClosedTask(scope, task, closed.graph(), closed.payloadIds(), record);
         });
         scope.task().filter(task -> TaskStatus.isTerminal(task.getStatus())).ifPresent(task -> {
-            TaskRecord record = new TaskRecord(task.getTaskId(),
-                Objects.toString(task.getAgentId(), ""), task.getGoalSummary(), task.getStatus(),
-                task.getFinalMessage(), scope.entities(), List.of(), System.currentTimeMillis());
+            TaskRecord record = TaskRecords.of(task, scope);
             flushPlan.dropClosedTask(scope, record);
             scope.clearActiveTask();
         });

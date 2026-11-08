@@ -50,6 +50,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,7 +121,7 @@ public class DefaultNodeRunner implements NodeRunner {
     public List<GraphEffect> run(TaskNode node, GraphFrame frame) {
         try (TraceScope ignored = TraceScope.node(node.getNodeId())) {
             long start = System.nanoTime();
-            Trace.at(TraceStage.NODE, "node_start").kv("skillKey", node.getSkillKey()).kv("action", frame.action()).info();
+            Trace.at(TraceStage.NODE, "node_start").kv("skillKey", node.getSkillKey()).kv("action", actionFor(node, frame)).info();
             List<GraphEffect> effects = execute(node, frame);
             Trace.at(TraceStage.NODE, "node_end")
                 .kv("status", node.getStatus())
@@ -201,20 +202,21 @@ public class DefaultNodeRunner implements NodeRunner {
             .info();
 
         if (nodeScope instanceof DefaultNodeScope defaultNode) {
-            applyVerifyResume(defaultNode, frame, history);
+            applyVerifyResume(defaultNode, actionFor(node, frame), frame, history);
             if (writeVerifier.haltUnknown(node, frame, skill, tools, defaultNode, effects)) {
                 return effects;
             }
         }
 
         // 用户确认续跑：先把挂起上的待批写动作真正派发，再进循环
-        if (GraphResumeActions.isConfirm(frame.action())) {
+        if (GraphResumeActions.isConfirm(actionFor(node, frame))) {
             dispatchPending(node, history, frame, nodeScope);
         }
 
         // 节点内循环；循环结果决定节点终态，本方法不直接调控流工具
         ReActLoopResult nodeResult = reActLoop.run(new ReActLoopContext(frame, node, nodeScope, history, tools));
-        if (nodeResult.nodeStatus() == NodeStatus.DONE && Strings.isNotBlank(nodeResult.message())) {
+        boolean settled = nodeResult.nodeStatus() == NodeStatus.DONE || nodeResult.nodeStatus() == NodeStatus.SKIPPED;
+        if (settled && Strings.isNotBlank(nodeResult.message())) {
             node.setResult(nodeResult.message().trim());
         }
 
@@ -249,10 +251,11 @@ public class DefaultNodeRunner implements NodeRunner {
         }
         switch (node.getStatus()) {
             case FAILED -> stepEvents.fail(stepId,
-                Strings.defaultIfBlank(node.getErrorMessage(), RuntimeMessage.STEP_FAILED.text()), null, null);
+                Strings.defaultIfBlank(node.getErrorMessage(), RuntimeMessage.STEP_FAILED.text()), node.getErrorCode(), null);
             case SUSPENDED -> stepEvents.done(stepId, RuntimeMessage.STEP_WAITING.text());
             case WAITING_DELEGATE -> stepEvents.done(stepId, RuntimeMessage.STATUS_PREPARING.text());
             case CANCELLED -> stepEvents.done(stepId, RuntimeMessage.STEP_CANCELLED.text());
+            case SKIPPED -> stepEvents.done(stepId, node.getResult());
             default -> stepEvents.done(stepId, null);
         }
     }
@@ -276,7 +279,7 @@ public class DefaultNodeRunner implements NodeRunner {
             .anyMatch(edge -> edge.isDelegate() && nodeId.equals(edge.getFrom()));
         return switch (event) {
             // 断点在节点被唤醒时已消费，完成时无需再清
-            case LOOP_DONE -> effects;
+            case LOOP_DONE, LOOP_SKIPPED -> effects;
             case LOOP_SUSPENDED -> {
                 String message = Strings.defaultIfBlank(result.message(), RuntimeMessage.STEP_WAITING.text());
                 effects.add(new GraphEffect.SaveSuspend(nodeId, result.checkpointType(), message, result.pendingAction(), result.missingParameters(), result.suggestions()));
@@ -375,6 +378,20 @@ public class DefaultNodeRunner implements NodeRunner {
     }
 
     /**
+     * 本节点适用的恢复动作：只有被恢复的检查点所在节点才承接本轮动作，同轮后续节点按普通启动。
+     *
+     * @param node  当前节点
+     * @param frame 当前图执行帧
+     * @return 恢复动作；不适用时为 {@code null}
+     */
+    private static @Nullable ResumeAction actionFor(TaskNode node, GraphFrame frame) {
+        boolean resumedHere = frame.turn().resumed()
+            .map(checkpoint -> Objects.equals(checkpoint.getNodeId(), node.getNodeId()))
+            .orElse(false);
+        return resumedHere ? frame.action() : null;
+    }
+
+    /**
      * 确认续跑时执行已消费断点上的待批工具：先记下用户确认，再派发；确认与结果写入本节点 history，并清 pending。
      *
      * @param node      当前节点
@@ -393,9 +410,10 @@ public class DefaultNodeRunner implements NodeRunner {
             return;
         }
 
-        String args = Strings.isBlank(pending.args()) ? "{}" : pending.args();
+        JsonNode argsNode = pending.args();
+        String args = JsonCodecFactory.instance().obj2str(argsNode);
         if (Strings.isNotBlank(pending.argsHash())) {
-            String current = RuntimeUtils.argsHash(JsonCodecFactory.instance().str2node(args));
+            String current = RuntimeUtils.argsHash(argsNode);
             if (!Objects.equals(current, pending.argsHash())) {
                 throw new BusinessException(RuntimeErrorCode.ARGS_HASH_MISMATCH);
             }
@@ -411,7 +429,7 @@ public class DefaultNodeRunner implements NodeRunner {
         }
 
         // 用户确认单独成轮：记在派发结果之前，跨轮重建时顺序为"确认 → 执行 → 结果"
-        nodeScope.round(0);
+        nodeScope.round();
         recordUser(nodeScope, history, ModelHint.USER_CONFIRMED.text("tool", pending.toolName()));
 
         ToolExecutionContext toolContext = new ToolExecutionContext(frame, node, nodeScope);
@@ -438,17 +456,18 @@ public class DefaultNodeRunner implements NodeRunner {
      * VERIFY 检查点上用户确认/拒绝：把未知写证据收成 SUCCESS / FAILED，并记下用户的回应。
      *
      * @param node    当前节点作用域
+     * @param action  本节点适用的恢复动作；可空
      * @param frame   当前图执行帧
      * @param history 本节点对话历史
      */
-    private void applyVerifyResume(DefaultNodeScope node, GraphFrame frame, List<ChatMessage> history) {
+    private void applyVerifyResume(DefaultNodeScope node, @Nullable ResumeAction action, GraphFrame frame,
+                                   List<ChatMessage> history) {
         boolean verify = frame.turn().resumed()
             .map(checkpoint -> checkpoint.getType() == CheckpointType.VERIFY)
             .orElse(false);
         if (!verify) {
             return;
         }
-        ResumeAction action = frame.action();
         EvidenceStatus status;
         Boolean businessOk;
         if (action == ResumeAction.CONFIRM) {
@@ -469,7 +488,7 @@ public class DefaultNodeRunner implements NodeRunner {
             evidenceFlow.applyOutcome(node, head, status, businessOk, FailureKind.NONE);
             // 用户的回应单独成轮，排在之后的模型调用之前
             if (!opened) {
-                node.round(0);
+                node.round();
                 opened = true;
             }
             recordUser(node, history, said.text("tool", head.toolName()));

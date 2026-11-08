@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,7 +53,7 @@ public class EntityExtractor {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 平台字段目录：与 catalog.keys() 同名的键禁止写入 shared。
+     * 平台字段目录：与 catalog.keys() 同名的键禁止写入 shared，也不进入实体属性。
      */
     private final PlatformCatalog platformCatalog;
 
@@ -211,7 +212,7 @@ public class EntityExtractor {
     }
 
     /**
-     * 把种子合并进本轮实体索引。
+     * 把种子合并进本轮实体索引；属性中的平台字段不入索引。
      *
      * @param turn       本轮视图
      * @param seeds      待合并种子
@@ -219,7 +220,7 @@ public class EntityExtractor {
      * @param taskId     当前任务 id
      * @param outputOnly 为 {@code true} 时不覆盖已有属性
      */
-    private static void mergeSeeds(DefaultTurnScope turn, List<EntitySeed> seeds, @Nullable String evidenceId,
+    private void mergeSeeds(DefaultTurnScope turn, List<EntitySeed> seeds, @Nullable String evidenceId,
                                    String taskId, boolean outputOnly) {
         long now = System.currentTimeMillis();
         for (EntitySeed seed : seeds) {
@@ -227,15 +228,15 @@ public class EntityExtractor {
                 continue;
             }
             String key = seed.type() + ":" + seed.id();
-            String display = Strings.defaultIfBlank(seed.displayName(), seed.id());
-            JsonNode attrs = seed.attrs();
+            JsonNode attrs = withoutPlatform(seed.attrs());
             EntityEntry current = turn.entityIndex().get(key);
             if (Objects.isNull(current)) {
-                turn.entityIndex().put(key, new EntityEntry(display, outputOnly ? EMPTY_ATTRS : attrs, taskId, evidenceId,
-                    now, 1));
+                turn.entityIndex().put(key, new EntityEntry(Strings.defaultIfBlank(seed.displayName(), seed.id()),
+                    outputOnly ? EMPTY_ATTRS : attrs, taskId, evidenceId, now, 1));
                 continue;
             }
-            String nextName = Strings.isNotBlank(display) ? display : current.displayName();
+            // 种子没有展示名（如保存只回主键）时保留已有名称，不用 id 覆盖
+            String nextName = Strings.defaultIfBlank(seed.displayName(), current.displayName());
             JsonNode nextAttrs = current.attrs();
             String nextEvidence = current.evidenceId();
             if (!outputOnly && wins(current, evidenceId, now)) {
@@ -245,6 +246,21 @@ public class EntityExtractor {
             turn.entityIndex().put(key, new EntityEntry(nextName, nextAttrs, taskId, nextEvidence, now,
                 current.mentions() + 1));
         }
+    }
+
+    /**
+     * 去掉与平台字段目录同名的属性。
+     *
+     * @param attrs 种子属性
+     * @return 不含平台字段的属性；非对象原样返回
+     */
+    private JsonNode withoutPlatform(JsonNode attrs) {
+        if (!(attrs instanceof ObjectNode object)) {
+            return attrs;
+        }
+        ObjectNode copy = object.deepCopy();
+        copy.remove(platformCatalog.keys());
+        return copy;
     }
 
     /**

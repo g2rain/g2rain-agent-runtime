@@ -62,11 +62,14 @@ class DefaultTurnDispatcherTest {
     @Test
     void pendingWriteNeverContinuesOnText() {
         IntentResult resume = intent(TurnMode.CONTINUE_TASK, null, null);
-        assertThat(DefaultTurnDispatcher.settle(resume, TurnScene.ACTIVE_TASK, false, true)).isEqualTo(TurnMode.UNCERTAIN);
-        assertThat(DefaultTurnDispatcher.settle(null, TurnScene.ACTIVE_TASK, false, true)).isEqualTo(TurnMode.UNCERTAIN);
+        assertThat(DefaultTurnDispatcher.settle(resume, TurnScene.WRITE_PENDING, false, true)).isEqualTo(TurnMode.UNCERTAIN);
+        assertThat(DefaultTurnDispatcher.settle(null, TurnScene.WRITE_PENDING, false, true)).isEqualTo(TurnMode.UNCERTAIN);
 
         IntentResult cancel = intent(TurnMode.CANCEL_TASK, null, null);
-        assertThat(DefaultTurnDispatcher.settle(cancel, TurnScene.ACTIVE_TASK, false, true)).isEqualTo(TurnMode.CANCEL_TASK);
+        assertThat(DefaultTurnDispatcher.settle(cancel, TurnScene.WRITE_PENDING, false, true)).isEqualTo(TurnMode.CANCEL_TASK);
+
+        IntentResult replace = intent(TurnMode.REPLACE_TASK, null, null);
+        assertThat(DefaultTurnDispatcher.settle(replace, TurnScene.WRITE_PENDING, false, true)).isEqualTo(TurnMode.REPLACE_TASK);
     }
 
     @Test

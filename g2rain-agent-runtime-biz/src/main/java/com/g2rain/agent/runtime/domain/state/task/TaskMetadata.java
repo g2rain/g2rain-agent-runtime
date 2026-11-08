@@ -58,6 +58,16 @@ public class TaskMetadata {
     private @Nullable String request;
 
     /**
+     * 目标核验结论；未核验为空。不改变任务状态，只进任务记录。
+     */
+    private @Nullable Boolean goalMet;
+
+    /**
+     * 以拒绝结束时被拒绝的待批动作（参数已脱敏、不截断）；否则为空。
+     */
+    private @Nullable RejectedAction rejected;
+
+    /**
      * 终态对外文案（成功/失败收口时给用户看的一句话）。
      */
     private @Nullable String finalMessage;

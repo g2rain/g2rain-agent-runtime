@@ -53,6 +53,9 @@ public final class PlanGraphs {
     /**
      * 把计划步骤落成任务图：生成运行时节点 ID，并按 dependsOn 连边。
      *
+     * <p>非首步且未声明依赖的步骤接到前一步之后：图按单节点调度，补边不改变执行顺序，
+     * 只让后续步骤能看到前一步的证据。开启同级并行时需重新评估此规则。</p>
+     *
      * @param steps 已校验的计划步骤
      * @return 可执行任务图
      */
@@ -70,8 +73,10 @@ public final class PlanGraphs {
         for (int i = 0, n = steps.size(); i < n; i++) {
             PlanStep step = steps.get(i);
             TaskNode node = nodes.get(i);
-            for (String dep : step.dependsOn()) {
-                String fromId = stepIdToNodeId.get(dep);
+            List<String> fromIds = step.dependsOn().isEmpty() && i > 0
+                ? List.of(nodes.get(i - 1).getNodeId())
+                : step.dependsOn().stream().map(stepIdToNodeId::get).toList();
+            for (String fromId : fromIds) {
                 node.getDependsOn().add(fromId);
                 edges.add(new TaskEdge(fromId, node.getNodeId()));
             }

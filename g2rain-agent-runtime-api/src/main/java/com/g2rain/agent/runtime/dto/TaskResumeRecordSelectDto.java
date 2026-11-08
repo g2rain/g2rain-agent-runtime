@@ -78,9 +78,4 @@ public class TaskResumeRecordSelectDto extends BaseSelectListDto {
     @Schema(description = "动作时间")
     private LocalDateTime actedAt;
 
-    /**
-     * 动作载荷
-     */
-    @Schema(description = "动作载荷")
-    private String payload;
 }

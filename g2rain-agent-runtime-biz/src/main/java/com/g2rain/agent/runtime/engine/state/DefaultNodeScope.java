@@ -251,14 +251,20 @@ public final class DefaultNodeScope implements NodeScope {
     }
 
     /**
-     * 记录一轮执行及其 token 消耗。
-     *
-     * @param tokens 本轮消耗的 token 数；由调用方传入非负值
+     * 进入下一轮；只增不减，不允许调用方重置历史统计。
      */
     @Override
-    public void round(int tokens) {
-        // 每次进入一轮只增加计数，不允许调用方重置历史统计。
+    public void round() {
         this.rounds++;
-        this.tokens += tokens;
+    }
+
+    /**
+     * 累加 token 消耗。
+     *
+     * @param tokens 本次模型调用消耗的 token；非负
+     */
+    @Override
+    public void spend(long tokens) {
+        this.tokens += Math.max(0, tokens);
     }
 }

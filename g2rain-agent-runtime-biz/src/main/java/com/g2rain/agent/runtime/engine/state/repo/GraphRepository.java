@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,9 +72,9 @@ public class GraphRepository {
                 return null;
             }
 
-            // 节点行按库序还原为 TaskNode，保持计划顺序
+            // 主键按规划顺序生成：升序还原即计划顺序（查询默认按主键倒序）
             Map<String, TaskNode> byId = new LinkedHashMap<>();
-            for (TaskGraphNodeVo vo : nodeVos) {
+            for (TaskGraphNodeVo vo : nodeVos.stream().sorted(Comparator.comparing(TaskGraphNodeVo::getId)).toList()) {
                 TaskNode node = new TaskNode();
                 node.setNodeId(vo.getNodeId());
                 node.setTitle(vo.getTitle());
@@ -138,7 +139,7 @@ public class GraphRepository {
     }
 
     /**
-     * 轮末写图：节点壳 + 已打开节点的 inputs / outputs / state。
+     * 轮末写图：节点壳 + 已打开节点的 state。
      *
      * @param taskId 任务 id
      * @param graph  执行图
@@ -189,11 +190,9 @@ public class GraphRepository {
             if (Objects.nonNull(node.getFinishedAt())) {
                 dto.setFinishedTime(RuntimeUtils.timeOf(node.getFinishedAt()));
             }
-            // 本轮打开过的节点才同步空间（输入、产出与完整 NodeSpace）
+            // 本轮打开过的节点才同步节点空间（含输入、产出，冷恢复读此列）
             NodeSpace space = spaces.get(node.getNodeId());
             if (Objects.nonNull(space)) {
-                dto.setInputs(RepoSupport.toJson(space.inputs()));
-                dto.setOutputs(RepoSupport.toJson(space.outputs()));
                 dto.setState(RepoSupport.toJson(space));
             }
             taskGraphNodeService.save(dto);

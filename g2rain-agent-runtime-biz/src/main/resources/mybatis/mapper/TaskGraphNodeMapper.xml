@@ -26,8 +26,6 @@
         <result column="error_message" property="errorMessage" jdbcType="VARCHAR"/>
         <result column="started_time" property="startedTime" jdbcType="TIMESTAMP"/>
         <result column="finished_time" property="finishedTime" jdbcType="TIMESTAMP"/>
-        <result column="inputs" property="inputs" jdbcType="LONGVARCHAR"/>
-        <result column="outputs" property="outputs" jdbcType="LONGVARCHAR"/>
         <result column="state" property="state" jdbcType="LONGVARCHAR"/>
         <!-- deleteFlag字段（如果存在） -->
         <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
@@ -112,14 +110,6 @@
                         finished_time
                         <include refid="directionClause"/>
                     </when>
-                    <when test="item.column == 'inputs'">
-                        inputs
-                        <include refid="directionClause"/>
-                    </when>
-                    <when test="item.column == 'outputs'">
-                        outputs
-                        <include refid="directionClause"/>
-                    </when>
                     <when test="item.column == 'state'">
                         state
                         <include refid="directionClause"/>
@@ -137,7 +127,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -148,7 +138,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{target, jdbcType=VARCHAR}, #{targetClaimed, jdbcType=TINYINT}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{result, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{inputs, jdbcType=LONGVARCHAR}, #{outputs, jdbcType=LONGVARCHAR}, #{state, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{target, jdbcType=VARCHAR}, #{targetClaimed, jdbcType=TINYINT}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{result, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{state, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -210,12 +200,6 @@
             <if test="finishedTime != null">
                 finished_time = #{finishedTime, jdbcType=TIMESTAMP},
             </if>
-            <if test="inputs != null">
-                inputs = #{inputs, jdbcType=LONGVARCHAR},
-            </if>
-            <if test="outputs != null">
-                outputs = #{outputs, jdbcType=LONGVARCHAR},
-            </if>
             <if test="state != null">
                 state = #{state, jdbcType=LONGVARCHAR},
             </if>
@@ -233,7 +217,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -252,7 +236,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -334,12 +318,6 @@
             <if test="finishedTime != null">
                 AND finished_time = #{finishedTime, jdbcType=TIMESTAMP}
             </if>
-            <if test="inputs != null">
-                AND inputs = #{inputs, jdbcType=LONGVARCHAR}
-            </if>
-            <if test="outputs != null">
-                AND outputs = #{outputs, jdbcType=LONGVARCHAR}
-            </if>
             <if test="state != null">
                 AND state = #{state, jdbcType=LONGVARCHAR}
             </if>
@@ -362,7 +340,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, inputs, outputs, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -375,7 +353,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.target, jdbcType=VARCHAR}, #{item.targetClaimed, jdbcType=TINYINT}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.result, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.inputs, jdbcType=LONGVARCHAR}, #{item.outputs, jdbcType=LONGVARCHAR}, #{item.state, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.target, jdbcType=VARCHAR}, #{item.targetClaimed, jdbcType=TINYINT}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.result, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.state, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -442,12 +420,6 @@
             </if>
             <if test="finishedTime != null">
                 finished_time = #{finishedTime, jdbcType=TIMESTAMP},
-            </if>
-            <if test="inputs != null">
-                inputs = #{inputs, jdbcType=LONGVARCHAR},
-            </if>
-            <if test="outputs != null">
-                outputs = #{outputs, jdbcType=LONGVARCHAR},
             </if>
             <if test="state != null">
                 state = #{state, jdbcType=LONGVARCHAR},

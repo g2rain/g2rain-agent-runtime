@@ -65,12 +65,13 @@ public class ToolEvents {
     public @Nullable String started(ToolInvokeRequest request) {
         if (request.toolCallback() instanceof BuiltinToolCallback builtin) {
             String title = builtinTitleOf(builtin.action(), request);
-            return Objects.isNull(title) ? null : stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(), null);
+            return Objects.isNull(title) ? null : stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(),
+                request.context().scope().rounds());
         }
 
         String label = labelOf(request.contract(), request.toolCallback());
         String title = Objects.isNull(label) ? RuntimeMessage.STEP_TOOL_DEFAULT.text() : RuntimeMessage.STEP_TOOL.text("name", label);
-        return stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(), null);
+        return stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(), request.context().scope().rounds());
     }
 
     /**
@@ -88,7 +89,7 @@ public class ToolEvents {
 
         Map<String, Object> extra = new LinkedHashMap<>();
         if (Strings.isNotBlank(args)) {
-            extra.put("args", args);
+            extra.put("args", argsValue(args));
         }
 
         // 内置工具：完成被门槛拒绝记为失败并带原因，其余只记完成，不加"成功"说明
@@ -174,5 +175,20 @@ public class ToolEvents {
         }
 
         return null;
+    }
+
+    /**
+     * 参数摘要按 JSON 写入排查信息，避免二次编码；无法解析时保留原文。
+     *
+     * @param args 参数摘要
+     * @return JSON 节点或原文
+     */
+    private static Object argsValue(String args) {
+        try {
+            JsonNode node = JSON.str2node(args);
+            return Objects.isNull(node) ? args : node;
+        } catch (RuntimeException _) {
+            return args;
+        }
     }
 }

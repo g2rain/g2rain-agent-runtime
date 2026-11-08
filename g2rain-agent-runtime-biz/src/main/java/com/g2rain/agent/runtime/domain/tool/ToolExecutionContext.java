@@ -320,6 +320,18 @@ public final class ToolExecutionContext {
     }
 
     /**
+     * 标记节点跳过：写 SKIPPED，原因作为产出文本，并清挂起/完成拒绝原因。
+     *
+     * @param reason 不需要执行写操作的原因
+     */
+    public void applySkip(String reason) {
+        this.nodeStatus = NodeStatus.SKIPPED;
+        this.output = reason;
+        this.checkpointType = null;
+        this.finishRejectedReason = null;
+    }
+
+    /**
      * 记录一次完成被拒（节点仍可继续），不改变 nodeStatus。
      *
      * @param reason 拒绝原因

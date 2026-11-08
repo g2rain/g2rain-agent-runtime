@@ -69,7 +69,7 @@ public class McpClientConfig {
             .builder(originResolver.getBaseUrl())
             .endpoint(Strings.isBlank(mcp.getPath()) ? "/mcp" : mcp.getPath())
             .connectTimeout(Duration.ofMillis(mcp.getConnectTimeoutMs()))
-            .httpRequestCustomizer(requestCustomizer(originResolver, tracer, propagator))
+            .addHttpRequestCustomizer(requestCustomizer(originResolver, tracer, propagator))
             .build();
 
         // readTimeoutMs=0 → 近似无限等 MCP 返回；否则按毫秒封顶

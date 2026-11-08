@@ -260,11 +260,6 @@ public class RuntimeProperties {
         private Duration payloadDoneTtl = Duration.ofHours(1);
 
         /**
-         * EvidenceHead.entities JSON 字符上限
-         */
-        private int evidenceEntitiesMaxChars = 2048;
-
-        /**
          * 节点 space 单字段上限（字节）
          */
         private int spaceFieldMaxBytes = 65536;

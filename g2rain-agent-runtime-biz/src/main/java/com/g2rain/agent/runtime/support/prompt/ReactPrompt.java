@@ -26,6 +26,7 @@ public final class ReactPrompt {
         【输入说明】
         用户消息由若干带标签的 JSON 块组成，没有内容的块不出现：
         - <node_goal>：objective 是本节点要完成的事，userGoal 是用户原始诉求，只用来理解背景和取用其中的细节（名称、正文等）；本节点只做 objective 范围内的事，诉求里的其余部分由其他节点完成，不要越界执行；skillManual 是当前技能的操作手册；profileText 是数字员工的身份与边界；platform 是平台已注入的上下文；target 是本节点的完成目标（一个写工具，调用成功才算完成），没有时本节点不要求写操作；phaseHint 说明完成目标与必填产出的完成情况；delegateCatalog 说明何时委派及可委派的技能，没有时本节点不能委派。
+        - <task_plan>：本任务的全部步骤及状态，current 为本节点。userGoal 中由其他步骤负责的部分不在本节点处理，也不作为本节点的前置；已完成步骤的结果见 <upstream_evidence>。
         - <checkpoint>：仍在等待用户回复的断点；存在时先按其中说明处理。
         - <input_schema>：节点输入的声明与已绑定的值。
         - <tool_catalog>：可用工具摘要。confirm=true 表示写操作须经用户确认；args 中 missingAction 为 CALL_TOOL 时先调用 missingTool 查询该参数，为 FAIL 时由平台注入。
@@ -34,7 +35,7 @@ public final class ReactPrompt {
         - <output_schema>：节点产出声明；required=false 的产出可以不写。
         - <dependency_outputs>：上游节点的产出，可直接使用。
         - <shared>：任务级和会话级共享值。
-        - <prior>：之前任务的摘要和实体，可用于定位对象。
+        - <prior>：之前任务的摘要和实体，可用于定位对象；request 是该任务的用户原文，rejected 是用户拒绝执行的动作及其参数，用户要求沿用之前给过的内容时从这里取。
         - <delegate_result>：委派的前置步骤未成功时的结果。
         历史消息是本节点之前的工具调用、返回和用户回复。工具列表随请求另附，只能调用其中的工具。
 
@@ -50,9 +51,11 @@ public final class ReactPrompt {
 
         【结束节点】
         - 目标已完成：调用 builtin_node_finish，output 写给用户看的结论（查询要写清有哪些或没有），不能为空。
+        - 查询结果表明本节点的写操作不需要执行（如对象已存在）：调用 builtin_node_skip（提供该工具时），reason 写明依据。
         - 需要用户回答：调用 builtin_node_follow_up，节点挂起等待回复。
         - 无法继续完成：调用 builtin_node_fail，说明原因和用户可以怎么做。
-        - 给用户的文字（finish 的 output、追问、失败原因）一律使用语言标签 %s（BCP-47），优先于用户输入语种与历史对话语种。
+        - 给用户的文字（finish 的 output、跳过原因、追问、失败原因）一律使用语言标签 %s（BCP-47），优先于用户输入语种与历史对话语种。
+        - 给用户的文字不出现平台注入的字段及其值（如 organId），也不出现内部主键；指代对象用名称。
         """;
 
     /**

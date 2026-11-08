@@ -126,6 +126,11 @@ public final class DefaultTurnScope implements TurnScope {
     private @Nullable String lastResumeMessageId;
 
     /**
+     * 恢复动作发生时间（epoch ms）。
+     */
+    private long lastResumeAt;
+
+    /**
      * 被新任务顶替的旧终态，persist 时一并写入。
      */
     private final List<ClosedTask> closedTasks = new ArrayList<>();
@@ -159,6 +164,16 @@ public final class DefaultTurnScope implements TurnScope {
      * 本轮最终回复；追加时记录。
      */
     private @Nullable DialogueMessage reply;
+
+    /**
+     * 本轮最后一次实际调用的模型名。
+     */
+    private @Nullable String modelUsed;
+
+    /**
+     * 本轮入站渠道；AGENT 消息落库沿用。
+     */
+    private @Nullable String channel;
 
     /**
      * 本轮执行过程。
@@ -213,6 +228,22 @@ public final class DefaultTurnScope implements TurnScope {
      */
     public void attachPlatform(Platform platform) {
         this.platform = Objects.requireNonNullElseGet(platform, Platform::empty);
+    }
+
+    /**
+     * begin 时挂上本轮入站渠道。
+     *
+     * @param channel 渠道；可空
+     */
+    public void attachChannel(@Nullable String channel) {
+        this.channel = Strings.blankToNull(channel);
+    }
+
+    /**
+     * @return 本轮入站渠道；未知为 {@code null}
+     */
+    public @Nullable String channel() {
+        return channel;
     }
 
     /**
@@ -378,6 +409,9 @@ public final class DefaultTurnScope implements TurnScope {
             && message.getType() == MessageType.AGENT_REPLY
             && Strings.isBlank(message.getNodeId())) {
             message.setElapsedMs(Math.toIntExact(Math.max(0, message.getCreatedAt() - startedAt)));
+            if (Strings.isBlank(message.getModel())) {
+                message.setModel(modelUsed);
+            }
             reply = message;
         }
         dialogue.append(message);
@@ -386,6 +420,13 @@ public final class DefaultTurnScope implements TurnScope {
     @Override
     public Optional<DialogueMessage> reply() {
         return Objects.isNull(reply) ? Optional.empty() : Optional.of(reply);
+    }
+
+    @Override
+    public void recordModel(@Nullable String model) {
+        if (Strings.isNotBlank(model)) {
+            this.modelUsed = model.trim();
+        }
     }
 
     @Override
@@ -517,6 +558,7 @@ public final class DefaultTurnScope implements TurnScope {
             this.checkpoint = null;
             this.lastResumeAction = action;
             this.lastResumeMessageId = messageId;
+            this.lastResumeAt = System.currentTimeMillis();
         }
         if (Objects.nonNull(task)) {
             task.setStatus(TaskStatus.RUNNING);
@@ -539,6 +581,15 @@ public final class DefaultTurnScope implements TurnScope {
      */
     public Optional<String> lastResumeMessageId() {
         return Objects.isNull(lastResumeMessageId) ? Optional.empty() : Optional.of(lastResumeMessageId);
+    }
+
+    /**
+     * persist 写恢复审计用。
+     *
+     * @return 恢复动作发生时间（epoch ms）；未恢复为 0
+     */
+    public long lastResumeAt() {
+        return lastResumeAt;
     }
 
     /**
@@ -576,7 +627,25 @@ public final class DefaultTurnScope implements TurnScope {
         }
         task.setStatus(status);
         task.setFinalMessage(finalMessage);
+        if (TaskStatus.isTerminal(status)) {
+            settleOpenNodes();
+        }
         // persist 成功后再清 activeTaskId；本轮先记下终态
+    }
+
+    /**
+     * 任务终态时收尾未终态节点：从未开始的记 SKIPPED，已开始未结束的记 CANCELLED。
+     */
+    private void settleOpenNodes() {
+        graph.getNodes().forEach(node -> {
+            NodeStatus status = node.getStatus();
+            if (status.isTerminal()) {
+                return;
+            }
+            NodeStatus settled = status == NodeStatus.PENDING || status == NodeStatus.READY
+                ? NodeStatus.SKIPPED : NodeStatus.CANCELLED;
+            mark(node.getNodeId(), settled, node.getErrorCode(), node.getErrorMessage());
+        });
     }
 
     /**

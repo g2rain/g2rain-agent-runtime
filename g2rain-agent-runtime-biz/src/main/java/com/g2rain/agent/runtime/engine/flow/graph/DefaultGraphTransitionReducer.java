@@ -8,15 +8,26 @@ import com.g2rain.agent.runtime.domain.graph.NodeEvent;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
+import com.g2rain.agent.runtime.domain.hydrate.Skill;
+import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.PendingAction;
+import com.g2rain.agent.runtime.domain.state.task.RejectedAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
+import com.g2rain.agent.runtime.support.ArgsBrief;
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Objects;
@@ -97,11 +108,46 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
         NodeTransition transition = nodeStateMachine.transit(event, node.getStatus());
         frame.turn().mark(node.getNodeId(), transition.to(), null, null);
 
-        String message = rejected ? rejectedMessage(frame) : null;
+        String message = null;
+        if (rejected) {
+            message = rejectedMessage(frame);
+            RejectedAction action = rejectedAction(frame, node);
+            frame.turn().task().ifPresent(task -> task.setRejected(action));
+        }
         return List.of(
             new GraphEffect.ClearSuspend(node.getNodeId()),
             new GraphEffect.Halt(new ExecutorResult(TaskStatus.CANCELED, node.getNodeId(), message, null, List.of()))
         );
+    }
+
+    /**
+     * 被拒绝的待批动作：参数按契约脱敏后完整保留（平台注入的参数不保留），供后续任务沿用用户已给出的内容。
+     *
+     * @param frame 当前图执行帧
+     * @param node  被拒绝的挂起节点
+     * @return 被拒动作；不是审批断点或没有待批动作时为空
+     */
+    private static @Nullable RejectedAction rejectedAction(GraphFrame frame, TaskNode node) {
+        PendingAction pending = frame.turn().checkpoint().or(() -> frame.turn().resumed())
+            .filter(checkpoint -> checkpoint.getType() == CheckpointType.APPROVAL)
+            .map(TaskCheckpoint::getPendingAction)
+            .orElse(null);
+        if (Objects.isNull(pending)) {
+            return null;
+        }
+
+        Skill skill = frame.findSkill(node.getSkillKey());
+        SkillContract contract = Objects.isNull(skill) ? null : skill.contract();
+        ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(pending.toolName());
+        JsonNode masked = JsonCodecFactory.instance().str2node(ArgsBrief.of(pending.args(), spec, Integer.MAX_VALUE));
+        if (masked instanceof ObjectNode args && Objects.nonNull(spec)) {
+            spec.getArgs().forEach((name, arg) -> {
+                if (Objects.nonNull(arg) && Objects.nonNull(arg.getValueRef()) && arg.getValueRef().bag() == ValueRef.Bag.PLATFORM) {
+                    args.remove(name);
+                }
+            });
+        }
+        return new RejectedAction(pending.toolName(), masked);
     }
 
     /**

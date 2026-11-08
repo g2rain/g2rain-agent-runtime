@@ -155,7 +155,7 @@ public enum NodeStatus {
     /**
      * 把当前节点状态映射成节点循环事件（NodeEvent）。
      * <p>
-     * DONE → LOOP_DONE；WAITING_DELEGATE / SUSPENDED / CANCELLED 各有对应事件；
+     * DONE → LOOP_DONE；SKIPPED / WAITING_DELEGATE / SUSPENDED / CANCELLED 各有对应事件；
      * 其余（含 FAILED）一律映射为 LOOP_FAILED。
      * </p>
      *
@@ -166,6 +166,8 @@ public enum NodeStatus {
         return switch (this) {
             // 成功完成
             case DONE -> NodeEvent.LOOP_DONE;
+            // 写操作不需要执行
+            case SKIPPED -> NodeEvent.LOOP_SKIPPED;
             // 等委派子节点
             case WAITING_DELEGATE -> NodeEvent.LOOP_WAITING_DELEGATE;
             // 挂起等人

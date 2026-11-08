@@ -15,8 +15,6 @@ import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
-import com.g2rain.common.json.JsonCodec;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -37,11 +35,6 @@ import java.util.Objects;
 @Order(7)
 @Component
 public class EvidenceInterceptor implements ToolInterceptor {
-
-    /**
-     * JSON 编解码。
-     */
-    private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
      * 运行时状态门面：落证据、结算预写证据。

@@ -1,7 +1,6 @@
 package com.g2rain.agent.runtime.engine.flow.graph;
 
 
-import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
@@ -9,13 +8,18 @@ import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.domain.state.SourceType;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
+import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
+import com.g2rain.agent.runtime.engine.state.DefaultTurnScope;
 import com.g2rain.agent.runtime.support.ArgsBrief;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -27,6 +31,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -49,11 +54,6 @@ public class DefaultEffectHandler implements EffectHandler {
      * 解析待批参数。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
-
-    /**
-     * 待批参数摘要上限。
-     */
-    private final RuntimeProperties runtimeProperties;
 
     /**
      * 按顺序应用副作用；列表空则直接返回。
@@ -109,38 +109,147 @@ public class DefaultEffectHandler implements EffectHandler {
     }
 
     /**
-     * 待批参数的可读摘要：脱敏后按「标签：值」拼接，平台注入的参数不展示。
+     * 待批参数的可读明细：用户据此授权，内容须完整。
      *
-     * @param frame   当前图执行帧，用于取技能契约
+     * <p>按契约渲染，不区分技能：参数脱敏后不截断；平台注入的参数不展示；只能取自查询结果的引用参数
+     * 换成对象名称展示，找不到名称时不展示。</p>
+     *
+     * @param frame   当前图执行帧，用于取技能契约与会话实体
      * @param nodeId  挂起节点 id
-     * @param pending 待批准的写动作；为空或没有入参时不生成摘要
-     * @return 如「文章标题：G2rain 2.0，内容空间标识：3」；没有可展示参数时为 {@code null}
+     * @param pending 待批准的写动作；为空时不生成明细
+     * @return 如「文章标题：G2rain 2.0，内容空间：官网」；没有可展示参数时为 {@code null}
      */
     private @Nullable String approvalDetail(GraphFrame frame, String nodeId, @Nullable PendingAction pending) {
-        if (Objects.isNull(pending) || Strings.isBlank(pending.args())) {
+        if (Objects.isNull(pending)) {
             return null;
         }
 
         ToolSpec spec = toolSpec(frame, nodeId, pending.toolName());
-        JsonNode brief = JSON.str2node(ArgsBrief.of(JSON.str2node(pending.args()), spec,
-            runtimeProperties.getReact().getBriefMaxChars()));
-        if (Objects.isNull(brief) || !brief.isObject()) {
+        JsonNode masked = JSON.str2node(ArgsBrief.of(pending.args(), spec, Integer.MAX_VALUE));
+        if (Objects.isNull(masked) || !masked.isObject()) {
             return null;
         }
 
+        Map<String, String> names = entityNames(frame);
         List<String> parts = new ArrayList<>();
-        for (Map.Entry<String, JsonNode> field : brief.properties()) {
-            ArgSpec arg = Objects.isNull(spec) ? null : spec.getArgs().get(field.getKey());
+        for (Map.Entry<String, JsonNode> field : masked.properties()) {
+            ArgSpec arg = argOf(spec, field.getKey());
             if (isPlatform(arg)) {
                 continue;
             }
 
             JsonNode value = field.getValue();
+            String text = isReference(arg) ? referenceText(names, value)
+                : value.isValueNode() ? value.asString() : JSON.obj2str(value);
+            if (Objects.isNull(text)) {
+                continue;
+            }
+
             String label = Objects.nonNull(arg) && Strings.isNotBlank(arg.getLabel()) ? arg.getLabel() : field.getKey();
-            parts.add(label + "：" + (value.isValueNode() ? value.asString() : JSON.obj2str(value)));
+            parts.add(label + "：" + text);
         }
 
         return parts.isEmpty() ? null : String.join("，", parts);
+    }
+
+    /**
+     * 按字段名取参数契约；数组参数在契约中以 {@code 字段名[]} 声明。
+     *
+     * @param spec 工具规格；可空
+     * @param name 参数名
+     * @return 参数契约；找不到为 {@code null}
+     */
+    private static @Nullable ArgSpec argOf(@Nullable ToolSpec spec, String name) {
+        if (Objects.isNull(spec)) {
+            return null;
+        }
+
+        ArgSpec arg = spec.getArgs().get(name);
+        return Objects.nonNull(arg) ? arg : spec.getArgs().get(name + RuntimeUtils.WILDCARD_ARRAY_INDEX);
+    }
+
+    /**
+     * 引用参数的展示文本：标识换成对象名称，数组逐个换后以「、」连接。
+     *
+     * @param names 对象名称表，键形如 {@code type:id}
+     * @param value 参数值
+     * @return 名称文本；一个名称都找不到为 {@code null}
+     */
+    private static @Nullable String referenceText(Map<String, String> names, JsonNode value) {
+        if (!value.isArray()) {
+            return entityName(names, value.asString());
+        }
+
+        List<String> found = new ArrayList<>();
+        value.forEach(item -> {
+            String name = entityName(names, item.asString());
+            if (Objects.nonNull(name)) {
+                found.add(name);
+            }
+        });
+        return found.isEmpty() ? null : String.join("、", found);
+    }
+
+    /**
+     * 参数是否只能取自查询结果或前情（引用已有对象的标识），不由用户或模型直接给出。
+     *
+     * @param arg 参数契约；可空
+     * @return 引用参数时为 {@code true}
+     */
+    private static boolean isReference(@Nullable ArgSpec arg) {
+        return Objects.nonNull(arg) && !arg.allows(SourceType.USER) && !arg.allows(SourceType.MODEL)
+            && (arg.allows(SourceType.EVIDENCE) || arg.allows(SourceType.PRIOR_TASK));
+    }
+
+    /**
+     * 可用于展示的对象名称，键形如 {@code type:id}：会话实体在轮末才并入，本轮成功证据带出的实体一并纳入。
+     *
+     * @param frame 当前图执行帧
+     * @return 对象名称表
+     */
+    private static Map<String, String> entityNames(GraphFrame frame) {
+        Map<String, String> names = new LinkedHashMap<>();
+        // 只有 id 没有名称的实体（展示名回落为 id）不占位，留给本轮证据补上名称
+        frame.turn().entities().forEach((key, entry) -> {
+            if (!key.endsWith(":" + entry.displayName())) {
+                names.put(key, entry.displayName());
+            }
+        });
+        if (!(frame.turn() instanceof DefaultTurnScope turn)) {
+            return names;
+        }
+
+        frame.graph().getNodes().forEach(node -> turn.node(node.getNodeId()).ifPresent(scope ->
+            scope.evidence().stream()
+                .filter(head -> head.status() == EvidenceStatus.SUCCESS)
+                .map(EvidenceHead::entities)
+                .filter(Objects::nonNull)
+                .map(JSON::str2node)
+                .filter(Objects::nonNull)
+                .forEach(entities -> entities.forEach(entity -> {
+                    String name = JSON.asString(entity.get("displayName"));
+                    if (Strings.isNotBlank(name)) {
+                        names.putIfAbsent(JSON.asString(entity.get("type")) + ":" + JSON.asString(entity.get("id")), name);
+                    }
+                }))
+        ));
+        return names;
+    }
+
+    /**
+     * 按标识找对象名称。
+     *
+     * @param names 对象名称表，键形如 {@code type:id}
+     * @param id    参数值
+     * @return 对象名称；找不到为 {@code null}
+     */
+    private static @Nullable String entityName(Map<String, String> names, String id) {
+        String suffix = ":" + id;
+        return names.entrySet().stream()
+            .filter(entry -> entry.getKey().endsWith(suffix))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .orElse(null);
     }
 
     /**

@@ -1,6 +1,5 @@
 package com.g2rain.agent.runtime.engine.state.repo;
 
-import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
 import com.g2rain.agent.runtime.domain.state.task.PayloadType;
 import com.g2rain.agent.runtime.dto.TaskNodePayloadDto;
 import com.g2rain.agent.runtime.dto.TaskNodePayloadSelectDto;
