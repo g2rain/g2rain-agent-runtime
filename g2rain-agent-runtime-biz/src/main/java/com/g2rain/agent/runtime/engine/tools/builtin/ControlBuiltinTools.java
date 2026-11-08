@@ -432,7 +432,7 @@ public class ControlBuiltinTools implements BuiltinTools {
 
         EvidenceHead last = evidence.getLast();
         return last.done() && Objects.nonNull(last.extractCounts())
-            && last.extractCounts().values().stream().anyMatch(count -> Objects.nonNull(count) && count > 1);
+            && last.extractCounts().values().stream().anyMatch(count -> count > 1);
     }
 
     /**
