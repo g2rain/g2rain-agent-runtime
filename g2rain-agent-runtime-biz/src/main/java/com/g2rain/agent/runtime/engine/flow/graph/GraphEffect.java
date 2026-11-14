@@ -68,6 +68,7 @@ public sealed interface GraphEffect {
             CheckpointType type = Objects.requireNonNullElse(checkpointType, CheckpointType.FOLLOW_UP);
             TaskCheckpoint checkpoint = new TaskCheckpoint();
             checkpoint.setCheckpointId(RuntimeUtils.uuid());
+            checkpoint.setNodeId(nodeId);
             checkpoint.setType(type);
             checkpoint.setQuestion(question);
             checkpoint.setAllowedActions(new ArrayList<>(allowedActions));

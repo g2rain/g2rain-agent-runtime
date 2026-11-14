@@ -19,7 +19,6 @@
         <result column="message_id" property="messageId" jdbcType="VARCHAR"/>
         <result column="resume_action" property="resumeAction" jdbcType="VARCHAR"/>
         <result column="acted_at" property="actedAt" jdbcType="TIMESTAMP"/>
-        <result column="payload" property="payload" jdbcType="LONGVARCHAR"/>
         <!-- deleteFlag字段（如果存在） -->
         <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
         <!-- version字段（如果存在） -->
@@ -83,10 +82,6 @@
                         acted_at
                         <include refid="directionClause"/>
                     </when>
-                    <when test="item.column == 'payload'">
-                        payload
-                        <include refid="directionClause"/>
-                    </when>
                 </choose>
             </foreach>
         </trim>
@@ -100,7 +95,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at, payload,
+        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -111,7 +106,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{resumeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{messageId, jdbcType=VARCHAR}, #{resumeAction, jdbcType=VARCHAR}, #{actedAt, jdbcType=TIMESTAMP}, #{payload, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{resumeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{messageId, jdbcType=VARCHAR}, #{resumeAction, jdbcType=VARCHAR}, #{actedAt, jdbcType=TIMESTAMP},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -152,9 +147,6 @@
             <if test="actedAt != null">
                 acted_at = #{actedAt, jdbcType=TIMESTAMP},
             </if>
-            <if test="payload != null">
-                payload = #{payload, jdbcType=LONGVARCHAR},
-            </if>
             <!-- version字段更新（如果存在，版本号自增） -->
             version = version + 1
         </set>
@@ -169,7 +161,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at, payload,
+        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -188,7 +180,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at, payload,
+        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -261,9 +253,6 @@
             <if test="actedAt != null">
                 AND acted_at = #{actedAt, jdbcType=TIMESTAMP}
             </if>
-            <if test="payload != null">
-                AND payload = #{payload, jdbcType=LONGVARCHAR}
-            </if>
             <!-- 过滤已删除的记录 -->
             AND (delete_flag = 0 OR delete_flag IS NULL)
         </where>
@@ -283,7 +272,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at, payload,
+        organ_id, task_id, node_id, resume_id, checkpoint_id, message_id, resume_action, acted_at,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -296,7 +285,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.resumeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.messageId, jdbcType=VARCHAR}, #{item.resumeAction, jdbcType=VARCHAR}, #{item.actedAt, jdbcType=TIMESTAMP}, #{item.payload, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.resumeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.messageId, jdbcType=VARCHAR}, #{item.resumeAction, jdbcType=VARCHAR}, #{item.actedAt, jdbcType=TIMESTAMP},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -342,9 +331,6 @@
             </if>
             <if test="actedAt != null">
                 acted_at = #{actedAt, jdbcType=TIMESTAMP},
-            </if>
-            <if test="payload != null">
-                payload = #{payload, jdbcType=LONGVARCHAR},
             </if>
             <!-- version字段更新（乐观锁版本号自增） -->
             version = version + 1

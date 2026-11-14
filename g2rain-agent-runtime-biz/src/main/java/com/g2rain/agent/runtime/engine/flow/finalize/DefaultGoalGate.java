@@ -100,6 +100,7 @@ public final class DefaultGoalGate implements GoalGate {
             try {
                 GoalGateAnswer answer = verify(pack, cfg.getPromptMaxChars(), ctx.getRequest().getModel());
                 if (Objects.nonNull(answer)) {
+                    ctx.getTurn().task().ifPresent(task -> task.setGoalMet(!Boolean.FALSE.equals(answer.achieved())));
                     if (Boolean.FALSE.equals(answer.achieved())) {
                         Trace.at(TraceStage.FINALIZE, "goal_unmet").kv("goal", pack.goal()).warn();
                         stepEvents.done(stepId, RuntimeMessage.STEP_VERIFY_UNMET.text());

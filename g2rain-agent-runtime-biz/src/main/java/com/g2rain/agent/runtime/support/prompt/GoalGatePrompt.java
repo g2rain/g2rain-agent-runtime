@@ -41,7 +41,9 @@ public final class GoalGatePrompt {
             - 以 goal 为准，逐项对照 nodes 的执行事实判断是否达成。
             - 节点 status 为 DONE 且有 target，表示该写操作已成功执行；claimed 为 true 时，target 只是执行中第一次发起的写操作，可能只是前置步骤，须对照 goal 和 result 判断要求的写操作是否都已完成。
             - 节点 writable 为 true 却没有 target，表示该节点没有执行任何写操作；若 goal 要求新增、修改、删除或变更状态，该部分视为未达成。
-            - 节点 status 不是 DONE 的，其目标视为未完成。
+            - 节点 status 为 SKIPPED 且有 result，表示经查询确认该写操作不需要执行（依据见 result）：goal 中带条件的要求（如「不存在就创建」）视为已满足；goal 无条件要求执行的写操作被跳过，视为未达成。
+            - 节点 status 不是 DONE 或 SKIPPED 的，其目标视为未完成。
+            - 查询类要求：查询已执行且结果为空并如实告知，视为达成。
             - 只要 goal 中有一项要求未被执行事实支持，achieved 为 false。
 
             【答复要求】

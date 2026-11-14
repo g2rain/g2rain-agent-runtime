@@ -102,18 +102,6 @@ public class TaskGraphNodeSelectDto extends BaseSelectListDto {
     private LocalDateTime finishedTime;
 
     /**
-     * 输入（带来源）
-     */
-    @Schema(description = "输入（带来源）")
-    private String inputs;
-
-    /**
-     * 输出（带来源）
-     */
-    @Schema(description = "输出（带来源）")
-    private String outputs;
-
-    /**
      * 节点空间（便签、轮次、动作）
      */
     @Schema(description = "节点空间（便签、轮次、动作）")

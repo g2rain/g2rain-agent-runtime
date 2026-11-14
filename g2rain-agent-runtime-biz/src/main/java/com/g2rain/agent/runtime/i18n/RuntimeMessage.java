@@ -64,6 +64,7 @@ public enum RuntimeMessage {
     STEP_DELEGATE("step.delegate", "委派：{skill}"),
     STEP_FINISH("step.finish", "完成"),
     STEP_FAIL("step.fail", "判定无法完成"),
+    STEP_SKIP("step.skip", "跳过"),
     MODE_START_FRESH("mode.start_fresh", "新开任务"),
     MODE_CONTINUE_TASK("mode.continue_task", "继续上一个任务"),
     MODE_START_WITH_CONTEXT("mode.start_with_context", "接着之前的话题新开任务"),

@@ -84,10 +84,4 @@ public class TaskResumeRecordDto extends BaseDto {
     @Schema(description = "动作时间")
     private LocalDateTime actedAt;
 
-    /**
-     * 动作载荷
-     */
-    @Size(max = 1073741824)
-    @Schema(description = "动作载荷", maxLength = 1073741824)
-    private String payload;
 }

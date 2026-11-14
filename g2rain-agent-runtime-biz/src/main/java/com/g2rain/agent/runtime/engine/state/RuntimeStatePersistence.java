@@ -96,7 +96,7 @@ public class RuntimeStatePersistence {
             graphs.save(task.getTaskId(), scope.graph(), spacesOf(scope.nodes()));
             calls.syncHeads(headsOf(scope.nodes()));
             scope.lastResumeAction().ifPresent(action -> tasks.consumeCheckpoint(task.getTaskId(), action,
-                scope.lastResumeMessageId().orElse("")));
+                scope.lastResumeMessageId().orElse(""), scope.lastResumeAt()));
             scope.checkpoint().ifPresent(checkpoint -> {
                 if (tasks.suspend(task.getTaskId(), checkpoint, task)) {
                     conversations.bindTask(task.getSourceMessageId(), task.getTaskId());
@@ -109,7 +109,7 @@ public class RuntimeStatePersistence {
                 // 用户消息在 begin 时已 insert，避免轮末重复
                 return;
             }
-            conversations.insertMessage(conversationId, message.getTaskId(), message, null);
+            conversations.insertMessage(conversationId, message.getTaskId(), message, scope.channel());
         });
 
         // 本轮执行步骤与消息同事务落库，历史接口按 traceId 关联到最终回复
@@ -139,9 +139,7 @@ public class RuntimeStatePersistence {
      * @return 任务记录
      */
     private static TaskRecord recordOf(TaskMetadata task, DefaultTurnScope scope) {
-        return new TaskRecord(task.getTaskId(), Objects.toString(task.getAgentId(), ""),
-            task.getGoalSummary(), task.getStatus(), task.getFinalMessage(), scope.entities(), List.of(),
-            System.currentTimeMillis());
+        return TaskRecords.of(task, scope);
     }
 
     /**

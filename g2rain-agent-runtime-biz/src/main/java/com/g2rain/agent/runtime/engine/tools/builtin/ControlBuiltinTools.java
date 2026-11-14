@@ -20,6 +20,7 @@ import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
 import com.g2rain.agent.runtime.engine.tools.finish.NodeFinisher;
+import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -45,7 +46,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 控流内置工具：追问、审批、委派、完成、失败。
+ * 控流内置工具：追问、审批、委派、完成、跳过、失败。
  *
  * <p>模型在节点内循环里调用；实现从 Spring ToolContext 取出本仓执行上下文后改节点状态。</p>
  *
@@ -70,6 +71,11 @@ public class ControlBuiltinTools implements BuiltinTools {
      * 委派深度上限。
      */
     private final RuntimeProperties runtimeProperties;
+
+    /**
+     * 读本节点与上游节点的成功证据：跳过须有查询依据。
+     */
+    private final EvidenceReader evidenceReader;
 
     /**
      * 向用户追问（含补参）。
@@ -189,6 +195,33 @@ public class ControlBuiltinTools implements BuiltinTools {
     }
 
     /**
+     * 本节点跳过：查询结果表明目标写操作不需要执行，结束本节点循环并标记 SKIPPED。
+     *
+     * <p>须有完成目标且尚未写成功，并有本节点或上游节点成功且非空的查询作为依据，否则拒绝。
+     * 原因作为节点结论，下游照常读取本节点的查询证据。
+     * 例：{@code skip("《使用说明》已存在，无需创建", toolContext)}</p>
+     *
+     * @param reason      不需要执行的原因，会回给用户看
+     * @param toolContext Spring AI 工具上下文，内含本节点执行现场
+     * @return 控流后的节点状态名与原因
+     */
+    @Tool(
+        name = "builtin_node_skip",
+        description = """
+            查询结果表明本节点的写操作不需要执行（如对象已存在）时调用: 结束本节点循环并标记跳过。reason 写明依据。
+            """
+    )
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.SKIP)
+    public NodeActionResult skip(@ToolParam(description = "不需要执行的原因") String reason, ToolContext toolContext) {
+        ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
+        reason = RuntimeUtils.unescapeLiteral(reason);
+        requireSkippable(ctx);
+        ctx.scope().note(NodeNoteKey.GATED_WRITE, null);
+        ctx.applySkip(reason);
+        return new NodeActionResult(ctx.getNodeStatus().name(), reason);
+    }
+
+    /**
      * 本节点失败：结束本节点循环并标记 FAILED。
      *
      * <p>写入失败原因并清挂起类型。后续调度按失败节点处理，不再续跑本循环。
@@ -295,7 +328,7 @@ public class ControlBuiltinTools implements BuiltinTools {
      * 追问须有依据，否则拒绝：
      * <ol>
      *   <li>缺参：待补参数都是本技能工具中允许来自用户的参数，或须来自查询结果且本节点已查到候选（让用户选）；</li>
-     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空或业务失败。</li>
+     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空、业务失败，或返回多条候选需要用户选择。</li>
      * </ol>
      * 没有契约的技能不做判定。
      *
@@ -309,7 +342,7 @@ public class ControlBuiltinTools implements BuiltinTools {
         }
 
         if (expectedFields.isEmpty()) {
-            if (!lastCallUnresolved(ctx)) {
+            if (!lastCallUnresolved(ctx) && !lastCallAmbiguous(ctx)) {
                 throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
                     ModelHint.FOLLOW_UP_NO_BASIS.text());
             }
@@ -357,6 +390,49 @@ public class ControlBuiltinTools implements BuiltinTools {
         boolean failed = last.status() == EvidenceStatus.FAILED || last.status() == EvidenceStatus.TIMEOUT
             || Boolean.FALSE.equals(last.businessOk());
         return failed || (last.done() && Boolean.TRUE.equals(last.empty()));
+    }
+
+    /**
+     * 跳过须有依据，否则拒绝：节点有完成目标、目标尚未写成功、本节点或上游节点有成功且非空的查询。
+     *
+     * @param ctx 节点执行现场
+     */
+    private void requireSkippable(ToolExecutionContext ctx) {
+        String target = ctx.getTarget();
+        if (Objects.isNull(target)) {
+            throw new ToolRejectedException(RuntimeErrorCode.SKIP_UNGROUNDED, ModelHint.NEXT_FINISH.text(),
+                ModelHint.SKIP_NO_TARGET.text());
+        }
+
+        if (ctx.scope().evidence().stream().anyMatch(head -> target.equals(head.toolName()) && head.done())) {
+            throw new ToolRejectedException(RuntimeErrorCode.SKIP_UNGROUNDED, ModelHint.NEXT_FINISH.text(),
+                ModelHint.SKIP_TARGET_DONE.text());
+        }
+
+        boolean grounded = evidenceReader.successfulEvidenceNewestFirst(ctx).stream()
+            .map(EvidenceReader.OwnedEvidence::head)
+            .anyMatch(head -> head.sideEffect() != SideEffect.WRITE && !Boolean.TRUE.equals(head.empty()));
+        if (!grounded) {
+            throw new ToolRejectedException(RuntimeErrorCode.SKIP_UNGROUNDED, ModelHint.NEXT_SKIP.text(),
+                ModelHint.SKIP_NO_BASIS.text());
+        }
+    }
+
+    /**
+     * 本节点最近一次业务调用成功且有抽取项返回多条，需要用户从候选中选择。
+     *
+     * @param ctx 节点执行现场
+     * @return 有多条候选
+     */
+    private static boolean lastCallAmbiguous(ToolExecutionContext ctx) {
+        List<EvidenceHead> evidence = ctx.scope().evidence();
+        if (evidence.isEmpty()) {
+            return false;
+        }
+
+        EvidenceHead last = evidence.getLast();
+        return last.done() && Objects.nonNull(last.extractCounts())
+            && last.extractCounts().values().stream().anyMatch(count -> count > 1);
     }
 
     /**

@@ -39,6 +39,9 @@ public class DefaultNodeStateMachine implements NodeStateMachine {
             // 节点内循环正常完成：节点 DONE；可继续调度下游，不停图
             case LOOP_DONE -> new NodeTransition(from, NodeStatus.DONE, false);
 
+            // 节点内循环判定写操作不需要执行：节点 SKIPPED；同样放行下游，不停图
+            case LOOP_SKIPPED -> new NodeTransition(from, NodeStatus.SKIPPED, false);
+
             // 节点内循环失败或循环超时：节点 FAILED；应停图
             case LOOP_FAILED -> new NodeTransition(from, NodeStatus.FAILED, true);
 

@@ -2,6 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.InputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 把节点现场收成结构化投影 record，供提示组装器序列化。
@@ -81,6 +83,7 @@ public class ReactProjectionFactory {
     public List<ReactProjection.TaggedBlock> blocks(PromptAssembleRequest request) {
         List<ReactProjection.TaggedBlock> blocks = new ArrayList<>();
         add(blocks, "node_goal", nodeGoal(request));
+        add(blocks, "task_plan", taskPlan(request));
         add(blocks, "checkpoint", pendingCheckpoint(request));
         add(blocks, "input_schema", inputSchema(request));
         add(blocks, "tool_catalog", ToolCatalogProjector.of(request.toolCallbacks(), request.contract()));
@@ -349,7 +352,11 @@ public class ReactProjectionFactory {
 
         List<ReactProjection.PriorTaskView> tasks = prior.tasks().stream()
             .map(record -> new ReactProjection.PriorTaskView(
-                record.taskId(), Strings.blankToNull(record.goal()), record.status(), Strings.blankToNull(record.summary())
+                record.taskId(), Strings.blankToNull(record.goal()), record.status(), Strings.blankToNull(record.summary()),
+                Strings.blankToNull(record.request()),
+                Optional.ofNullable(record.rejected())
+                    .map(rejected -> new ReactProjection.RejectedView(rejected.toolName(), rejected.args()))
+                    .orElse(null)
             ))
             .toList();
         List<ReactProjection.PriorEntityView> entities = prior.entities().entrySet().stream()
@@ -362,6 +369,24 @@ public class ReactProjectionFactory {
         }
 
         return new ReactProjection.PriorView(Strings.blankToNull(prior.reason()), emptyToNull(tasks), emptyToNull(entities));
+    }
+
+    /**
+     * 组装 {@code task_plan}：任务内全部步骤与状态，让节点知道其他部分由谁完成；单步骤任务省略。
+     *
+     * @param request 组装入参
+     * @return 计划视图；不足两个步骤时为 {@code null}
+     */
+    private static @Nullable List<ReactProjection.PlanStepView> taskPlan(PromptAssembleRequest request) {
+        List<TaskNode> nodes = request.node().turn().graph().getNodes();
+        if (nodes.size() < 2) {
+            return null;
+        }
+
+        return nodes.stream()
+            .map(node -> new ReactProjection.PlanStepView(node.getTitle(), node.getStatus(),
+                Objects.equals(node.getNodeId(), request.nodeId()) ? Boolean.TRUE : null))
+            .toList();
     }
 
     /**

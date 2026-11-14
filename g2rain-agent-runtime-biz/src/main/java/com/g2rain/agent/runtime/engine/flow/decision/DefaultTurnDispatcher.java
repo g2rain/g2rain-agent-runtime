@@ -116,7 +116,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
 
         TurnScope turn = ctx.getTurn();
         boolean write = writePending(turn);
-        TurnScene scene = TurnScene.of(hasActiveTask(turn), !turn.records().isEmpty());
+        TurnScene scene = TurnScene.of(hasActiveTask(turn), !turn.records().isEmpty(), write);
         Long lockedAgentId = entry.explicitAgentId();
 
         IntentResult intent = intentClassifier.classify(buildIntentRequest(ctx, scene, lockedAgentId, write));
@@ -149,7 +149,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
      *
      * <pre>{@code
      * settle(null, TurnScene.FRESH, false, false);         // START_FRESH
-     * settle(null, TurnScene.ACTIVE_TASK, false, true);    // UNCERTAIN
+     * settle(null, TurnScene.WRITE_PENDING, false, true);  // UNCERTAIN
      * }</pre>
      *
      * @param intent       模型结论；可空
@@ -279,7 +279,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
             IntentRequest.DialogueWindow.from(turn.dialogue(DIALOGUE_LIMIT)),
             null,
             resolveSkillCatalog(catalog, locked),
-            activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK, writePending),
+            activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK || scene == TurnScene.WRITE_PENDING, writePending),
             ctx.getRequest().getModel()
         );
     }
