@@ -5,13 +5,13 @@ import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.VerifySpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.VerifySpec;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
@@ -20,6 +20,7 @@ import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.state.DefaultNodeScope;
 import com.g2rain.agent.runtime.engine.state.EvidenceFlow;
 import com.g2rain.agent.runtime.engine.tools.ToolInvoker;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.json.JsonCodec;
@@ -31,6 +32,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,7 +65,7 @@ public class WriteVerifier {
     private final EvidenceFlow evidenceFlow;
 
     /**
-     * 仍未知的写证据：先调 verify.tool；调不了则 VERIFY 挂起。
+     * 仍未知的写证据：先调 verify.tool；调不了或回查无结论则 VERIFY 挂起。
      *
      * @param node      当前节点
      * @param frame     当前图执行帧
@@ -98,13 +100,16 @@ public class WriteVerifier {
     /**
      * 调用契约 verify 工具收口未知写证据。
      *
+     * <p>回查成功记成功；回查调用成功但业务判定失败（查无此写入）记失败；回查自身调用失败、被拒或须前置步骤时
+     * 无法得出结论，保持未知，交由 VERIFY 挂起人工核实，避免模型据此重做写入。</p>
+     *
      * @param node      当前节点
      * @param frame     当前图执行帧
      * @param skill     当前技能；可空
      * @param tools     本节点可见工具
      * @param nodeScope 当前节点作用域
      * @param head      待核实的写证据
-     * @return 已调用 verify 工具则为 {@code true}；无工具可调则为 {@code false}
+     * @return 已据回查收口为 {@code true}；无工具可调或回查无结论为 {@code false}
      */
     private boolean settleByVerifyTool(TaskNode node, GraphFrame frame, @Nullable Skill skill,
                                        List<ToolCallback> tools, DefaultNodeScope nodeScope, EvidenceHead head) {
@@ -126,10 +131,15 @@ public class WriteVerifier {
         ));
         if (observation.outcome() == Outcome.SUCCESS) {
             evidenceFlow.applyOutcome(nodeScope, head, EvidenceStatus.SUCCESS, true, FailureKind.NONE);
-        } else {
-            evidenceFlow.applyOutcome(nodeScope, head, EvidenceStatus.FAILED, false, FailureKind.NONE);
+            return true;
         }
-        return true;
+
+        if (observation.errorCode() == RuntimeErrorCode.TOOL_BUSINESS_FAILED) {
+            evidenceFlow.applyOutcome(nodeScope, head, EvidenceStatus.FAILED, false, FailureKind.NONE);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -144,7 +154,7 @@ public class WriteVerifier {
         if (Collections.isEmpty(verify.getArgs())) {
             return Strings.isBlank(request) ? "{}" : request;
         }
-        JsonNode original = Strings.isBlank(request) ? JSON.str2node("{}") : JSON.str2node(request);
+        JsonNode original = Strings.isBlank(request) ? JsonNodeFactory.instance.objectNode() : JSON.str2node(request);
         Map<String, Object> built = new LinkedHashMap<>();
         verify.getArgs().forEach((key, spec) -> {
             if (Objects.nonNull(spec.getConstant())) {

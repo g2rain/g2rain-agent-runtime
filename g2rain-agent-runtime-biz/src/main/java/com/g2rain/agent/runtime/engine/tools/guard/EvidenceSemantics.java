@@ -1,10 +1,11 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ExtractSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.engine.state.EntitySeeds;
+import com.g2rain.agent.runtime.spec.ExtractSpec;
+import com.g2rain.agent.runtime.spec.SideEffect;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -162,7 +163,7 @@ public final class EvidenceSemantics {
         }
 
         ObjectNode base = contract.sideEffectOrDefault() == SideEffect.WRITE && args instanceof ObjectNode obj
-            ? obj : JsonNodeFactory.instance.objectNode();
+            ? withoutSensitive(obj, contract) : JsonNodeFactory.instance.objectNode();
         List<EntitySeed> seeds = new ArrayList<>();
         for (ExtractSpec extract : contract.getExtracts()) {
             if (Objects.isNull(extract.getEntity()) || Strings.isBlank(extract.getEntity().getType())
@@ -176,9 +177,9 @@ public final class EvidenceSemantics {
             }
 
             if (at.isArray()) {
-                at.forEach(item -> addSeed(seeds, extract.getEntity().seed(base, item)));
+                at.forEach(item -> addSeed(seeds, EntitySeeds.of(extract.getEntity(), base, item)));
             } else {
-                addSeed(seeds, extract.getEntity().seed(base, at));
+                addSeed(seeds, EntitySeeds.of(extract.getEntity(), base, at));
             }
         }
 
@@ -187,6 +188,25 @@ public final class EvidenceSemantics {
         }
 
         return JSON.obj2str(seeds);
+    }
+
+    /**
+     * 写工具以调用参数为实体底稿时，去掉契约标为敏感的参数，避免进入实体索引、任务记录与提示词。
+     *
+     * <p>实体属性只取顶层标量字段，按顶层参数名去除即可。</p>
+     *
+     * @param args     调用参数
+     * @param contract 工具契约
+     * @return 去掉敏感参数后的副本
+     */
+    private static ObjectNode withoutSensitive(ObjectNode args, ToolSpec contract) {
+        ObjectNode base = args.deepCopy();
+        contract.getArgs().forEach((path, spec) -> {
+            if (spec.isSensitive() && Strings.isNotBlank(path)) {
+                base.remove(path.trim());
+            }
+        });
+        return base;
     }
 
     /**

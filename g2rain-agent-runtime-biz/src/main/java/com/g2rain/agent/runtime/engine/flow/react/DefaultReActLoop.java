@@ -5,7 +5,7 @@ import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.react.ReActLoopContext;
 import com.g2rain.agent.runtime.domain.react.ReActLoopResult;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
@@ -282,9 +282,9 @@ public class DefaultReActLoop implements ReActLoop {
             }
         }
 
-        // 轮次用尽仍未由控流收口 → 失败
+        // 轮次用尽仍未由控流收口 → 失败，带上停在哪一步的说明
         Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.MAX_ROUNDS).error();
-        return new ReActLoopResult(NodeStatus.FAILED);
+        return new ReActLoopResult(NodeStatus.FAILED, RuntimeMessage.NODE_ROUNDS_EXHAUSTED.text("step", titleOf(context.node())), null, null);
     }
 
     /**
@@ -547,7 +547,7 @@ public class DefaultReActLoop implements ReActLoop {
     /**
      * 本轮提供给模型的工具：审批只在有被拦下待确认的写调用时提供。
      *
-     * <p>只影响模型可见列表；执行仍按全量工具查找，同一轮先写后申请的并行调用照常处理。</p>
+     * <p>只影响模型可见列表；执行仍按全量工具查找。写调用被拦下后同一轮其余调用都会跳过，申请确认须在下一轮发起。</p>
      *
      * @param tools 节点全部工具
      * @param scope 当前节点作用域

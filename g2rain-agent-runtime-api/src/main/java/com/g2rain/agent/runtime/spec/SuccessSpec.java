@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -26,9 +26,9 @@ public class SuccessSpec {
     private String path;
 
     /**
-     * 比较运算符。
+     * 比较运算符；缺省时整条成功判定按未配置处理。
      */
-    private SuccessOp op;
+    private @Nullable SuccessOp op;
 
     /**
      * 期望值。

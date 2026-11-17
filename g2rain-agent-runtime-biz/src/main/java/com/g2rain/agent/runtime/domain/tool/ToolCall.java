@@ -1,8 +1,8 @@
 package com.g2rain.agent.runtime.domain.tool;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 

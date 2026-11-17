@@ -1,12 +1,12 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.BindingWhen;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.BindingWhen;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
@@ -24,11 +24,17 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 
 /**
@@ -40,7 +46,7 @@ import java.util.Optional;
  * @since 2026/8/21
  */
 @Slf4j
-@Order(2)
+@Order(2000)
 @Component
 @RequiredArgsConstructor
 public class ArgBindingInterceptor implements ToolInterceptor {
@@ -54,6 +60,16 @@ public class ArgBindingInterceptor implements ToolInterceptor {
      * JSON 编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 路径分段符。
+     */
+    private static final char PATH_SEPARATOR = '.';
+
+    /**
+     * 数组下标起始符。
+     */
+    private static final char INDEX_OPEN = '[';
 
     /**
      * 调用前按契约 {@code from / const} 覆盖入参，并把来源写入请求。
@@ -70,16 +86,19 @@ public class ArgBindingInterceptor implements ToolInterceptor {
             return Optional.empty();
         }
 
+        // 已批准写工具按用户确认的那组参数执行：这组参数在确认前已规范、绑定、校验过，不得再改写或拒调
+        if (request.context().approvedWrite()) {
+            return Optional.empty();
+        }
+
         ToolExecutionContext ctx = request.context();
         ToolSpec spec = request.contract();
         if (Objects.isNull(spec) || Collections.isEmpty(spec.getArgs())) {
             return Optional.empty();
         }
 
-        JsonNode parsed = JSON.str2node(request.arguments());
-        if (!(parsed instanceof ObjectNode args)) {
-            return Optional.empty();
-        }
+        // 在请求持有的参数树上原地改写，不再解析与回写字符串
+        ObjectNode args = request.args();
 
         // 逐参按契约注入：常量 → 数组模板 → from 取值，命中即改写并记来源
         JsonNode working = WorkingTree.of(ctx);
@@ -126,9 +145,7 @@ public class ArgBindingInterceptor implements ToolInterceptor {
             }
         }
 
-        // 有改写才回写入参，并触发指纹重算
         if (changed) {
-            request.replaceArguments(JSON.obj2str(args));
             log.debug("[ArgBinding] rewritten tool={}", request.toolName());
         }
 
@@ -188,7 +205,10 @@ public class ArgBindingInterceptor implements ToolInterceptor {
     }
 
     /**
-     * 把数组通配 from 展开写入对应下标参数。
+     * 把数组通配 from 展开写入对应下标参数；支持多层嵌套，各层下标按来源数组的实际长度分别展开。
+     *
+     * <p>{@code evidence.*} 先取出一条证据里该抽取项的整棵子树，再在其上展开，所有行都来自同一次调用结果，
+     * 行与行天然对齐。例：{@code invoiceDetailList[].goodsName} ← {@code evidence.order_lines[].goodsName}。</p>
      *
      * @param toPath  目标路径模板
      * @param args    当前入参对象
@@ -197,40 +217,149 @@ public class ArgBindingInterceptor implements ToolInterceptor {
      * @param binding 参数契约
      * @return 是否改写了入参
      */
-    private static boolean applyArrayTemplate(String toPath, ObjectNode args, JsonNode working, ToolInvokeRequest request, ArgSpec binding) {
+    private boolean applyArrayTemplate(String toPath, ObjectNode args, JsonNode working, ToolInvokeRequest request, ArgSpec binding) {
         ValueRef baseRef = binding.getValueRef();
         if (Objects.isNull(baseRef)) {
             return false;
         }
 
-        int wild = baseRef.path().indexOf(RuntimeUtils.WILDCARD_ARRAY_INDEX);
-        if (wild < 0) {
-            return false;
-        }
-
-        ValueRef arrayRef = new ValueRef(baseRef.bag(), baseRef.path().substring(0, wild));
-        JsonNode sourceArr = WorkingTree.lookup(working, arrayRef);
-        if (!(sourceArr instanceof ArrayNode src) || src.isEmpty()) {
+        TemplateSource template = baseRef.bag() == ValueRef.Bag.EVIDENCE
+            ? evidenceTemplate(request.context(), baseRef.path())
+            : workingTemplate(working, baseRef.bag());
+        if (Objects.isNull(template)) {
             return false;
         }
 
         boolean changed = false;
-        for (int i = 0, j = src.size(); i < j; i++) {
-            String to = toPath.replace(RuntimeUtils.WILDCARD_ARRAY_INDEX, "[" + i + "]");
-            if (JSON.hasValue(JSON.lookupNode(args, to))) {
+        for (PathPair pair : concretePaths(baseRef.path(), toPath, template.root())) {
+            // 目标位置已有值（模型或前一条绑定给出）则保留
+            if (JSON.hasValue(JSON.lookupNode(args, pair.to()))) {
                 continue;
             }
 
-            String itemPath = baseRef.path().replace(RuntimeUtils.WILDCARD_ARRAY_INDEX, "[" + i + "]");
-            ValueRef itemRef = new ValueRef(baseRef.bag(), itemPath);
-            JsonNode v = WorkingTree.lookup(working, itemRef);
-            if (JSON.hasValue(v) && JSON.upsertNode(args, to, v, true)) {
+            JsonNode value = JSON.lookupNode(template.root(), pair.from());
+            if (JSON.hasValue(value) && JSON.upsertNode(args, pair.to(), value, true)) {
                 changed = true;
-                request.argSource(to, new Source(sourceTypeOf(itemRef.bag()), refLeaf(itemRef.path()), itemRef.path()));
+                request.argSource(pair.to(), template.sourceOf(pair.from()));
             }
         }
 
         return changed;
+    }
+
+    /**
+     * 证据数组模板的取值根：按抽取键取一条证据的抽取子树，挂在同名键下，模板路径无需改写。
+     *
+     * @param ctx  执行上下文
+     * @param path 来源路径，如 {@code order_lines[].goodsName}
+     * @return 取值根与来源；取不到证据为 {@code null}
+     */
+    private @Nullable TemplateSource evidenceTemplate(ToolExecutionContext ctx, String path) {
+        String key = extractKeyOf(path);
+        if (Strings.isBlank(key)) {
+            return null;
+        }
+
+        Optional<EvidenceReader.Hit> hit = evidenceReader.resolve(ctx, new ValueRef(ValueRef.Bag.EVIDENCE, key));
+        if (hit.isEmpty()) {
+            return null;
+        }
+
+        ObjectNode root = JsonNodeFactory.instance.objectNode();
+        root.set(key, hit.get().value());
+        Source extract = hit.get().source();
+        return new TemplateSource(root, itemPath -> new Source(SourceType.EVIDENCE, extract.ref(),
+            extract.path() + itemPath.substring(key.length())));
+    }
+
+    /**
+     * 工作树数组模板的取值根：对应袋（输入、产出、共享、会话、前情）的子树。
+     *
+     * @param working 当前节点取值树
+     * @param bag     来源袋
+     * @return 取值根与来源；袋不存在为 {@code null}
+     */
+    private static @Nullable TemplateSource workingTemplate(JsonNode working, ValueRef.Bag bag) {
+        JsonNode root = working.get(bag.wirePrefix());
+        if (Objects.isNull(root)) {
+            return null;
+        }
+
+        SourceType type = sourceTypeOf(bag);
+        return new TemplateSource(root, itemPath -> new Source(type, refLeaf(itemPath), itemPath));
+    }
+
+    /**
+     * 证据路径的抽取键：第一个 {@code .} 或 {@code [} 之前的部分。
+     *
+     * @param path 来源路径
+     * @return 抽取键
+     */
+    private static String extractKeyOf(String path) {
+        int end = path.length();
+        int dot = path.indexOf(PATH_SEPARATOR);
+        if (dot >= 0) {
+            end = dot;
+        }
+
+        int bracket = path.indexOf(INDEX_OPEN);
+        if (bracket >= 0 && bracket < end) {
+            end = bracket;
+        }
+
+        return path.substring(0, end);
+    }
+
+    /**
+     * 把含通配的来源 / 目标路径展开成逐项对应的具体路径；用队列逐层展开，不递归。
+     *
+     * <p>每次取来源路径里第一个 {@code []}，按该处数组的实际长度生成新路径，来源与目标的第一个 {@code []}
+     * 换成同一个下标。例：{@code items[].tags[]}，items 两项、各有 3 和 1 个 tag，得到 4 对路径。
+     * 来源层数用完而目标仍带通配时，层数对不上，该对路径丢弃。</p>
+     *
+     * @param fromPath 来源路径模板，含通配
+     * @param toPath   目标路径模板
+     * @param root     来源路径的取值根
+     * @return 具体路径对，按展开顺序
+     */
+    static List<PathPair> concretePaths(String fromPath, String toPath, JsonNode root) {
+        List<PathPair> pairs = new ArrayList<>();
+        Deque<PathPair> pending = new ArrayDeque<>();
+        pending.add(new PathPair(fromPath, toPath));
+        while (!pending.isEmpty()) {
+            PathPair pair = pending.poll();
+            int wild = pair.from().indexOf(RuntimeUtils.WILDCARD_ARRAY_INDEX);
+            if (wild < 0) {
+                if (!pair.to().contains(RuntimeUtils.WILDCARD_ARRAY_INDEX)) {
+                    pairs.add(pair);
+                }
+                continue;
+            }
+
+            JsonNode array = JSON.lookupNode(root, pair.from().substring(0, wild));
+            if (!(array instanceof ArrayNode items)) {
+                continue;
+            }
+
+            for (int i = 0, j = items.size(); i < j; i++) {
+                String index = "[" + i + "]";
+                pending.add(new PathPair(firstWildcardAs(pair.from(), index), firstWildcardAs(pair.to(), index)));
+            }
+        }
+
+        return pairs;
+    }
+
+    /**
+     * 把路径中第一个 {@code []} 换成具体下标；没有通配时原样返回。
+     *
+     * @param path  路径
+     * @param index 具体下标，如 {@code [0]}
+     * @return 替换后的路径
+     */
+    private static String firstWildcardAs(String path, String index) {
+        int at = path.indexOf(RuntimeUtils.WILDCARD_ARRAY_INDEX);
+        return at < 0 ? path : path.substring(0, at) + index + path.substring(at + RuntimeUtils.WILDCARD_ARRAY_INDEX.length());
     }
 
     /**
@@ -311,12 +440,41 @@ public class ArgBindingInterceptor implements ToolInterceptor {
     }
 
     /**
+     * 数组模板的取值根与逐项来源。
+     *
+     * @param root       来源路径的取值根
+     * @param itemSource 按具体来源路径生成该项的来源
+     */
+    private record TemplateSource(JsonNode root, Function<String, Source> itemSource) {
+
+        /**
+         * 生成具体来源路径对应的来源。
+         *
+         * @param itemPath 具体来源路径，如 {@code order_lines[0].goodsName}
+         * @return 该项来源
+         */
+        Source sourceOf(String itemPath) {
+            return itemSource.apply(itemPath);
+        }
+    }
+
+    /**
      * 一次绑定得到的值与来源。
      *
      * @param value  绑定值
      * @param source 来源；平台/证据可空以外一般有值
      */
     private record BoundValue(JsonNode value, @Nullable Source source) {
+
+    }
+
+    /**
+     * 一对逐项对应的具体路径。
+     *
+     * @param from 来源路径（数据袋内）
+     * @param to   目标参数路径
+     */
+    record PathPair(String from, String to) {
 
     }
 }

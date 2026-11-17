@@ -7,6 +7,7 @@ import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
@@ -15,6 +16,7 @@ import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import lombok.Getter;
 import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Objects;
@@ -228,21 +230,41 @@ public final class ToolExecutionContext {
     }
 
     /**
-     * 节点尚无完成目标时，把本次实际发起的写调用记为目标；之后 finish 须等它成功。
-     * <p>该写工具已是其他未结束节点的目标时不认领，交写范围门拒绝。</p>
+     * 把本次实际发起的写调用记为节点完成目标；之后 finish 须等它成功。
+     * <p>节点尚无目标时认领；目标是先前自动认领的、且尚无成功或进行中的调用、也没有待确认的写调用时，
+     * 换成本次的写工具（模型第一次可能调错）。规划指定的目标不换；该写工具已是其他未结束节点的目标时不认领，交写范围门拒绝。</p>
      *
      * @param toolName 本次调用的工具注册名
      * @return 本次记为目标时为 {@code true}
      */
     public boolean claimTarget(String toolName) {
-        if (Strings.isNotBlank(node.getTarget()) || Objects.isNull(skill) || !skill.writeTools().contains(toolName)
+        if (Objects.isNull(skill) || !skill.writeTools().contains(toolName) || toolName.equals(node.getTarget())
             || Objects.nonNull(getGraph().targetOwner(toolName, node.getNodeId()))) {
+            return false;
+        }
+
+        if (Strings.isNotBlank(node.getTarget()) && !claimedTargetReplaceable(node.getTarget())) {
             return false;
         }
 
         node.setTarget(toolName);
         node.setTargetClaimed(true);
         return true;
+    }
+
+    /**
+     * 自动认领的目标能否被换掉：规划指定的不换；本节点有该工具成功或仍占用幂等槽的调用、或有待确认的写调用时不换。
+     *
+     * @param target 当前目标工具名
+     * @return 可以换成新的写调用时为 {@code true}
+     */
+    private boolean claimedTargetReplaceable(String target) {
+        if (!node.isTargetClaimed() || Objects.nonNull(scope.note(NodeNoteKey.GATED_WRITE))) {
+            return false;
+        }
+
+        return scope.evidence().stream()
+            .noneMatch(head -> target.equals(head.toolName()) && head.status().holdsSlot(head.businessOk()));
     }
 
     /**
@@ -419,11 +441,22 @@ public final class ToolExecutionContext {
     public static String fingerprintOf(String toolName, String arguments) {
         try {
             String args = Strings.defaultIfBlank(arguments, "{}");
-            return toolName + "|" + RuntimeUtils.argsHash(JsonCodecFactory.instance().str2node(args));
+            return fingerprintOf(toolName, JsonCodecFactory.instance().str2node(args));
         } catch (RuntimeException _) {
             // 解析失败必须换新指纹，防止坏 JSON 被当成同一调用
             return toolName + "|fp-fail-" + System.nanoTime();
         }
+    }
+
+    /**
+     * 由工具名与已解析的参数树生成调用指纹，免去先序列化再解析。
+     *
+     * @param toolName 工具注册名
+     * @param args     参数树
+     * @return {@code 工具名|argsHash}
+     */
+    public static String fingerprintOf(String toolName, JsonNode args) {
+        return toolName + "|" + RuntimeUtils.argsHash(args);
     }
 
     /**

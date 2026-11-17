@@ -15,7 +15,6 @@ import com.g2rain.agent.runtime.service.ChatMessageService;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
 import com.g2rain.agent.runtime.vo.ChatMessageVo;
-import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Moments;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
@@ -116,21 +115,18 @@ public class ConversationRepository {
     }
 
     /**
-     * 从 {@code chat_message} 回灌会话对话（时间正序）。
+     * 从 {@code chat_message} 回灌会话最近的对话，按时间正序返回。
      *
      * @param conversationId 会话 id
      * @param limit          最多条数
      * @return 消息
      */
     public List<DialogueMessage> loadDialogue(String conversationId, int limit) {
-        ChatMessageSelectDto query = new ChatMessageSelectDto();
-        query.setConversationId(conversationId);
-        List<ChatMessageVo> rows = chatMessageService.selectList(query);
-        if (Collections.isEmpty(rows)) {
-            return List.of();
-        }
-        int from = Math.max(0, rows.size() - limit);
-        return rows.subList(from, rows.size()).stream().map(this::toDialogue).toList();
+        return chatMessageService.selectLatest(conversationId, limit)
+            .reversed()
+            .stream()
+            .map(this::toDialogue)
+            .toList();
     }
 
     /**

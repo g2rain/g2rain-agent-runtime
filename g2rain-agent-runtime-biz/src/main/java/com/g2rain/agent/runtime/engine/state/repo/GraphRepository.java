@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -47,6 +48,11 @@ public class GraphRepository {
      * 节点结论的长度上限（列宽 2000）。
      */
     private static final int NODE_RESULT_MAX = 2000;
+
+    /**
+     * 边去重键中起点与终点之间的分隔符，避免不同 id 拼接后撞键。
+     */
+    private static final String EDGE_KEY_SEPARATOR = "|";
 
     /**
      * 图节点表服务。
@@ -82,6 +88,7 @@ public class GraphRepository {
                 node.setSkillKey(vo.getSkillKey());
                 node.setTarget(vo.getTarget());
                 node.setTargetClaimed(Boolean.TRUE.equals(vo.getTargetClaimed()));
+                node.setProviderInserted(Boolean.TRUE.equals(vo.getProviderInserted()));
                 node.setResult(vo.getResult());
                 if (Objects.nonNull(vo.getDelegateDepth())) {
                     node.setDelegateDepth(vo.getDelegateDepth());
@@ -151,7 +158,7 @@ public class GraphRepository {
     }
 
     /**
-     * 按图节点 upsert {@code task_graph_node}。
+     * 按图节点 upsert {@code task_graph_node}；已有行与本轮内容一致时跳过，不再逐行重写。
      *
      * @param taskId 任务 id
      * @param nodes  图节点
@@ -173,6 +180,7 @@ public class GraphRepository {
                 dto.setSkillKey(node.getSkillKey());
                 dto.setTarget(node.getTarget());
                 dto.setTargetClaimed(node.isTargetClaimed());
+                dto.setProviderInserted(node.isProviderInserted());
                 dto.setStatus(node.getStatus().name());
                 dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
                 dto.setDelegateDepth(node.getDelegateDepth());
@@ -182,19 +190,25 @@ public class GraphRepository {
                 dto = TaskGraphNodeConverter.INSTANCE.node2dto(node);
                 dto.setTaskId(taskId);
                 dto.setTargetClaimed(node.isTargetClaimed());
+                dto.setProviderInserted(node.isProviderInserted());
                 dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
             }
+            // 列为秒精度：先截到秒，读回的行才能与本轮内容逐字段比对
             if (Objects.nonNull(node.getStartedAt())) {
-                dto.setStartedTime(RuntimeUtils.timeOf(node.getStartedAt()));
+                dto.setStartedTime(RuntimeUtils.timeOf(node.getStartedAt()).truncatedTo(ChronoUnit.SECONDS));
             }
             if (Objects.nonNull(node.getFinishedAt())) {
-                dto.setFinishedTime(RuntimeUtils.timeOf(node.getFinishedAt()));
+                dto.setFinishedTime(RuntimeUtils.timeOf(node.getFinishedAt()).truncatedTo(ChronoUnit.SECONDS));
             }
             // 本轮打开过的节点才同步节点空间（含输入、产出，冷恢复读此列）
             NodeSpace space = spaces.get(node.getNodeId());
             if (Objects.nonNull(space)) {
                 dto.setState(RepoSupport.toJson(space));
             }
+            if (Objects.nonNull(old) && dto.equals(TaskGraphNodeConverter.INSTANCE.vo2dto(old))) {
+                continue;
+            }
+
             taskGraphNodeService.save(dto);
         }
     }
@@ -208,11 +222,11 @@ public class GraphRepository {
     private void saveEdges(String taskId, List<TaskEdge> edges) {
         // 已落库边集合，避免重复 insert
         Set<String> knownKeys = listEdges(taskId).stream()
-            .map(vo -> vo.getFromNodeId() + vo.getToNodeId())
+            .map(vo -> vo.getFromNodeId() + EDGE_KEY_SEPARATOR + vo.getToNodeId())
             .collect(Collectors.toSet());
 
         for (TaskEdge edge : edges) {
-            String key = edge.getFrom() + edge.getTo();
+            String key = edge.getFrom() + EDGE_KEY_SEPARATOR + edge.getTo();
             if (knownKeys.contains(key)) {
                 continue;
             }

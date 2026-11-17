@@ -19,11 +19,12 @@ import java.util.Objects;
  * @param semanticDesc 语义短描述；可空（候选筛选 / 规划目录用）
  * @param skillManual  技能操作说明/手册文本；可空（执行/ReAct 用）
  * @param contract     技能契约；可空
+ * @param pin          动作语义版本标记；契约模式或未声明 source 时为 {@code null}
  * @author alpha
  * @since 2026/8/21
  */
 public record Skill(String skillKey, @Nullable String skillName, List<String> toolNames, @Nullable String semanticDesc,
-                    @Nullable String skillManual, @Nullable SkillContract contract) {
+                    @Nullable String skillManual, @Nullable SkillContract contract, @Nullable String pin) {
 
     public Skill {
         // 工具名列表固化为不可变副本
@@ -31,12 +32,12 @@ public record Skill(String skillKey, @Nullable String skillName, List<String> to
     }
 
     /**
-     * 仅带技能键的轻量构造：无工具、无短描述、无手册、无契约。
+     * 仅带技能键的轻量构造：无工具、无短描述、无手册、无契约、无版本标记。
      *
      * @param skillKey 技能唯一键
      */
     public Skill(String skillKey) {
-        this(skillKey, null, List.of(), null, null, null);
+        this(skillKey, null, List.of(), null, null, null, null);
     }
 
     /**
@@ -47,7 +48,7 @@ public record Skill(String skillKey, @Nullable String skillName, List<String> to
      * @param contract    契约；可空
      */
     public Skill(String skillKey, @Nullable String skillManual, @Nullable SkillContract contract) {
-        this(skillKey, null, List.of(), null, skillManual, contract);
+        this(skillKey, null, List.of(), null, skillManual, contract, null);
     }
 
     /**

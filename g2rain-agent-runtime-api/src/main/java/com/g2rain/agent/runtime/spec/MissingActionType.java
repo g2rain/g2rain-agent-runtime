@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 /**
  * 缺参动作：必填参数绑不上时下一步做什么。

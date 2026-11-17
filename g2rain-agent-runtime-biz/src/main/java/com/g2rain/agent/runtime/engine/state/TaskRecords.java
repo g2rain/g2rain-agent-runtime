@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -38,6 +39,22 @@ final class TaskRecords {
     static TaskRecord of(TaskMetadata task, DefaultTurnScope scope) {
         return new TaskRecord(task.getTaskId(), Objects.toString(task.getAgentId(), ""), task.getGoalSummary(),
             task.getStatus(), task.getFinalMessage(), RuntimeUtils.clip(task.getRequest(), REQUEST_MAX_CHARS),
-            task.getRejected(), task.getGoalMet(), scope.entities(), List.of(), System.currentTimeMillis());
+            task.getRejected(), task.getGoalMet(), entityKeys(task.getTaskId(), scope), List.of(),
+            System.currentTimeMillis());
+    }
+
+    /**
+     * 本任务涉及的实体键：实体上记的最近任务即为本任务。
+     *
+     * @param taskId 任务 id
+     * @param scope  本轮视图
+     * @return 实体键列表
+     */
+    private static List<String> entityKeys(String taskId, DefaultTurnScope scope) {
+        return scope.entities().entrySet().stream()
+            .filter(entry -> Objects.equals(taskId, entry.getValue().taskId()))
+            .map(Map.Entry::getKey)
+            .sorted()
+            .toList();
     }
 }

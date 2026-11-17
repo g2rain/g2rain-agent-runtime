@@ -72,7 +72,7 @@ public final class PlanPrompt {
             - dependsOn 只能引用本图中的 nodeId。
             - 节点需要另一技能先提供数据、结果或状态时，必须先生成对应节点，并在 dependsOn 中引用。
             - 有多个直接前置节点时全部列出。
-            - dependsOn 只表示真实的业务依赖，不要为了串行而添加；没有依赖的节点可以并行。
+            - dependsOn 只填写真实的业务依赖。
             - 不得自依赖或循环依赖。
 
             【输入说明】

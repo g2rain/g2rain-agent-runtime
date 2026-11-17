@@ -51,6 +51,11 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
     private static final int DIALOGUE_LIMIT = 12;
 
     /**
+     * 日志里技能引用 {@code agentId:skillKey} 的分隔符。
+     */
+    private static final String SKILL_REF_SEPARATOR = ":";
+
+    /**
      * 意图分类器：非硬协议路径上判断推进模式与人选。
      */
     private final IntentClassifier intentClassifier;
@@ -267,7 +272,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
         TurnScope turn = ctx.getTurn();
         boolean locked = Objects.nonNull(lockedAgentId);
         List<AgentCatalogItemVo> catalog = candidatesOf(lockedAgentId);
-        TaskRecord latest = turn.records().isEmpty() ? null : turn.records().getFirst();
+        TaskRecord latest = turn.latestRecord().orElse(null);
 
         return new IntentRequest(
             scene,
@@ -332,11 +337,7 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
      * @return 可解析的 Agent id；没有记录或格式非法时返回 {@code null}
      */
     private static @Nullable Long continuityAgentId(TurnScope turn) {
-        if (turn.records().isEmpty()) {
-            return null;
-        }
-
-        String raw = turn.records().getFirst().agentId();
+        String raw = turn.latestRecord().map(TaskRecord::agentId).orElse(null);
         if (Strings.isBlank(raw)) {
             return null;
         }
@@ -363,15 +364,19 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
         }
 
         List<IntentRequest.SkillCatalogItem> out = new ArrayList<>();
+        // 因上限没进目录的技能（agentId:skillKey）与没轮到的 Agent：意图判定看不到它们，记 WARN 便于排查
+        List<String> droppedSkills = new ArrayList<>();
+        List<Long> droppedAgents = new ArrayList<>();
         int total = runtimeProperties.getPlan().getMaxSkillsTotal();
         int perAgent = fullCatalog ? total : runtimeProperties.getPlan().getMaxSkillsPerAgent();
         // 按 Agent 顺序取技能摘要，先受总上限约束，再受每 Agent 上限约束
         for (AgentCatalogItemVo agent : catalog) {
-            if (out.size() >= total) {
-                break;
+            if (Objects.isNull(agent.getAgentId())) {
+                continue;
             }
 
-            if (Objects.isNull(agent.getAgentId())) {
+            if (out.size() >= total) {
+                droppedAgents.add(agent.getAgentId());
                 continue;
             }
 
@@ -382,11 +387,12 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
 
             int added = 0;
             for (SkillDigestVo digest : digests) {
-                if (added >= perAgent || out.size() >= total) {
-                    break;
+                if (Strings.isBlank(digest.getSkillKey())) {
+                    continue;
                 }
 
-                if (Strings.isBlank(digest.getSkillKey())) {
+                if (added >= perAgent || out.size() >= total) {
+                    droppedSkills.add(agent.getAgentId() + SKILL_REF_SEPARATOR + digest.getSkillKey().trim());
                     continue;
                 }
 
@@ -403,6 +409,15 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
 
                 added++;
             }
+        }
+
+        if (!droppedSkills.isEmpty() || !droppedAgents.isEmpty()) {
+            Trace.at(TraceStage.DECISION, "skill_catalog_capped")
+                .kv("total", total)
+                .kv("perAgent", perAgent)
+                .kv("droppedSkills", droppedSkills)
+                .kv("droppedAgents", droppedAgents)
+                .warn();
         }
 
         return out;

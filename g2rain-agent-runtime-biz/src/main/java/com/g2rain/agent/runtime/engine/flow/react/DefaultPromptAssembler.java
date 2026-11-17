@@ -2,6 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.react;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.support.prompt.ReactPrompt;
 import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.common.json.JsonCodec;
@@ -85,7 +86,10 @@ public class DefaultPromptAssembler implements PromptAssembler {
     }
 
     /**
-     * 将投影 record 序列化为带标签 JSON；超长丢低优先级整块。
+     * 将投影 record 序列化为带标签 JSON；超长丢低优先级整块，委派结果送达后清便签。
+     *
+     * <p>每块只序列化一次，丢块时从总长里减去；首块 {@code node_goal} 始终保留，即使它本身超长，
+     * 也不把提示词丢成空的。</p>
      *
      * @param request 组装入参
      * @return user 文本
@@ -93,27 +97,35 @@ public class DefaultPromptAssembler implements PromptAssembler {
     private String projectUser(PromptAssembleRequest request) {
         int max = runtimeProperties.getReact().getWorkspaceSliceMaxChars();
         List<ReactProjection.TaggedBlock> blocks = new ArrayList<>(projectionFactory.blocks(request));
-        while (Collections.isNotEmpty(blocks) && render(blocks).length() > max) {
-            // 超长时从队尾丢掉低优先级整块，避免半截 JSON
+        List<String> rendered = new ArrayList<>(blocks.size());
+        int total = 0;
+        for (ReactProjection.TaggedBlock taggedBlock : blocks) {
+            String text = render(taggedBlock);
+            rendered.add(text);
+            total += text.length();
+        }
+
+        // 超长时从队尾丢掉低优先级整块，避免半截 JSON
+        while (rendered.size() > 1 && total > max) {
+            total -= rendered.removeLast().length();
             blocks.removeLast();
         }
-        return render(blocks);
+
+        // 委派结果是一次性便签：确认进入最终提示词后才清，被丢弃时留到下一轮
+        if (blocks.stream().anyMatch(block -> ReactProjectionFactory.DELEGATE_RESULT_TAG.equals(block.tag()))) {
+            request.node().note(NodeNoteKey.DELEGATE_RESULT, null);
+        }
+        return String.join("", rendered);
     }
 
     /**
-     * {@code <tag>{json}</tag>} 拼接；json 来自 record 序列化。
+     * {@code <tag>{json}</tag>} 一块；json 来自 record 序列化。
      *
-     * @param blocks 投影块
-     * @return user 文本
+     * @param block 投影块
+     * @return 带标签文本，末尾换行
      */
-    private static String render(List<ReactProjection.TaggedBlock> blocks) {
-        StringBuilder text = new StringBuilder();
-        blocks.forEach(block -> {
-            text.append('<').append(block.tag()).append('>');
-            text.append(JSON.obj2str(block.payload()));
-            text.append("</").append(block.tag()).append(">\n");
-        });
-        return text.toString();
+    private static String render(ReactProjection.TaggedBlock block) {
+        return "<" + block.tag() + ">" + JSON.obj2str(block.payload()) + "</" + block.tag() + ">\n";
     }
 
     /**
@@ -140,9 +152,9 @@ public class DefaultPromptAssembler implements PromptAssembler {
      * 解析工具入参 schema；缺省或非法时兜底，避免整次组装失败。
      *
      * @param inputSchema 工具入参 schema 字符串
-     * @return 解析结果或原文
+     * @return 解析结果；缺省或非法时为空对象 schema
      */
-    private static Object parseSchema(String inputSchema) {
+    private static JsonNode parseSchema(String inputSchema) {
         if (Strings.isBlank(inputSchema)) {
             return JSON.str2obj(EMPTY_OBJ_SCHEMA, JsonNode.class);
         }
@@ -151,8 +163,8 @@ public class DefaultPromptAssembler implements PromptAssembler {
             return JSON.str2obj(inputSchema, JsonNode.class);
         } catch (RuntimeException ex) {
             log.error("failed to parse schema", ex);
-            // 非法 schema 原样交给模型，不让整次组装失败
-            return inputSchema;
+            // 非法 schema 退回空对象：模型接口要的是对象，原文字符串会让整次调用失败
+            return JSON.str2obj(EMPTY_OBJ_SCHEMA, JsonNode.class);
         }
     }
 }

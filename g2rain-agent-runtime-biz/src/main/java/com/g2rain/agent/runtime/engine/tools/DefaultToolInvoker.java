@@ -1,19 +1,25 @@
 package com.g2rain.agent.runtime.engine.tools;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
+import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
+import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.ArgsBrief;
+import com.g2rain.agent.runtime.support.JsonClip;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
+import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
+import com.g2rain.common.utils.Strings;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +31,6 @@ import org.springframework.util.ClassUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
-import tools.jackson.databind.node.StringNode;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -63,6 +68,16 @@ public class DefaultToolInvoker implements ToolInvoker {
     private static final int ARGS_BRIEF_MAX_CHARS = 200;
 
     /**
+     * {@code builtin_output_set} 的产出键参数名。
+     */
+    private static final String OUTPUT_KEY_ARG = "key";
+
+    /**
+     * {@code builtin_output_set} 的产出值参数名。
+     */
+    private static final String OUTPUT_VALUE_ARG = "value";
+
+    /**
      * 响应信封中对模型无意义的字段。
      */
     private static final List<String> ENVELOPE_NOISE = List.of("requestId", "requestTime");
@@ -78,24 +93,32 @@ public class DefaultToolInvoker implements ToolInvoker {
     private final ToolEvents toolEvents;
 
     /**
+     * 运行时配置：成功结果给模型的字符上限。
+     */
+    private final RuntimeProperties runtimeProperties;
+
+    /**
      * 创建工具调用编排器。
      *
      * <p>拦截器按 Spring 的 order 元数据排序，并在调用结束时反向执行 after 逻辑，
      * 使外层拦截器能够包住内层拦截器和实际工具调用。</p>
      *
-     * @param interceptors 调用前后拦截器；允许为空集合
-     * @param toolEvents   工具开始提示发布器
+     * @param interceptors      调用前后拦截器；允许为空集合
+     * @param toolEvents        工具开始提示发布器
+     * @param runtimeProperties 运行时配置
      */
-    public DefaultToolInvoker(List<ToolInterceptor> interceptors, ToolEvents toolEvents) {
+    public DefaultToolInvoker(List<ToolInterceptor> interceptors, ToolEvents toolEvents,
+                              RuntimeProperties runtimeProperties) {
         // 构造期按 order 排成固定序列，调用期不再重排，保证 before 正序与 after 逆序成对
         this.interceptors = interceptors.stream().sorted(AnnotationAwareOrderComparator.INSTANCE).toList();
         this.toolEvents = toolEvents;
+        this.runtimeProperties = runtimeProperties;
     }
 
     /**
      * 执行一次工具调用并返回标准化观测结果。
      *
-     * <p>节点尚无完成目标时，先把本次写调用记为目标。调用前拦截器按正序执行，首个阻断结果会立即返回；
+     * <p>节点尚无完成目标（或自动认领的目标尚未写成功）时，先把本次写调用记为目标。调用前拦截器按正序执行，首个阻断结果会立即返回；
      * 只有全部通过时才会发布过程提示并调用工具。工具返回后，after 拦截器按逆序处理结果。</p>
      *
      * @param request 工具名称、参数、上下文和契约信息
@@ -104,7 +127,7 @@ public class DefaultToolInvoker implements ToolInvoker {
     @Override
     public Observation invoke(ToolInvokeRequest request) {
         long start = System.nanoTime();
-        // 节点尚无完成目标时，首个实际发起的写调用（无论后续是否被拦下）成为目标
+        // 节点尚无完成目标、或自动认领的目标尚未写成功时，本次写调用（无论后续是否被拦下）成为目标
         if (request.context().claimTarget(request.toolName())) {
             Trace.at(TraceStage.NODE, "target_claimed")
                 .kv("nodeId", request.context().getNodeId())
@@ -167,19 +190,39 @@ public class DefaultToolInvoker implements ToolInvoker {
     }
 
     /**
-     * 工具入参的脱敏摘要；入参不是合法 JSON 时为 {@code null}。
+     * 工具入参的脱敏摘要；入参不是 JSON 对象时为 {@code {}}。
      *
      * @param request 工具调用请求
      * @return 脱敏摘要
      */
-    private static @Nullable String argsBrief(ToolInvokeRequest request) {
-        try {
-            JsonNode args = JSON.str2node(request.arguments());
-            ToolSpec contract = request.contract();
-            return ArgsBrief.of(args, contract, ARGS_BRIEF_MAX_CHARS);
-        } catch (RuntimeException _) {
-            return null;
+    private static String argsBrief(ToolInvokeRequest request) {
+        if (sensitiveOutput(request)) {
+            ObjectNode masked = request.args().deepCopy();
+            masked.put(OUTPUT_VALUE_ARG, ArgsBrief.MASK);
+            return ArgsBrief.of(masked, request.contract(), ARGS_BRIEF_MAX_CHARS);
         }
+
+        return ArgsBrief.of(request.args(), request.contract(), ARGS_BRIEF_MAX_CHARS);
+    }
+
+    /**
+     * 是否为写入敏感产出的 {@code builtin_output_set}：契约 {@code outputs.<key>.sensitive} 为 {@code true}。
+     *
+     * @param request 工具调用请求
+     * @return 写入敏感产出时为 {@code true}
+     */
+    private static boolean sensitiveOutput(ToolInvokeRequest request) {
+        if (!ToolCallbacks.is(request.toolCallback(), BuiltinToolAction.OUTPUT)) {
+            return false;
+        }
+
+        SkillContract contract = request.context().contract();
+        if (Objects.isNull(contract)) {
+            return false;
+        }
+
+        OutputSpec spec = contract.getOutputs().get(request.args().path(OUTPUT_KEY_ARG).asString().trim());
+        return Objects.nonNull(spec) && spec.isSensitive();
     }
 
     /**
@@ -254,19 +297,37 @@ public class DefaultToolInvoker implements ToolInvoker {
     }
 
     /**
-     * 去掉响应信封噪声后的文本；不是对象或没有噪声字段时原样返回。
+     * 给模型看的结果：去掉响应信封噪声，超出上限时裁剪并注明已省略；未改动时沿用工具原文。
      *
      * @param text 工具返回原文
-     * @param data 解析后的 JSON
+     * @param data 解析后的 JSON；非 JSON 返回为文本节点
      * @return 给模型的文本
      */
-    private static String withoutEnvelope(String text, @Nullable JsonNode data) {
-        if (!(data instanceof ObjectNode object) || ENVELOPE_NOISE.stream().noneMatch(object::has)) {
-            return text;
+    private String visibleText(String text, JsonNode data) {
+        int max = runtimeProperties.getReact().getObservationMaxChars();
+        if (data.isString()) {
+            return text.length() <= max ? text : text.substring(0, max) + ModelHint.OBSERVATION_CLIPPED.text();
         }
+
+        JsonNode visible = withoutEnvelope(data);
+        String json = visible == data ? text : JSON.obj2str(visible);
+        return json.length() <= max ? json : JsonClip.of(visible, max) + ModelHint.OBSERVATION_CLIPPED.text();
+    }
+
+    /**
+     * 去掉响应信封中对模型无意义的字段；不是对象或没有噪声字段时原样返回。
+     *
+     * @param data 解析后的 JSON
+     * @return 去噪后的副本，或原节点
+     */
+    private static JsonNode withoutEnvelope(JsonNode data) {
+        if (!(data instanceof ObjectNode object) || ENVELOPE_NOISE.stream().noneMatch(object::has)) {
+            return data;
+        }
+
         ObjectNode trimmed = object.deepCopy();
         ENVELOPE_NOISE.forEach(trimmed::remove);
-        return JSON.obj2str(trimmed);
+        return trimmed;
     }
 
     /**
@@ -274,21 +335,27 @@ public class DefaultToolInvoker implements ToolInvoker {
      *
      * <p>优先把返回值解析为 JSON；部分工具只返回普通文本时，文本会被包装成 JSON
      * 字符串节点，仍然按成功处理，不会因为返回格式不是 JSON 而误判工具失败。
-     * 给模型的文本去掉响应信封里的请求标识与时间，结构化数据保持原样。</p>
+     * 给模型的文本去掉响应信封里的请求标识与时间，超长时保结构裁剪；结构化数据保持原样。</p>
      *
      * @param result 工具返回文本；允许为空
      * @return 包含文本摘要和结构化数据的成功观测
      */
     private Observation successOf(String result) {
         String text = Objects.toString(result, "");
+        if (Strings.isBlank(text)) {
+            return Observation.success(text, null);
+        }
+
+        JsonNode data;
         try {
-            JsonNode data = JSON.str2node(text);
-            return Observation.success(withoutEnvelope(text, data), data);
+            data = JSON.str2node(text);
         } catch (RuntimeException _) {
             // 工具已执行成功；非 JSON 一律按文本节点记 SUCCESS
-            StringNode data = JsonNodeFactory.instance.stringNode(text);
-            return Observation.success(text, data);
+            data = JsonNodeFactory.instance.stringNode(text);
         }
+
+        // 证据保留完整报文，只裁剪给模型看的文本
+        return Observation.success(visibleText(text, data), data);
     }
 
     /**
@@ -306,11 +373,11 @@ public class DefaultToolInvoker implements ToolInvoker {
         Throwable cause = ex;
         while (Objects.nonNull(cause)) {
             if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
-                return ToolErrors.TOOL_TIMEOUT.observe(messageOf(ex));
+                return ToolErrors.TOOL_TIMEOUT.observe();
             }
 
             if (cause instanceof ConnectException) {
-                return ToolErrors.TOOL_UNREACHABLE.observe(messageOf(ex));
+                return ToolErrors.TOOL_UNREACHABLE.observe();
             }
 
             if (cause instanceof McpError mcpError) {
@@ -337,13 +404,14 @@ public class DefaultToolInvoker implements ToolInvoker {
         cause = ex;
         while (Objects.nonNull(cause)) {
             if (cause instanceof IOException) {
-                return ToolErrors.TOOL_IO_ERROR.observe(messageOf(ex));
+                return ToolErrors.TOOL_IO_ERROR.observe();
             }
 
             cause = cause.getCause();
         }
 
-        return ToolErrors.TOOL_ERROR.observe(messageOf(ex));
+        // 传输层与未分类异常的原文只进日志（logFailure），给模型归类后的说明
+        return ToolErrors.TOOL_ERROR.observe();
     }
 
     /**

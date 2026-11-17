@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.tools;
 
 
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
@@ -129,24 +129,19 @@ public class ToolEvents {
             return step.text();
         }
 
-        return step.text("skill", skillTitleOf(request.context(), request.arguments()));
+        return step.text("skill", skillTitleOf(request.context(), request.args()));
     }
 
     /**
      * 委派目标技能的标题：按入参技能键在本节点可见技能中查找，找不到时用技能键。
      *
      * @param ctx       节点执行现场
-     * @param arguments 委派工具入参 JSON
+     * @param args      委派工具入参
      * @return 技能标题；入参不可读时为空串
      */
-    private static String skillTitleOf(ToolExecutionContext ctx, String arguments) {
-        String skillKey;
-        try {
-            JsonNode node = JSON.lookupNode(JSON.str2node(arguments), DELEGATE_SKILL_ARG);
-            skillKey = JSON.hasValue(node) ? JSON.asString(node) : null;
-        } catch (RuntimeException _) {
-            return "";
-        }
+    private static String skillTitleOf(ToolExecutionContext ctx, JsonNode args) {
+        JsonNode node = JSON.lookupNode(args, DELEGATE_SKILL_ARG);
+        String skillKey = JSON.hasValue(node) ? JSON.asString(node) : null;
         if (Strings.isBlank(skillKey)) {
             return "";
         }

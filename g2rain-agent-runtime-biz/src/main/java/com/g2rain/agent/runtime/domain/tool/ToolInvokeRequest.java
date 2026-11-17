@@ -2,11 +2,15 @@ package com.g2rain.agent.runtime.domain.tool;
 
 
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.Source;
+import com.g2rain.common.json.JsonCodec;
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -15,13 +19,24 @@ import java.util.Objects;
 /**
  * 一次待执行工具调用的可变入参包。
  * <p>
- * 绑定执行上下文、工具名与参数 JSON，并在构造时从回调列表里按名匹配 {@link ToolCallback}。
- * 允许在真正调用前用 {@link #replaceArguments(String)} 改写参数（如契约注入后）。
+ * 绑定执行上下文、工具名与参数，并在构造时从回调列表里按名匹配 {@link ToolCallback}。
+ * 参数只解析一次：业务工具由参数规范拦截器解析后经 {@link #args(ObjectNode)} 存入，拦截器在
+ * {@link #args()} 这棵树上原地改写；真正调用工具时才由 {@link #arguments()} 序列化一次。
  *
  * @author alpha
  * @since 2026/8/21
  */
 public final class ToolInvokeRequest {
+
+    /**
+     * 参数序列化与原文解析。
+     */
+    private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 空参数原文。
+     */
+    private static final String EMPTY_OBJECT = "{}";
 
     /**
      * 工具执行上下文（节点运行时）。
@@ -39,9 +54,9 @@ public final class ToolInvokeRequest {
     private final String toolName;
 
     /**
-     * 当前工具名和参数生成的稳定指纹；参数被替换后必须同步更新。
+     * 按原文生成的指纹；参数树存在时改按树计算。
      */
-    private String fingerprint;
+    private final String rawFingerprint;
 
     /**
      * 当前工具使用的契约；可为空，例如内置控制工具路径。
@@ -49,9 +64,14 @@ public final class ToolInvokeRequest {
     private final @Nullable ToolSpec contract;
 
     /**
-     * 工具参数 JSON 字符串；可读时空白会按 "{}" 返回。
+     * 模型给出的参数原文。
      */
-    private String arguments;
+    private final String rawArguments;
+
+    /**
+     * 参数树：解析一次后由各拦截器原地改写；尚未解析或原文不是 JSON 对象时为空。
+     */
+    private @Nullable ObjectNode args;
 
     /**
      * 写工具完成调用前登记的证据 id；读工具和未真正调用的短路路径为空。
@@ -71,8 +91,7 @@ public final class ToolInvokeRequest {
     /**
      * 组装调用请求并绑定工具回调。
      *
-     * <p>构造时立即生成初始指纹，并从当前技能契约解析工具配置；后续通过
-     * {@link #replaceArguments(String)} 改写参数时会重新计算指纹。</p>
+     * <p>构造时按原文生成指纹，并从当前技能契约解析工具配置。</p>
      *
      * @param context  执行上下文
      * @param callback 可用工具回调
@@ -83,8 +102,8 @@ public final class ToolInvokeRequest {
         this.toolCallback = callback;
         this.toolName = callback.getToolDefinition().name();
         this.contract = skillTool();
-        this.arguments = args;
-        this.fingerprint = ToolExecutionContext.fingerprintOf(toolName(), arguments());
+        this.rawArguments = args;
+        this.rawFingerprint = ToolExecutionContext.fingerprintOf(toolName, args);
     }
 
     /**
@@ -153,34 +172,61 @@ public final class ToolInvokeRequest {
     }
 
     /**
-     * 当前调用的稳定参数指纹
+     * 当前调用的稳定参数指纹：参数树存在时按树计算（反映拦截器的改写），否则用原文指纹。
      *
      * @return 工具名与规范化参数生成的指纹
      */
     public String fingerprint() {
-        return this.fingerprint;
+        return Objects.nonNull(args) ? ToolExecutionContext.fingerprintOf(toolName, args) : rawFingerprint;
     }
 
     /**
-     * 参数 JSON；空白时返回 "{}"。
+     * 模型给出的参数原文；空白时返回 "{}"。供参数规范拦截器做唯一一次解析。
+     *
+     * @return 参数原文
+     */
+    public String rawArguments() {
+        return Strings.defaultIfBlank(rawArguments, EMPTY_OBJECT);
+    }
+
+    /**
+     * 存入解析并清理后的参数树，之后各拦截器在这棵树上原地改写。
+     *
+     * @param normalized 参数树
+     */
+    public void args(ObjectNode normalized) {
+        this.args = normalized;
+    }
+
+    /**
+     * 参数树：尚未存入时按原文解析一次并缓存；原文不是 JSON 对象时返回一个空对象（不缓存）。
+     *
+     * @return 参数树
+     */
+    public ObjectNode args() {
+        if (Objects.nonNull(args)) {
+            return args;
+        }
+
+        try {
+            if (JSON.str2node(rawArguments()) instanceof ObjectNode parsed) {
+                this.args = parsed;
+                return parsed;
+            }
+        } catch (RuntimeException _) {
+            // 原文不是合法 JSON：业务工具已由参数规范拦截器拒调，这里只给只读方一个空对象
+        }
+
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    /**
+     * 实际调用工具时使用的参数 JSON：参数树存在时由树序列化，否则返回原文。
      *
      * @return 参数字符串
      */
     public String arguments() {
-        return Strings.defaultIfBlank(this.arguments, "{}");
-    }
-
-    /**
-     * 覆盖参数 JSON 并重新计算调用指纹。
-     *
-     * <p>该方法只负责更新内存中的请求，不会自动发起第二次工具调用；调用方仍需重新执行
-     * 预写和保护校验。</p>
-     *
-     * @param arguments 新的参数 JSON
-     */
-    public void replaceArguments(String arguments) {
-        this.arguments = arguments;
-        this.fingerprint = ToolExecutionContext.fingerprintOf(toolName(), arguments());
+        return Objects.nonNull(args) ? JSON.obj2str(args) : rawArguments();
     }
 
     /**

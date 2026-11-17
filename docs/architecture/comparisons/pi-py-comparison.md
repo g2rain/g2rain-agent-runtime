@@ -211,6 +211,7 @@ g2rain 的模块主要按平台服务工程组织。模型适配、能力装载�
 - [DefaultTurnPipeline](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/DefaultTurnPipeline.java)
 - [Skill](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/hydrate/Skill.java)
 - [SkillContract](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/hydrate/SkillContract.java)
+- [ToolSpec](../g2rain-agent-runtime-api/src/main/java/com/g2rain/agent/runtime/spec/ToolSpec.java)
 - [TaskGraph](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/graph/TaskGraph.java)
 - [DefaultNodeRunner](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/graph/DefaultNodeRunner.java)
 - [DefaultReActLoop](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/react/DefaultReActLoop.java)

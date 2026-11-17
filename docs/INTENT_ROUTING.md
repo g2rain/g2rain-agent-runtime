@@ -567,7 +567,7 @@ private IntentRequest buildIntentRequest(TurnContext ctx, TurnScene scene, @Null
     TurnScope turn = ctx.getTurn();
     boolean locked = Objects.nonNull(lockedAgentId);
     List<AgentCatalogItemVo> catalog = candidatesOf(lockedAgentId);
-    TaskRecord latest = turn.records().isEmpty() ? null : turn.records().getFirst();
+    TaskRecord latest = turn.latestRecord().orElse(null);
     return new IntentRequest(
         scene,
         locked,

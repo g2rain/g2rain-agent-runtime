@@ -27,7 +27,7 @@ CREATE TABLE `chat_conversation` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_conversation` (`organ_id`, `conversation_id`),
+    UNIQUE KEY `uk_organ_conversation` (`organ_id`, `conversation_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_user` (`organ_id`, `user_id`),
     INDEX `idx_organ_user_last_msg` (`organ_id`, `user_id`, `last_message_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '聊天会话表';
@@ -58,7 +58,7 @@ CREATE TABLE `chat_message` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_message` (`organ_id`, `message_id`),
+    UNIQUE KEY `uk_organ_message` (`organ_id`, `message_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_conversation` (`organ_id`, `conversation_id`, `created_at_ms`),
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_trace` (`organ_id`, `trace_id`),
@@ -96,7 +96,7 @@ CREATE TABLE `task_instance` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_task` (`organ_id`, `task_id`),
+    UNIQUE KEY `uk_organ_task` (`organ_id`, `task_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_conversation` (`organ_id`, `conversation_id`),
     INDEX `idx_organ_status` (`organ_id`, `status`),
     INDEX `idx_organ_conversation_finished` (`organ_id`, `conversation_id`, `finished_time`)
@@ -117,6 +117,7 @@ CREATE TABLE `task_graph_node` (
     `skill_key` VARCHAR(128) DEFAULT NULL COMMENT                                                       '技能键',
     `target` VARCHAR(128) DEFAULT NULL COMMENT                                                          '完成目标：节点要完成的写工具注册名',
     `target_claimed` TINYINT NOT NULL DEFAULT 0 COMMENT                                                 '完成目标是否由首个写调用自动记录[0:否, 1:是]',
+    `provider_inserted` TINYINT NOT NULL DEFAULT 0 COMMENT                                              '是否由技能契约 provider 声明自动补入[0:否, 1:是]',
     `delegate_depth` INT NOT NULL DEFAULT 0 COMMENT                                                     '委派深度',
     `status` VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT                                             '步骤状态[PENDING, READY, RUNNING, WAITING_DELEGATE, SUSPENDED, DONE, FAILED, SKIPPED, CANCELLED, TIMEOUT]',
     `result` VARCHAR(2000) DEFAULT NULL COMMENT                                                         '节点结论：完成时给用户的结论',
@@ -130,7 +131,7 @@ CREATE TABLE `task_graph_node` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_task_node` (`organ_id`, `task_id`, `node_id`),
+    UNIQUE KEY `uk_organ_task_node` (`organ_id`, `task_id`, `node_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_status` (`organ_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '任务图步骤表';
@@ -152,7 +153,7 @@ CREATE TABLE `task_graph_edge` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_task_edge` (`organ_id`, `task_id`, `from_node_id`, `to_node_id`),
+    UNIQUE KEY `uk_organ_task_edge` (`organ_id`, `task_id`, `from_node_id`, `to_node_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_task_to` (`organ_id`, `task_id`, `to_node_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '任务图依赖边表';
@@ -177,7 +178,7 @@ CREATE TABLE `task_node_payload` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_payload` (`organ_id`, `payload_id`),
+    UNIQUE KEY `uk_organ_payload` (`organ_id`, `payload_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_node` (`organ_id`, `node_id`),
     INDEX `idx_organ_type` (`organ_id`, `payload_type`)
@@ -206,7 +207,7 @@ CREATE TABLE `task_checkpoint` (
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
     INDEX `idx_organ_checkpoint` (`organ_id`, `checkpoint_id`),
-    INDEX `idx_organ_task` (`organ_id`, `task_id`),
+    UNIQUE KEY `uk_organ_task` (`organ_id`, `task_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_type` (`organ_id`, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '任务检查点表';
 
@@ -244,7 +245,7 @@ CREATE TABLE `tool_call_record` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_call` (`organ_id`, `call_id`),
+    UNIQUE KEY `uk_organ_call` (`organ_id`, `call_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_task_node` (`organ_id`, `task_id`, `node_id`),
     INDEX `idx_organ_tool` (`organ_id`, `tool_name`),
     INDEX `idx_organ_status` (`organ_id`, `call_status`),
@@ -271,7 +272,7 @@ CREATE TABLE `task_resume_record` (
     `version` INT NOT NULL DEFAULT 0 COMMENT                                                            '记录版本',
     `delete_flag` TINYINT NOT NULL DEFAULT 0 COMMENT                                                    '删除标识[0:未删除, 1:已删除]',
     PRIMARY KEY (`id`),
-    INDEX `idx_organ_resume` (`organ_id`, `resume_id`),
+    UNIQUE KEY `uk_organ_resume` (`organ_id`, `resume_id`, (IF(delete_flag = 0, 0, NULL))),
     INDEX `idx_organ_task` (`organ_id`, `task_id`),
     INDEX `idx_organ_checkpoint` (`organ_id`, `checkpoint_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT=                             '任务恢复动作审计表';

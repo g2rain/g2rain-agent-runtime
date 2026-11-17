@@ -10,6 +10,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ import java.util.Objects;
 public class RedisStateStore implements StateStore {
 
     /**
-     * JSON 编解码：flush 改动列表序列化给 Lua。
+     * JSON 编解码：flush 改动列表序列化给 Lua，renew 的 traceId 参数与返回值编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
@@ -86,7 +87,8 @@ public class RedisStateStore implements StateStore {
                              @Nullable String sessionSharedKey, List<KeyTtl> extraKeys, long baseVersion) {
         // ARGV：traceId、会话 TTL、session shared、baseVersion、任务 key/ttl 成对
         List<String> args = new ArrayList<>();
-        args.add(traceId);
+        // lastTraceId 与 flush 写入的栅栏字段同为 JSON 编码，见 HashCodec
+        args.add(JSON.obj2str(JsonNodeFactory.instance.stringNode(traceId)));
         args.add(Long.toString(conversationTtl.toMillis()));
         args.add(Objects.requireNonNullElse(sessionSharedKey, ""));
         args.add(Long.toString(baseVersion));
@@ -97,7 +99,7 @@ public class RedisStateStore implements StateStore {
         List<?> raw = Objects.requireNonNull(redis.execute(renewScript, List.of(stateKey), args.toArray(new Object[0])));
         long version = ((Number) raw.getFirst()).longValue();
         String previous = raw.size() > 1 ? String.valueOf(raw.get(1)) : "";
-        return new RenewResult(version, Strings.isBlank(previous) ? null : previous);
+        return new RenewResult(version, Strings.isBlank(previous) ? null : JSON.str2obj(previous, String.class));
     }
 
     /**

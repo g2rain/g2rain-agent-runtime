@@ -67,6 +67,20 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     }
 
     @Override
+    public List<ChatMessageVo> selectLatest(String conversationId, int limit) {
+        ChatMessageSelectDto query = new ChatMessageSelectDto();
+        query.setConversationId(conversationId);
+        query.setSorts(List.of("createdAtMs,desc", "id,desc"));
+        Page<ChatMessagePo> page = PageContext.of(1, limit, false, () ->
+            chatMessageDao.selectList(query)
+        );
+        return page.getResult()
+            .stream()
+            .map(ChatMessageConverter.INSTANCE::po2vo)
+            .toList();
+    }
+
+    @Override
     public Long save(ChatMessageDto dto) {
         if (Objects.isNull(dto.getOrganId())) {
             dto.setOrganId(PrincipalContextHolder.getOrganId());

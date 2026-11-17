@@ -1,8 +1,8 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
@@ -21,6 +21,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
@@ -36,7 +37,7 @@ import java.util.Optional;
  * @since 2026/8/21
  */
 @Slf4j
-@Order(1)
+@Order(1000)
 @Component
 public class ArgPolicyInterceptor implements ToolInterceptor {
 
@@ -60,9 +61,13 @@ public class ArgPolicyInterceptor implements ToolInterceptor {
      */
     @Override
     public Optional<Observation> before(ToolInvokeRequest request) {
-        // 已批准写工具按原参执行，不得再改写入参
         // Spring @Tool 内置回调入参由各自 @ToolParam 约束，不走业务 schema 门
         if (ToolCallbacks.isBuiltin(request.toolCallback())) {
+            return Optional.empty();
+        }
+
+        // 已批准写工具按用户确认的那组参数执行：这组参数在确认前已规范、绑定、校验过，不得再改写或拒调
+        if (request.context().approvedWrite()) {
             return Optional.empty();
         }
 
@@ -89,15 +94,16 @@ public class ArgPolicyInterceptor implements ToolInterceptor {
         // 非法 JSON 不抛出，写回拒绝观测供模型重交；空/空白入参按 {} 继续走 required 校验
         JsonNode args;
         try {
-            String raw = request.arguments();
+            // 全链路唯一一次解析：带嵌套 JSON 字符串展开，结果存入请求供后续拦截器原地改写
+            String raw = request.rawArguments();
             if (Strings.isBlank(raw)) {
-                args = JSON.str2obj("{}", JsonNode.class);
+                args = JsonNodeFactory.instance.objectNode();
             } else {
                 args = TOOL_ARGS_CODEC.str2obj(raw, JsonNode.class);
             }
 
             if (Objects.isNull(args) || args.isNull()) {
-                args = JSON.str2obj("{}", JsonNode.class);
+                args = JsonNodeFactory.instance.objectNode();
             }
         } catch (RuntimeException ex) {
             log.error("failed to prepareArguments", ex);
@@ -123,8 +129,8 @@ public class ArgPolicyInterceptor implements ToolInterceptor {
             return reject(ModelHint.ARG_MISSING_REQUIRED.text("fields", String.join(", ", missing)), ModelHint.NEXT_FILL_ARGS);
         }
 
-        // 净化后的对象写回 request，供后续 dispatch
-        request.replaceArguments(JSON.obj2str(object));
+        // 净化后的参数树存入请求，供后续拦截器与 dispatch 使用
+        request.args(object);
         return Optional.empty();
     }
 

@@ -84,6 +84,22 @@ public class TaskGraph {
     }
 
     /**
+     * 已完成的写步骤：DONE 且有完成目标的节点标题（空则目标说明），按图中顺序。
+     *
+     * <p>有完成目标的节点须目标写操作成功才能 DONE，因此这些节点都已完成一次写入。</p>
+     *
+     * @return 步骤名称；没有为空列表
+     */
+    public List<String> doneWriteSteps() {
+        return nodes.stream()
+            .filter(node -> node.getStatus() == NodeStatus.DONE && Strings.isNotBlank(node.getTarget()))
+            // 目标说明可能为空，Strings.defaultIfBlank 不接受空的缺省值
+            .map(node -> Strings.isNotBlank(node.getTitle()) ? node.getTitle() : node.getObjective())
+            .filter(Strings::isNotBlank)
+            .toList();
+    }
+
+    /**
      * 按节点 ID 查找。
      *
      * @param nodeId 节点 ID；空白则直接返回 null

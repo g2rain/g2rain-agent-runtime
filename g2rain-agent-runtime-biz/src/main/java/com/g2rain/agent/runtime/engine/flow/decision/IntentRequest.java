@@ -78,7 +78,7 @@ public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @J
             return new ContinuitySnippet(
                 record.goal(),
                 record.summary(),
-                List.copyOf(record.entities().keySet())
+                record.entityKeys()
             );
         }
     }
@@ -86,11 +86,10 @@ public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @J
     /**
      * 意图分类用的交互历史窗口。
      *
-     * @param overflowTranscript 较早消息的折叠文本；当前组装入口恒为 {@code null}
-     * @param hotTurns           近期原文发言，看指代与追问
+     * @param hotTurns 近期原文发言，看指代与追问
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record DialogueWindow(@Nullable String overflowTranscript, List<HotTurn> hotTurns) {
+    public record DialogueWindow(List<HotTurn> hotTurns) {
 
         public DialogueWindow {
             hotTurns = List.copyOf(hotTurns);
@@ -111,7 +110,7 @@ public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @J
                 var role = Objects.nonNull(o.getRole()) ? o.getRole().name() : null;
                 return new HotTurn(role, o.getText());
             }).toList();
-            return new DialogueWindow(null, hot);
+            return new DialogueWindow(hot);
         }
     }
 

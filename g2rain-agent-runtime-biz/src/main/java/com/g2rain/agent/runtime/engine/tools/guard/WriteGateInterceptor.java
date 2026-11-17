@@ -2,12 +2,12 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
@@ -38,7 +38,7 @@ import java.util.Optional;
  * @author alpha
  * @since 2026/10/4
  */
-@Order(5)
+@Order(6000)
 @Component
 public class WriteGateInterceptor implements ToolInterceptor {
 
@@ -85,7 +85,7 @@ public class WriteGateInterceptor implements ToolInterceptor {
             return Optional.empty();
         }
 
-        JsonNode args = RuntimeUtils.argsNode(request.arguments());
+        JsonNode args = request.args();
         String idempotencyKey = IdempotencyKeyBuilder.effectiveKey(request.toolName(), contract, args);
         ToolCall call = new ToolCall(request.toolName(), args, idempotencyKey, SideEffect.WRITE, contract);
         // 同一写操作已成功则直接复用、仍在进行或待核实则等待，都不再申请确认
@@ -97,6 +97,16 @@ public class WriteGateInterceptor implements ToolInterceptor {
         boolean bypass = runtimeProperties.getState().getWriteConfirmBypassTools().contains(request.toolName());
         if (contract.requiresConfirm() || !bypass) {
             if (!request.context().approvedWrite()) {
+                // 已有另一个写工具在等确认：一次只申请一个，拒绝本次，先处理待批的那个；同一工具再次调用视为改参，覆盖
+                PendingAction pending = PendingAction.from(request.context().scope().note(NodeNoteKey.GATED_WRITE));
+                if (Objects.nonNull(pending) && !pending.toolName().equals(request.toolName())) {
+                    return Optional.of(Observation.rejected(
+                        RuntimeErrorCode.GATED_WRITE_PENDING,
+                        ModelHint.WRITE_GATED_PENDING.text("tool", pending.toolName()),
+                        ModelHint.NEXT_APPROVAL.text("tool", pending.toolName())
+                    ));
+                }
+
                 // 记下被拦下的调用：审批只认这一次，待批参数取已过绑定与契约校验的值
                 request.context().scope().note(NodeNoteKey.GATED_WRITE,
                     new PendingAction(request.toolName(), args, RuntimeUtils.argsHash(args)));

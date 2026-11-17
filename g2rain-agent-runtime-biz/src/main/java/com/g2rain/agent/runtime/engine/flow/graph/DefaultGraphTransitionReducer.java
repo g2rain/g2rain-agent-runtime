@@ -10,8 +10,8 @@ import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.RejectedAction;
@@ -19,19 +19,16 @@ import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.ArgsBrief;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 /**
  * DefaultGraphTransitionReducer：默认图步骤归约器。
@@ -46,11 +43,6 @@ import java.util.regex.Pattern;
 @Component
 @RequiredArgsConstructor
 public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
-
-    /**
-     * 审批摘要末尾的标点，拼进拒绝回执前去掉。
-     */
-    private static final Pattern TRAILING_PUNCTUATION = Pattern.compile("[。.！!；;，,]+$");
 
     /**
      * 节点执行器：执行波时跑波内首个节点。
@@ -110,7 +102,7 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
 
         String message = null;
         if (rejected) {
-            message = rejectedMessage(frame);
+            message = rejectedMessage(frame, node);
             RejectedAction action = rejectedAction(frame, node);
             frame.turn().task().ifPresent(task -> task.setRejected(action));
         }
@@ -128,22 +120,17 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
      * @return 被拒动作；不是审批断点或没有待批动作时为空
      */
     private static @Nullable RejectedAction rejectedAction(GraphFrame frame, TaskNode node) {
-        PendingAction pending = frame.turn().checkpoint().or(() -> frame.turn().resumed())
-            .filter(checkpoint -> checkpoint.getType() == CheckpointType.APPROVAL)
-            .map(TaskCheckpoint::getPendingAction)
-            .orElse(null);
+        PendingAction pending = pendingApproval(frame);
         if (Objects.isNull(pending)) {
             return null;
         }
 
-        Skill skill = frame.findSkill(node.getSkillKey());
-        SkillContract contract = Objects.isNull(skill) ? null : skill.contract();
-        ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(pending.toolName());
-        JsonNode masked = JsonCodecFactory.instance().str2node(ArgsBrief.of(pending.args(), spec, Integer.MAX_VALUE));
-        if (masked instanceof ObjectNode args && Objects.nonNull(spec)) {
+        ToolSpec spec = toolSpec(frame, node, pending.toolName());
+        ObjectNode masked = ArgsBrief.masked(pending.args(), spec);
+        if (Objects.nonNull(spec)) {
             spec.getArgs().forEach((name, arg) -> {
-                if (Objects.nonNull(arg) && Objects.nonNull(arg.getValueRef()) && arg.getValueRef().bag() == ValueRef.Bag.PLATFORM) {
-                    args.remove(name);
+                if (Objects.nonNull(arg.getValueRef()) && arg.getValueRef().bag() == ValueRef.Bag.PLATFORM) {
+                    masked.remove(name);
                 }
             });
         }
@@ -151,45 +138,52 @@ public class DefaultGraphTransitionReducer implements GraphTransitionReducer {
     }
 
     /**
-     * 拒绝审批的回执：先列已完成的写步骤，再说明未执行的操作（审批摘要），并提示用户可以换个做法。
+     * 拒绝审批的回执：先列已完成的写步骤，再说明未执行的操作，并提示用户可以换个做法。
      *
-     * <p>审批问题由摘要与参数明细逐行组成，这里只取首行摘要。</p>
+     * <p>操作名取契约中待批工具的展示名（未配置用工具名），与审批问题首行一致，不取模型摘要。</p>
      *
      * @param frame 当前图执行帧
-     * @return 回执文案；不是审批断点或没有摘要时用通用取消文案
+     * @param node  被拒绝的挂起节点
+     * @return 回执文案；不是审批断点或没有待批动作时用通用取消文案
      */
-    private static String rejectedMessage(GraphFrame frame) {
-        String action = frame.turn().checkpoint().or(() -> frame.turn().resumed())
-            .filter(checkpoint -> checkpoint.getType() == CheckpointType.APPROVAL)
-            .map(TaskCheckpoint::getQuestion)
-            .filter(Strings::isNotBlank)
-            .map(question -> question.trim().lines().findFirst().orElse(""))
-            .map(summary -> TRAILING_PUNCTUATION.matcher(summary.trim()).replaceAll(""))
-            .filter(Strings::isNotBlank)
-            .orElse(null);
-        if (Objects.isNull(action)) {
+    private static String rejectedMessage(GraphFrame frame, TaskNode node) {
+        PendingAction pending = pendingApproval(frame);
+        if (Objects.isNull(pending)) {
             return RuntimeMessage.REPLY_CANCELLED.text();
         }
 
+        ToolSpec spec = toolSpec(frame, node, pending.toolName());
+        String action = Objects.nonNull(spec) && Strings.isNotBlank(spec.getLabel()) ? spec.getLabel() : pending.toolName();
         String rejected = RuntimeMessage.REPLY_REJECTED.text("action", action);
-        List<String> done = doneWriteSteps(frame.graph());
+        List<String> done = frame.graph().doneWriteSteps();
         return done.isEmpty() ? rejected : RuntimeMessage.REPLY_REJECTED_DONE.text("steps", String.join("；", done)) + rejected;
     }
 
     /**
-     * 已完成的写步骤：DONE 且有完成目标的节点标题（空则目标说明），按图中顺序。
+     * 当前或刚消费的审批断点上的待批动作。
      *
-     * <p>有完成目标的节点须目标写操作成功才能 DONE，因此这些节点都已完成一次写入。</p>
-     *
-     * @param graph 任务图
-     * @return 步骤名称；没有为空列表
+     * @param frame 当前图执行帧
+     * @return 待批动作；不是审批断点时为空
      */
-    private static List<String> doneWriteSteps(TaskGraph graph) {
-        return graph.getNodes().stream()
-            .filter(node -> node.getStatus() == NodeStatus.DONE && Strings.isNotBlank(node.getTarget()))
-            .map(node -> Strings.defaultIfBlank(node.getTitle(), node.getObjective()))
-            .filter(Strings::isNotBlank)
-            .toList();
+    private static @Nullable PendingAction pendingApproval(GraphFrame frame) {
+        return frame.turn().checkpoint().or(() -> frame.turn().resumed())
+            .filter(checkpoint -> checkpoint.getType() == CheckpointType.APPROVAL)
+            .map(TaskCheckpoint::getPendingAction)
+            .orElse(null);
+    }
+
+    /**
+     * 按节点技能契约查待批工具规格。
+     *
+     * @param frame    当前图执行帧
+     * @param node     挂起节点
+     * @param toolName 待批工具名
+     * @return 工具规格；技能或契约缺失时为空
+     */
+    private static @Nullable ToolSpec toolSpec(GraphFrame frame, TaskNode node, String toolName) {
+        Skill skill = frame.findSkill(node.getSkillKey());
+        SkillContract contract = Objects.isNull(skill) ? null : skill.contract();
+        return Objects.isNull(contract) ? null : contract.tool(toolName);
     }
 
     /**

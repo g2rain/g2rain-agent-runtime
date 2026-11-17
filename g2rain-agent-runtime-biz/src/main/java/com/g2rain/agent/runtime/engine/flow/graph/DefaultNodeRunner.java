@@ -46,7 +46,6 @@ import com.g2rain.common.utils.Strings;
 import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.support.ChatMessages;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
@@ -65,7 +64,6 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultNodeRunner implements NodeRunner {
@@ -156,8 +154,8 @@ public class DefaultNodeRunner implements NodeRunner {
             frame.turn(), node.getNodeId(), Objects.isNull(skill) ? null : skill.contract()
         );
 
-        // 共享/会话里已有未过期 provider 产出：直接 SKIPPED，不跑工具、也不发 RUNNING
-        if (Objects.nonNull(skill) && ProviderNodes.skipSatisfied(frame.turn(), skill)) {
+        // provider 补入的节点且共享/会话里已有其产出：直接 SKIPPED，不跑工具、也不发 RUNNING
+        if (Objects.nonNull(skill) && ProviderNodes.skipSatisfied(frame.turn(), node, skill)) {
             ProviderNodes.copySharedOutputs(frame.turn(), nodeScope, skill);
             node.setStatus(NodeStatus.SKIPPED);
             frame.turn().mark(node.getNodeId(), NodeStatus.SKIPPED, null, null);
@@ -421,11 +419,9 @@ public class DefaultNodeRunner implements NodeRunner {
 
         List<ToolCallback> tools = nodeToolset.of(node, frame);
         ToolCallback toolCallback = ToolCallbacks.find(tools, pending.toolName());
+        // 确认后工具已不可用（技能配置变更或工具停用）：本轮失败并告知用户，不让确认石沉大海
         if (Objects.isNull(toolCallback)) {
-            log.warn("dispatchPending tool missing nodeId={} tool={}",
-                node.getNodeId(), pending.toolName()
-            );
-            return;
+            throw new BusinessException(RuntimeErrorCode.TOOL_NOT_FOUND, pending.toolName());
         }
 
         // 用户确认单独成轮：记在派发结果之前，跨轮重建时顺序为"确认 → 执行 → 结果"

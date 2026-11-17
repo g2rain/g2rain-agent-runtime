@@ -8,7 +8,7 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.state.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.engine.store.FlushOp;
@@ -23,7 +23,6 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -124,9 +123,16 @@ public class TurnFlushPlan {
             ops.add(FlushOp.lpushTrim(keys.dialogue(), JSON.obj2str(message), dialogueMax)));
         turn.entities().forEach((field, entry) ->
             ops.add(FlushOp.hset(keys.entities(), field, JSON.obj2str(entry), null)));
+        turn.evictedEntities().forEach(field -> ops.add(FlushOp.hdel(keys.entities(), field)));
         turn.sessionShared().forEach((field, value) ->
             ops.add(FlushOp.hset(keys.sessionShared(), field, JSON.obj2str(value), null)));
         turn.task().ifPresent(task -> writeTask(ops, keys, turn, task));
+        // 会话级 key 随会话过期；每轮写后设置，只有一轮的会话也不会常驻
+        long conversationTtlMs = properties.getState().getConversationTtl().toMillis();
+        ops.add(FlushOp.expire(keys.dialogue(), conversationTtlMs));
+        ops.add(FlushOp.expire(keys.records(), conversationTtlMs));
+        ops.add(FlushOp.expire(keys.entities(), conversationTtlMs));
+        ops.add(FlushOp.expire(keys.sessionShared(), conversationTtlMs));
         return ops;
     }
 
@@ -393,23 +399,5 @@ public class TurnFlushPlan {
      */
     private void hsetAll(List<FlushOp> ops, String key, Map<String, String> hash, @Nullable Long ttlMs) {
         hash.forEach((field, value) -> ops.add(FlushOp.hset(key, field, value, ttlMs)));
-    }
-
-    /**
-     * UTF-8 截断对话正文。
-     *
-     * @param text 原文；空则返回空串
-     * @return 截断后的正文
-     */
-    public String clipMessage(@Nullable String text) {
-        if (Strings.isBlank(text)) {
-            return "";
-        }
-        int max = properties.getState().getMessageMaxBytes();
-        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length <= max) {
-            return text;
-        }
-        return new String(bytes, 0, max, StandardCharsets.UTF_8);
     }
 }

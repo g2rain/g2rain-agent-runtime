@@ -4,7 +4,7 @@ package com.g2rain.agent.runtime.engine.state;
 import com.g2rain.agent.runtime.domain.hydrate.InputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
@@ -130,7 +130,7 @@ final class InputBinder {
             if (Objects.isNull(sourced)) {
                 continue;
             }
-            return new Sourced<>(sourced.value(), new Source(SourceType.NODE_OUTPUT, predecessors.get(i), name));
+            return new Sourced<>(sourced.value(), new Source(SourceType.NODE_OUTPUT, predecessors.get(i), name), sourced.sensitive());
         }
         return null;
     }
@@ -186,6 +186,6 @@ final class InputBinder {
         if (Objects.isNull(value)) {
             return null;
         }
-        return new Sourced<>(value, new Source(SourceType.PRIOR_TASK, type, type + "." + attr));
+        return new Sourced<>(value, new Source(SourceType.PRIOR_TASK, type, type + "." + attr), false);
     }
 }

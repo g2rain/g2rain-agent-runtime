@@ -3,10 +3,11 @@ package com.g2rain.agent.runtime.engine.tools.builtin;
 
 
 import lombok.extern.slf4j.Slf4j;
+import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.OutputContractValidator;
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -43,9 +45,9 @@ import java.util.stream.Collectors;
  * @author alpha
  * @since 2026/10/3
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
-@Slf4j
 public class NodeBuiltinTools implements BuiltinTools {
 
     /**
@@ -144,7 +146,8 @@ public class NodeBuiltinTools implements BuiltinTools {
                 "outputs." + trimmedKey + " 的值与来源 " + type + " [" + source.ref() + "] " + sp + " 处的内容不一致");
         }
 
-        ctx.scope().output(trimmedKey, new Sourced<>(plain, source));
+        OutputSpec spec = Objects.isNull(contract) ? null : contract.getOutputs().get(trimmedKey);
+        ctx.scope().output(trimmedKey, new Sourced<>(plain, source, Objects.nonNull(spec) && spec.isSensitive()));
         return new KeyResult(trimmedKey);
     }
 
@@ -219,7 +222,7 @@ public class NodeBuiltinTools implements BuiltinTools {
         }
 
         try {
-            return SourceType.valueOf(raw.trim().toUpperCase());
+            return SourceType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             log.error("failed to parseSourceType", ex);
             throw new ToolRejectedException(RuntimeErrorCode.SOURCE_REJECT, next, "来源类型 [" + raw + "] 不存在");

@@ -1,12 +1,12 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.MissingActionType;
-import com.g2rain.agent.runtime.domain.hydrate.MissingSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.MissingActionType;
+import com.g2rain.agent.runtime.spec.MissingSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
@@ -46,7 +46,7 @@ import java.util.stream.IntStream;
  * @since 2026/8/21
  */
 @Slf4j
-@Order(3)
+@Order(3000)
 @Component
 @RequiredArgsConstructor
 public class ParamContractInterceptor implements ToolInterceptor {
@@ -100,9 +100,13 @@ public class ParamContractInterceptor implements ToolInterceptor {
      */
     @Override
     public Optional<Observation> before(ToolInvokeRequest request) {
-        // 已批准写工具按原参执行，不得再注入或拒调
         // Spring @Tool 内置回调参数由 @ToolParam 约束，不走 parameterContracts
         if (ToolCallbacks.isBuiltin(request.toolCallback())) {
+            return Optional.empty();
+        }
+
+        // 已批准写工具按用户确认的那组参数执行：这组参数在确认前已规范、绑定、校验过，不得再改写或拒调
+        if (request.context().approvedWrite()) {
             return Optional.empty();
         }
 
@@ -113,10 +117,8 @@ public class ParamContractInterceptor implements ToolInterceptor {
         Map<String, ArgSpec> contracts = spec.getArgs();
 
         ToolExecutionContext ctx = request.context();
-        JsonNode parsed = JSON.str2node(request.arguments());
-        if (!(parsed instanceof ObjectNode args)) {
-            return Optional.empty();
-        }
+        // 在请求持有的参数树上原地改写，不再解析与回写字符串
+        ObjectNode args = request.args();
 
         JsonNode working = WorkingTree.of(ctx);
         GateAccumulator acc = new GateAccumulator();
@@ -135,7 +137,6 @@ public class ParamContractInterceptor implements ToolInterceptor {
         }
 
         if (acc.changed) {
-            request.replaceArguments(JSON.obj2str(args));
             log.debug("[ParamContract] rewritten arguments tool={}", request.toolName());
         }
 

@@ -4,6 +4,7 @@ import com.g2rain.agent.runtime.domain.decision.GoalEvaluation;
 import com.g2rain.agent.runtime.domain.decision.IntentResult;
 import com.g2rain.agent.runtime.domain.decision.TurnMode;
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
+import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
@@ -117,7 +118,8 @@ public final class DefaultFinalizer implements Finalizer {
         TaskStatus status = resolveStatus(ctx.getTurn(), executed);
         boolean terminal = TaskStatus.isTerminal(status);
         boolean succeeded = terminal && status == TaskStatus.SUCCEEDED;
-        String draft = Objects.isNull(executed) ? null : Strings.blankToNull(executed.message());
+        String message = Objects.isNull(executed) ? null : Strings.blankToNull(executed.message());
+        String draft = status == TaskStatus.FAILED ? failedDraft(ctx.getTurn().graph(), message) : message;
         String summary = goalGate.present(ctx, draft, succeeded);
         return new GoalEvaluation(status, terminal, summary);
     }
@@ -205,6 +207,23 @@ public final class DefaultFinalizer implements Finalizer {
             return executed.status();
         }
         return turn.task().map(TaskMetadata::getStatus).orElse(TaskStatus.FAILED);
+    }
+
+    /**
+     * 失败回复先列已生效的写步骤，再给失败说明，与拒绝确认的回执格式一致。
+     *
+     * @param graph   任务图
+     * @param message 失败说明；可空
+     * @return 失败回复；没有已完成的写步骤时原样返回
+     */
+    private static @Nullable String failedDraft(TaskGraph graph, @Nullable String message) {
+        List<String> done = graph.doneWriteSteps();
+        if (done.isEmpty()) {
+            return message;
+        }
+
+        String reason = Strings.isBlank(message) ? defaultContent(TaskStatus.FAILED) : message;
+        return RuntimeMessage.REPLY_REJECTED_DONE.text("steps", String.join("；", done)) + reason;
     }
 
     /**

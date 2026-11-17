@@ -33,6 +33,15 @@ public interface ChatMessageService {
     PageData<ChatMessageVo> selectPage(PageSelectListDto<ChatMessageSelectDto> selectDto);
 
     /**
+     * 查询会话最近的若干条消息，不统计总数
+     *
+     * @param conversationId 会话 id
+     * @param limit          最多条数
+     * @return VO 对象列表，按时间倒序（最新在前）
+     */
+    List<ChatMessageVo> selectLatest(String conversationId, int limit);
+
+    /**
      * 新增或更新数据
      *
      * @param dto 数据传输对象

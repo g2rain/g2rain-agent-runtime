@@ -54,9 +54,9 @@ public final class TurnRequest {
 
     /**
      * 会话 ID。
-     * <p>为空表示新会话，服务端会生成并落会话骨架；续聊/恢复时传入已有 id。</p>
+     * <p>为空表示新会话，服务端会生成并落会话骨架；续聊/恢复时传入已有 id，不存在或不属于当前用户时拒绝。</p>
      */
-    @Schema(description = "会话 ID；为空表示新建会话", example = "abc")
+    @Schema(description = "会话 ID；为空表示新建会话，非空须为当前用户已有会话", example = "abc")
     private String conversationId;
 
     /**

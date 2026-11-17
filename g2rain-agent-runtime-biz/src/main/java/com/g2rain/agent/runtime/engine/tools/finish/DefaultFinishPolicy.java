@@ -5,7 +5,7 @@ import com.g2rain.agent.runtime.domain.graph.EdgeType;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
@@ -84,8 +84,8 @@ public class DefaultFinishPolicy implements FinishPolicy {
                 : FinishDecision.reject(ModelHint.FINISH_NEED_TARGET.text("tool", target));
         }
 
-        // 无完成目标、契约也没声明产出：至少完成过一次业务调用（空结果也算）
-        if (lacksDeclaredOutputs(context.contract()) && context.expectsBusinessTools() && !anyBusinessDone(context)) {
+        // 无完成目标、契约也没有必填产出：至少完成过一次业务调用（空结果也算）
+        if (lacksRequiredOutputs(context.contract()) && context.expectsBusinessTools() && !anyBusinessDone(context)) {
             return FinishDecision.reject(ModelHint.FINISH_NEED_BUSINESS.text());
         }
 
@@ -148,13 +148,14 @@ public class DefaultFinishPolicy implements FinishPolicy {
     }
 
     /**
-     * 契约是否没有声明任何 output。
+     * 契约是否没有必填 output；只声明了非必填产出时，节点可能一个都不填，不能据此免去业务调用要求。
      *
      * @param contract 技能契约；可空
-     * @return 空契约或空 outputs 为 {@code true}
+     * @return 空契约、空 outputs 或全部非必填为 {@code true}
      */
-    private static boolean lacksDeclaredOutputs(@Nullable SkillContract contract) {
-        return Objects.isNull(contract) || Collections.isEmpty(contract.getOutputs());
+    private static boolean lacksRequiredOutputs(@Nullable SkillContract contract) {
+        return Objects.isNull(contract) || Collections.isEmpty(contract.getOutputs())
+            || contract.getOutputs().values().stream().noneMatch(OutputSpec::isRequired);
     }
 
     /**

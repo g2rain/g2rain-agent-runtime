@@ -4,6 +4,9 @@ package com.g2rain.agent.runtime.domain.state.task;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
+import java.util.Comparator;
+import java.util.Map;
+
 /**
  * 会话记忆中的一条实体索引（Hash field = {@code type:id}）。
  *
@@ -22,4 +25,10 @@ import tools.jackson.databind.JsonNode;
 public record EntityEntry(String displayName, JsonNode attrs, @Nullable String taskId, @Nullable String evidenceId,
                           long seenAt, int mentions) {
 
+    /**
+     * 按最近提及从旧到新排序，同一时刻按键排序；淘汰取头部，截取最近提及的取 {@link Comparator#reversed()}。
+     */
+    public static final Comparator<Map.Entry<String, EntityEntry>> LEAST_RECENT =
+        Comparator.<Map.Entry<String, EntityEntry>>comparingLong(entry -> entry.getValue().seenAt())
+            .thenComparing(Map.Entry::getKey);
 }

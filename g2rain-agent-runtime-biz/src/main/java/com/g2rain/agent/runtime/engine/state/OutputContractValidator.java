@@ -4,7 +4,7 @@ package com.g2rain.agent.runtime.engine.state;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
@@ -38,6 +38,14 @@ public class OutputContractValidator {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
+     * 契约未声明产出时可用的来源类型：排除 MODEL（一律不可信）与 CONTRACT（无常量可比对）。
+     */
+    private static final String UNDECLARED_SOURCE_TYPES = Arrays.stream(SourceType.values())
+        .filter(type -> type != SourceType.MODEL && type != SourceType.CONTRACT)
+        .map(Enum::name)
+        .collect(Collectors.joining("、"));
+
+    /**
      * 校验输出键是否被当前契约声明。
      *
      * <p>契约没有声明 outputs 时跳过键白名单校验；一旦声明了 outputs，任意未声明键都会被拒绝。</p>
@@ -61,7 +69,7 @@ public class OutputContractValidator {
      * <p>来源类型和输出字段均由契约决定。对于 CONTRACT 来源，值必须与契约常量做
      * JSON 结构比较，而不是依赖 Java 对象的 {@code equals} 实现。</p>
      *
-     * @param contract 当前 Skill 契约；为空或没有 outputs 时跳过
+     * @param contract 当前 Skill 契约；为空或没有 outputs 时只拒绝 CONTRACT 来源（无常量可比对）
      * @param key      待写入的输出键
      * @param source   输出值的来源描述
      * @param value    待写入的实际值
@@ -69,6 +77,7 @@ public class OutputContractValidator {
      */
     public void requireAcceptedSource(@Nullable SkillContract contract, String key, Source source, @Nullable Object value) {
         if (Objects.isNull(contract) || Collections.isEmpty(contract.getOutputs())) {
+            requireVerifiableSource(key, source);
             return;
         }
         OutputSpec spec = contract.getOutputs().get(key);
@@ -91,6 +100,24 @@ public class OutputContractValidator {
                 );
             }
         }
+    }
+
+    /**
+     * 契约未声明产出时，CONTRACT 来源没有常量可比对，来源核验又对它直接放行，必须在此拒绝。
+     *
+     * @param key    待写入的输出键
+     * @param source 输出值的来源描述
+     * @throws ToolRejectedException 来源为 CONTRACT 时抛出
+     */
+    private static void requireVerifiableSource(String key, Source source) {
+        if (source.type() != SourceType.CONTRACT) {
+            return;
+        }
+
+        throw new ToolRejectedException(RuntimeErrorCode.SOURCE_REJECT,
+            ModelHint.NEXT_OUTPUT_SOURCE_TYPE.text("types", UNDECLARED_SOURCE_TYPES),
+            "outputs." + key + " 未在契约中声明，不能以 CONTRACT 作为来源"
+        );
     }
 
     /**

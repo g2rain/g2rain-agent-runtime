@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.enums.ModelHint;
+import com.g2rain.agent.runtime.support.JsonClip;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
@@ -62,10 +63,12 @@ final class NodeHistory {
      *
      * @param current 当前节点
      * @param tools   本节点可见工具，用于识别追问调用
-     * @param body    按 evidenceId 读证据报文；读不到返回 JSON null
+     * @param body     按 evidenceId 读证据报文；读不到返回 JSON null
+     * @param maxChars 成功报文给模型的字符上限，超出时保结构裁剪
      * @return 含 USER / ASSISTANT / TOOL 的跨轮历史
      */
-    static List<ChatTurn> build(DefaultNodeScope current, List<ToolCallback> tools, Function<String, JsonNode> body) {
+    static List<ChatTurn> build(DefaultNodeScope current, List<ToolCallback> tools, Function<String, JsonNode> body,
+                                int maxChars) {
         String nodeId = current.nodeId();
         List<ChatTurn> leadingUser = new ArrayList<>();
         List<String> textsWithoutRound = new ArrayList<>();
@@ -108,7 +111,7 @@ final class NodeHistory {
         current.evidence().forEach(head -> rounds.computeIfAbsent(head.round(), _ -> new RoundSlice()).calls.add(
             new RecordedCall(
                 new ChatTurn.ToolCallPart(head.evidenceId(), head.toolName(), Strings.defaultIfBlank(head.argsBrief(), "{}")),
-                resultOf(head, body)
+                resultOf(head, body, maxChars)
             )
         ));
 
@@ -161,13 +164,14 @@ final class NodeHistory {
     }
 
     /**
-     * 业务证据给模型的返回：未成功取完整说明，成功取完整报文，都没有时退回结果摘要。
+     * 业务证据给模型的返回：未成功取完整说明，成功取报文（超长保结构裁剪），都没有时退回结果摘要。
      *
-     * @param head 证据头
-     * @param body 按 evidenceId 读证据报文
+     * @param head     证据头
+     * @param body     按 evidenceId 读证据报文
+     * @param maxChars 成功报文字符上限
      * @return 返回内容
      */
-    private static String resultOf(EvidenceHead head, Function<String, JsonNode> body) {
+    private static String resultOf(EvidenceHead head, Function<String, JsonNode> body, int maxChars) {
         if (Strings.isNotBlank(head.detail())) {
             return head.detail();
         }
@@ -175,7 +179,8 @@ final class NodeHistory {
         if (head.status() == EvidenceStatus.SUCCESS) {
             JsonNode payload = body.apply(head.evidenceId());
             if (JSON.hasValue(payload)) {
-                return JSON.obj2str(payload);
+                String json = JSON.obj2str(payload);
+                return json.length() <= maxChars ? json : JsonClip.of(payload, maxChars) + ModelHint.OBSERVATION_CLIPPED.text();
             }
         }
 

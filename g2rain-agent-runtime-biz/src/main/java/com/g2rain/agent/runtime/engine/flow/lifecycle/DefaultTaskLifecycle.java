@@ -47,6 +47,11 @@ import java.util.Optional;
 public final class DefaultTaskLifecycle implements TaskLifecycle {
 
     /**
+     * {@code task_instance.goal_summary} 列宽。
+     */
+    private static final int GOAL_SUMMARY_MAX = 2000;
+
+    /**
      * 截取 Prior 时使用的任务条数与实体个数上限。
      */
     private final RuntimeProperties runtimeProperties;
@@ -116,8 +121,9 @@ public final class DefaultTaskLifecycle implements TaskLifecycle {
             .filter(Strings::isNotBlank)
             .orElse(ctx.getRequest().getUserInput());
 
+        // 回落为用户原文时可能超过列宽，截到 goal_summary 上限
         if (Strings.isNotBlank(goalSummary)) {
-            metadata.setGoalSummary(goalSummary.trim());
+            metadata.setGoalSummary(RuntimeUtils.clip(goalSummary.trim(), GOAL_SUMMARY_MAX));
         }
         metadata.setRequest(Strings.blankToNull(Strings.trim(ctx.getRequest().getUserInput())));
 
@@ -149,7 +155,7 @@ public final class DefaultTaskLifecycle implements TaskLifecycle {
     }
 
     /**
-     * 从会话任务记录与实体切出 Prior；条数超过配置时只保留尾部。
+     * 从会话任务记录与实体切出 Prior：任务取最近的若干条，实体取最近提及的若干个。
      *
      * @param turn 当前会话视图
      * @return 开任务写入的任务前情切片
@@ -161,19 +167,13 @@ public final class DefaultTaskLifecycle implements TaskLifecycle {
             tasks = tasks.subList(tasks.size() - maxTasks, tasks.size());
         }
 
-        Map<String, EntityEntry> entities = turn.entities();
+        // 实体索引本身无序：按最近提及从新到旧取前 N 个
         int maxEntities = Math.max(0, runtimeProperties.getState().getPriorEntitiesMax());
-        if (entities.size() > maxEntities) {
-            Map<String, EntityEntry> sliced = new LinkedHashMap<>();
-            int skip = entities.size() - maxEntities;
-            int i = 0;
-            for (var entry : entities.entrySet()) {
-                if (i++ >= skip) {
-                    sliced.put(entry.getKey(), entry.getValue());
-                }
-            }
-            entities = sliced;
-        }
+        Map<String, EntityEntry> entities = new LinkedHashMap<>();
+        turn.entities().entrySet().stream()
+            .sorted(EntityEntry.LEAST_RECENT.reversed())
+            .limit(maxEntities)
+            .forEach(entry -> entities.put(entry.getKey(), entry.getValue()));
 
         return new Prior(tasks, entities, List.of(), "start");
     }

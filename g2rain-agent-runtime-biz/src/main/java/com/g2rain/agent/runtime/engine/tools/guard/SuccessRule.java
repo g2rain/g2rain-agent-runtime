@@ -1,9 +1,9 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.SuccessOp;
-import com.g2rain.agent.runtime.domain.hydrate.SuccessSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.SuccessOp;
+import com.g2rain.agent.runtime.spec.SuccessSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -69,7 +69,7 @@ public final class SuccessRule {
      * 从工具契约构造成功条件。
      *
      * @param contract 工具契约；可空
-     * @return 成功条件；未配 path 为 {@code null}
+     * @return 成功条件；未配 path 或 op 为 {@code null}
      */
     public static @Nullable Condition conditionOf(@Nullable ToolSpec contract) {
         if (Objects.isNull(contract)) {
@@ -81,15 +81,20 @@ public final class SuccessRule {
             return null;
         }
 
-        return new Condition(
-            success.getPath().trim(),
-            success.getOp(),
-            success.getValue()
-        );
+        // 缺比较方式按未配置处理，装载时已由 ContractValidator 打警告
+        SuccessOp op = success.getOp();
+        if (Objects.isNull(op)) {
+            return null;
+        }
+
+        return new Condition(success.getPath().trim(), op, success.getValue());
     }
 
     /**
      * 按成功条件判断响应体。
+     *
+     * <p>响应里取不到判定字段时一律不成立，否定类算子（NE、NOT_IN）也不例外；
+     * IN、NOT_IN 的期望值不是数组属配置错误，同样不成立。</p>
      *
      * @param body      响应体
      * @param condition 契约成功条件
@@ -97,7 +102,10 @@ public final class SuccessRule {
      */
     public static boolean evalSuccess(JsonNode body, Condition condition) {
         JsonNode actual = JSON.lookupNode(body, condition.path());
-        // 按算子比较；IN / NOT_IN 的期望值须为数组，非数组时 IN 不成立、NOT_IN 成立
+        if (Objects.isNull(actual)) {
+            return false;
+        }
+
         switch (condition.op()) {
             case EQ -> {
                 return looseEquals(actual, condition.value());
@@ -120,7 +128,7 @@ public final class SuccessRule {
             case NOT_IN -> {
                 JsonNode expected = condition.value();
                 if (Objects.isNull(expected) || !expected.isArray()) {
-                    return true;
+                    return false;
                 }
                 for (JsonNode v : expected) {
                     if (looseEquals(actual, v)) {
@@ -133,7 +141,7 @@ public final class SuccessRule {
                 return isTruthy(actual);
             }
             case EXISTS -> {
-                return Objects.nonNull(actual);
+                return true;
             }
             default -> {
                 return false;

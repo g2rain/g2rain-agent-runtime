@@ -118,9 +118,9 @@ public class RuntimeProperties {
         private int connectTimeoutMs = 3000;
 
         /**
-         * 读超时（毫秒）；0=近似无限
+         * 读超时（毫秒）：等工具返回的兜底上限，防止业务接口挂起时整轮卡住；超时按工具超时处理（写操作结果不确定，转回查）
          */
-        private int readTimeoutMs = 0;
+        private int readTimeoutMs = 300000;
 
         /**
          * listTools 建连失败额外重试次数（不含首次）；callTool 不重试
@@ -149,6 +149,11 @@ public class RuntimeProperties {
          * 意图目录：整轮技能条数上限
          */
         private int maxSkillsTotal = 48;
+
+        /**
+         * 任务图单轮调度步数上限；与节点内 {@code react.max-rounds} 无关，超出时任务按失败收口
+         */
+        private int maxGraphSteps = 256;
     }
 
     /**
@@ -182,6 +187,11 @@ public class RuntimeProperties {
          * 写入 Observation 的业务错误文案上限（字符）
          */
         private int observationErrorMaxChars = 2048;
+
+        /**
+         * 工具成功结果给模型的字符上限；超出时保结构裁剪（先截长文本，再折叠容器），完整报文仍留在证据中
+         */
+        private int observationMaxChars = 8000;
 
         /**
          * 工具摘要上限：流式 resultBrief、EvidenceHead.argsBrief / resultBrief（字符）
@@ -220,6 +230,11 @@ public class RuntimeProperties {
          * 证据包对话尾取样条数
          */
         private int dialogueTail = 6;
+
+        /**
+         * 每个节点带入的成功调用摘要条数上限（取最近的）
+         */
+        private int evidencePerNodeMax = 5;
     }
 
     /**
@@ -265,9 +280,9 @@ public class RuntimeProperties {
         private int spaceFieldMaxBytes = 65536;
 
         /**
-         * 对话单条上限（字节）
+         * 用户单条输入上限（字符）；超出直接拒绝本轮请求，不截断
          */
-        private int messageMaxBytes = 4096;
+        private int userInputMaxChars = 20000;
 
         /**
          * 会话对话保留条数
@@ -344,17 +359,17 @@ public class RuntimeProperties {
     }
 
     /**
-     * 平台身份：从 {@code BasePrincipal} 内省，hidden 不可见。
+     * 平台身份：从 {@code BasePrincipal} 内省，只开放 exposed 白名单内的属性。
      */
     @Getter
     @Setter
     public static class Platform {
 
         /**
-         * 不进入 prompt / from / PLATFORM 校验的属性名
+         * 对外开放的属性名（白名单）：只有列出的属性进入 prompt / from / PLATFORM 校验；身份类新增属性默认不开放
          */
-        private Set<String> hidden = new LinkedHashSet<>(Set.of(
-            "passportId", "clientId", "sessionType", "adminUser", "adminCompany"
+        private Set<String> exposed = new LinkedHashSet<>(Set.of(
+            "userId", "memberId", "name", "organId", "organName", "organType", "deptPath"
         ));
     }
 

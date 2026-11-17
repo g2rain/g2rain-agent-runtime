@@ -15,7 +15,7 @@ import java.util.Optional;
 /**
  * 本轮平台身份快照（不可变）；不落 Redis / MySQL。
  *
- * <p>begin 时从请求身份拍定 organId、userId 等字段，供参数绑定 {@link com.g2rain.agent.runtime.domain.state.SourceType#PLATFORM}
+ * <p>begin 时从请求身份拍定 organId、userId 等字段，供参数绑定 {@link com.g2rain.agent.runtime.spec.SourceType#PLATFORM}
  * 精确比对。调用方只读；{@link #toJson()} 返回深拷贝，避免外部改动污染本轮快照。</p>
  *
  * @param values 属性名 → JSON 值

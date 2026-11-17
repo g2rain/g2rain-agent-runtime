@@ -258,7 +258,13 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     WRITE_OUT_OF_SCOPE("agent_runtime.42249", "写操作不在本节点范围内：{0:toolName}"),
 
-    SKIP_UNGROUNDED("agent_runtime.42250", "跳过没有依据：{0:detail}");
+    SKIP_UNGROUNDED("agent_runtime.42250", "跳过没有依据：{0:detail}"),
+
+    GATED_WRITE_PENDING("agent_runtime.42251", "已有待确认的写调用 [{0:toolName}]"),
+
+    GUARD_DENIED("agent_runtime.42252", "调用被前置条件拦下：{0:code}"),
+
+    GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 
     /**
      * 错误码字符串（如 {@code agent_runtime.40401}）；由 {@link #code()} 读出供全局异常处理器消费。

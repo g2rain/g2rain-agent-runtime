@@ -81,6 +81,8 @@
 | `ArgPolicyInterceptor` | 入参 JSON 非法、不是对象、被策略拒绝 | `ARG_JSON_INVALID` / `ARG_REJECTED` | `REJECTED` |
 | `ParamContractInterceptor` | 参数来源不符、须先查询、须先追问、被拒 | `PARAM_PROVENANCE_*` | `REJECTED` |
 | `WriteScopeInterceptor` | 调用的写工具是图中其他未结束节点的完成目标；本节点已成功完成过业务调用时，`DefaultReActLoop` 随即以交接文案尝试 finish（见 [节点写操作范围约束](design/node-write-scope.md) 第 8 节） | `WRITE_OUT_OF_SCOPE` | `REJECTED` |
+| `GuardInterceptor` | 插件 `ToolGuard` 拒绝 | `GUARD_DENIED` | `REJECTED` |
+| `GuardInterceptor` | `ToolGuard` 抛异常 | `GUARD_UNAVAILABLE` | `REJECTED` |
 | `FingerprintInterceptor` | 相同参数重复调用熔断 | `FINGERPRINT_TRIP` | `REJECTED` |
 | `WriteGateInterceptor` | 写操作须先申请确认 | `APPROVAL_REQUIRED` | `DEFERRED` |
 | `WriteGateInterceptor` | 写结果待核实、写操作进行中 | `WRITE_PENDING_VERIFY` / `WRITE_IN_FLIGHT` | `DEFERRED` |

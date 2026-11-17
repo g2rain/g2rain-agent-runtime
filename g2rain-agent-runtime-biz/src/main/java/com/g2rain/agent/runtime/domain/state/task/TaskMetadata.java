@@ -6,6 +6,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 活跃任务的身份、生命周期和并发控制元数据。
  * <p>
@@ -101,4 +104,9 @@ public class TaskMetadata {
      * 触发开启任务的用户消息 id；纯按钮动作开启时为空。
      */
     private @Nullable String sourceMessageId;
+
+    /**
+     * 开任务时锁定的动作语义版本：技能键 → pin；后续轮次原样传入装载。
+     */
+    private Map<String, String> skillVersions = new LinkedHashMap<>();
 }

@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;

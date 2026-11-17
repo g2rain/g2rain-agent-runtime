@@ -1,5 +1,5 @@
 -- KEYS[1] = state
--- ARGV[1] = traceId
+-- ARGV[1] = traceId（JSON 编码，与 state 其余字段一致）
 -- ARGV[2] = conversation ttl ms
 -- ARGV[3] = session shared key（可空）
 -- ARGV[4] = baseVersion（Redis 无 version 时用 MySQL state_version）

@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.state.task;
+package com.g2rain.agent.runtime.spec;
 
 
 /**

@@ -6,18 +6,19 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * flush.lua 单条改动。
- * <p>{@code LPUSH_TRIM} 的 ttl 表示保留条数，其余 op 的 ttl 为 PEXPIRE 毫秒。</p>
  *
- * @param op    操作
- * @param key   Redis key
- * @param field Hash 字段；非 HSET/HDEL 为空
- * @param value 写入或删除的值
- * @param ttl   过期毫秒或 List 保留条数
+ * @param op     操作
+ * @param key    Redis key
+ * @param field  Hash 字段；非 HSET/HDEL 为空
+ * @param value  写入或删除的值
+ * @param ttl    PEXPIRE 毫秒；可空
+ * @param maxLen {@code LPUSH_TRIM} 的 List 保留条数；其余 op 为空
  * @author alpha
  * @since 2026/10/3
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record FlushOp(Op op, String key, @Nullable String field, @Nullable String value, @Nullable Long ttl) {
+public record FlushOp(Op op, String key, @Nullable String field, @Nullable String value, @Nullable Long ttl,
+                      @Nullable Long maxLen) {
 
     /**
      * flush.lua 支持的操作；名称即脚本里的分支名。
@@ -81,7 +82,7 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp hset(String key, String field, String value, @Nullable Long ttlMs) {
-        return new FlushOp(Op.HSET, key, field, value, ttlMs);
+        return new FlushOp(Op.HSET, key, field, value, ttlMs, null);
     }
 
     /**
@@ -92,7 +93,7 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp hdel(String key, String field) {
-        return new FlushOp(Op.HDEL, key, field, null, null);
+        return new FlushOp(Op.HDEL, key, field, null, null, null);
     }
 
     /**
@@ -104,7 +105,7 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp set(String key, String value, @Nullable Long ttlMs) {
-        return new FlushOp(Op.SET, key, null, value, ttlMs);
+        return new FlushOp(Op.SET, key, null, value, ttlMs, null);
     }
 
     /**
@@ -114,7 +115,7 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp del(String key) {
-        return new FlushOp(Op.DEL, key, null, null, null);
+        return new FlushOp(Op.DEL, key, null, null, null, null);
     }
 
     /**
@@ -126,7 +127,7 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp lpushTrim(String key, String value, long maxLen) {
-        return new FlushOp(Op.LPUSH_TRIM, key, null, value, maxLen);
+        return new FlushOp(Op.LPUSH_TRIM, key, null, value, null, maxLen);
     }
 
     /**
@@ -137,6 +138,6 @@ public record FlushOp(Op op, String key, @Nullable String field, @Nullable Strin
      * @return 改动
      */
     public static FlushOp expire(String key, long ttlMs) {
-        return new FlushOp(Op.EXPIRE, key, null, null, ttlMs);
+        return new FlushOp(Op.EXPIRE, key, null, null, ttlMs, null);
     }
 }

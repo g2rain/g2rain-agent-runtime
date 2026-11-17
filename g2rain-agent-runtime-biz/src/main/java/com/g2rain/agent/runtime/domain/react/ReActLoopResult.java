@@ -28,15 +28,6 @@ public record ReActLoopResult(NodeStatus nodeStatus, @Nullable String message, @
                               @Nullable List<String> suggestions) {
 
     /**
-     * 仅带节点状态的结果（无消息、无挂起、无缺参）。
-     *
-     * @param nodeStatus 节点状态
-     */
-    public ReActLoopResult(NodeStatus nodeStatus) {
-        this(nodeStatus, null, null, null, null, null);
-    }
-
-    /**
      * 带消息、检查点类型与待确认动作、不带缺参/建议的结果。
      *
      * @param nodeStatus     节点状态

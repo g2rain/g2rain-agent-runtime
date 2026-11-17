@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 import java.text.Normalizer;
+import java.util.BitSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -38,6 +39,16 @@ public class SourceVerifier {
      * JSON 编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 「用户」来源按包含判断时值的最短长度；更短的值（如「1」「是」）几乎出现在任何消息里，不足以证明来自用户。
+     */
+    private static final int USER_VALUE_MIN_LENGTH = 2;
+
+    /**
+     * ASCII 字符上界（不含）。
+     */
+    private static final int ASCII_LIMIT = 128;
 
     /**
      * 证据读取：校验 EVIDENCE 来源的值。
@@ -112,7 +123,7 @@ public class SourceVerifier {
      */
     public Optional<String> findUserMessageId(ToolExecutionContext ctx, JsonNode argVal) {
         String needle = normalizeText(JSON.normalizeNode(argVal));
-        if (Strings.isBlank(needle) || needle.length() < 2) {
+        if (Strings.isBlank(needle) || needle.length() < USER_VALUE_MIN_LENGTH) {
             return Optional.empty();
         }
 
@@ -122,7 +133,7 @@ public class SourceVerifier {
             }
 
             String text = message.getText();
-            if (Strings.isBlank(text) || !normalizeText(text).contains(needle)) {
+            if (!containsValue(text, needle)) {
                 continue;
             }
 
@@ -163,17 +174,20 @@ public class SourceVerifier {
      *
      * @param ctx    当前工具执行上下文
      * @param argVal 待比对的入参值；可空
-     * @return 存在 id 相等的前情实体
+     * @param entity 参数指向的实体类型；配置时要求类型一致，未配置时只比对 id
+     * @return 存在匹配的前情实体
      */
-    public boolean matchesPriorId(ToolExecutionContext ctx, @Nullable JsonNode argVal) {
+    public boolean matchesPriorId(ToolExecutionContext ctx, @Nullable JsonNode argVal, @Nullable String entity) {
         if (!JSON.hasValue(argVal) || !argVal.isValueNode()) {
             return false;
         }
 
         String text = argVal.asString().trim();
         return ctx.getFrame().turn().prior()
-            .map(prior -> prior.entities().keySet().stream()
-                .anyMatch(key -> key.indexOf(':') > 0 && text.equals(key.substring(key.indexOf(':') + 1))))
+            .map(prior -> Strings.isNotBlank(entity)
+                ? prior.entities().containsKey(entity.trim() + ":" + text)
+                : prior.entities().keySet().stream()
+                    .anyMatch(key -> key.indexOf(':') > 0 && text.equals(key.substring(key.indexOf(':') + 1))))
             .orElse(false);
     }
 
@@ -182,10 +196,13 @@ public class SourceVerifier {
      *
      * @param ctx    当前工具执行上下文
      * @param argVal 待比对的入参值
-     * @return 证据 extract 子树中存在相等节点
+     * @param entity 参数指向的实体类型；配置时要求值等于该类型对象的标识，未配置时在 extract 子树中找相等节点
+     * @return 证据中存在匹配
      */
-    public boolean matchesEvidenceValue(ToolExecutionContext ctx, JsonNode argVal) {
-        return evidenceReader.matchesExact(ctx, argVal);
+    public boolean matchesEvidenceValue(ToolExecutionContext ctx, JsonNode argVal, @Nullable String entity) {
+        return Strings.isNotBlank(entity)
+            ? evidenceReader.matchesEntityId(ctx, entity.trim(), argVal)
+            : evidenceReader.matchesExact(ctx, argVal);
     }
 
     /**
@@ -207,7 +224,7 @@ public class SourceVerifier {
         }
 
         String needle = normalizeText(JSON.normalizeNode(value));
-        if (Strings.isBlank(needle)) {
+        if (Strings.isBlank(needle) || needle.length() < USER_VALUE_MIN_LENGTH) {
             return false;
         }
 
@@ -215,7 +232,7 @@ public class SourceVerifier {
             .filter(message -> message.getRole() == DialogueRole.USER)
             .filter(message -> Objects.equals(messageId, message.getMessageId()))
             .anyMatch(message -> Strings.isNotBlank(message.getText())
-                && normalizeText(message.getText()).contains(needle));
+                && containsValue(message.getText(), needle));
     }
 
     /**
@@ -224,27 +241,24 @@ public class SourceVerifier {
      * @param bag      带源 Map
      * @param source   声明来源
      * @param expected 入参值
-     * @return 袋中有相等值
+     * @return 按键查到且值相等
      */
     private boolean matchesBagged(Map<String, Sourced<?>> bag, Source source, JsonNode expected) {
-        if (bag.isEmpty()) {
+        // 只按键精确核验：键查不到即不通过，不退化为「同类来源任一值相等」
+        String key = Strings.defaultIfBlank(source.path(), source.ref());
+        if (Strings.isBlank(key)) {
             return false;
         }
 
-        String key = Strings.defaultIfBlank(source.path(), source.ref());
-        if (Strings.isNotBlank(key) && bag.containsKey(key)) {
-            Sourced<?> sourced = bag.get(key);
-            return Objects.nonNull(sourced)
-                && JSON.nodesEqual(JSON.obj2node(sourced.value()), expected)
-                && (Strings.isBlank(source.ref())
-                || Objects.equals(source.ref(), sourced.source().ref())
-                || Objects.equals(source.ref(), key));
+        Sourced<?> sourced = bag.get(key);
+        if (Objects.isNull(sourced)) {
+            return false;
         }
 
-        return bag.values().stream()
-            .filter(sourced -> sourced.source().type() == source.type())
-            .filter(sourced -> Strings.isBlank(source.ref()) || Objects.equals(source.ref(), sourced.source().ref()))
-            .anyMatch(sourced -> JSON.nodesEqual(JSON.obj2node(sourced.value()), expected));
+        return JSON.nodesEqual(JSON.obj2node(sourced.value()), expected)
+            && (Strings.isBlank(source.ref())
+            || Objects.equals(source.ref(), sourced.source().ref())
+            || Objects.equals(source.ref(), key));
     }
 
     /**
@@ -279,5 +293,62 @@ public class SourceVerifier {
         return str.replace('\u3000', ' ')
             .replaceAll("\\s+", "")
             .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 用户原文是否包含该值：归一化后按包含判断，值的首尾是英文字母或数字时，命中处前后不能紧挨字母或数字。
+     *
+     * <p>例：「2012」中不认「12」；「订单 ORD-10086」中认「ord-10086」；中文没有词边界，「发布到官网吧」中认「官网」。
+     * 原文中的空白在比较时去掉，但空白处仍视为边界。</p>
+     *
+     * @param raw    用户原文；可空
+     * @param needle 已归一化的值
+     * @return 有满足边界条件的命中
+     */
+    static boolean containsValue(@Nullable String raw, String needle) {
+        if (Strings.isBlank(raw) || needle.isEmpty()) {
+            return false;
+        }
+
+        String str = Normalizer.normalize(raw, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        StringBuilder text = new StringBuilder(str.length());
+        BitSet gapBefore = new BitSet();
+        boolean gap = false;
+        for (int i = 0, j = str.length(); i < j; i++) {
+            char c = str.charAt(i);
+            if (Character.isWhitespace(c)) {
+                gap = true;
+                continue;
+            }
+
+            if (gap) {
+                gapBefore.set(text.length());
+                gap = false;
+            }
+            text.append(c);
+        }
+
+        boolean boundedStart = isAsciiWord(needle.charAt(0));
+        boolean boundedEnd = isAsciiWord(needle.charAt(needle.length() - 1));
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
+            int end = at + needle.length();
+            boolean startOk = !boundedStart || at == 0 || gapBefore.get(at) || !isAsciiWord(text.charAt(at - 1));
+            boolean endOk = !boundedEnd || end == text.length() || gapBefore.get(end) || !isAsciiWord(text.charAt(end));
+            if (startOk && endOk) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 是否英文字母或数字（只有这类字符之间才有词边界的概念）。
+     *
+     * @param c 字符
+     * @return 是 ASCII 字母或数字
+     */
+    private static boolean isAsciiWord(char c) {
+        return c < ASCII_LIMIT && Character.isLetterOrDigit(c);
     }
 }

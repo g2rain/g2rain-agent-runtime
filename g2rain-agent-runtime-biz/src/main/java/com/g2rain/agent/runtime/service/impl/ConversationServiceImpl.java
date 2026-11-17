@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.service.impl;
 
 
+import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
@@ -100,19 +101,34 @@ public class ConversationServiceImpl implements ConversationService {
     private final ChatProgressService chatProgressService;
 
     /**
+     * 运行时配置：用户输入长度上限。
+     */
+    private final RuntimeProperties runtimeProperties;
+
+    /**
      * 持会话锁跑一整轮：空会话标识先生成，再加锁、回灌状态并进入流水线。
      *
      * <p>锁内顺序固定为 begin → 流水线（逐步推送执行步骤）→ flush/persist → 结果帧。
      * 编排异常收成失败结果并仍发结束事件；持久化失败只记日志，不改变已算出的本轮结果。</p>
      *
-     * @param request 本轮请求；会话标识可空，空则现场生成
+     * @param request 本轮请求；会话标识可空，空则现场生成；非空须是当前主体已有的会话
      * @return 本轮结果（已带 traceId）
      */
     @Override
     public TurnResult send(TurnRequest request) {
-        // 空会话由服务端创建；之后整个请求都使用同一个会话锁和 traceId。
+        // 超长输入直接拒绝，不截断后继续：用户能立即知道发不出去
+        int inputMax = runtimeProperties.getState().getUserInputMaxChars();
+        String userInput = request.getUserInput();
+        Asserts.isTrue(Objects.isNull(userInput) || userInput.length() <= inputMax,
+            SystemErrorCode.PARAM_EXCEEDS_SIZE, "userInput", inputMax);
+
+        // 会话 id 只由服务端生成：空则新建；客户端带来的 id 必须是本人已有会话，不再按它自动新建
         if (Strings.isBlank(request.getConversationId())) {
             request.setConversationId(RuntimeUtils.uuid());
+        } else {
+            ChatConversationSelectDto select = ownerSelect();
+            select.setConversationId(request.getConversationId());
+            requireOwned(chatConversationService.selectSummaryList(select));
         }
 
         String lockKey = RedisKeys.LOCK.format(request.getConversationId());
@@ -241,7 +257,13 @@ public class ConversationServiceImpl implements ConversationService {
         select.setConversationId(conversationId);
         List<ChatConversationVo> owned = chatConversationService.selectSummaryList(select);
         requireOwned(owned);
-        return chatConversationService.delete(owned.getFirst().getId());
+        // 与发消息同一把会话锁：正在跑的一轮先跑完，删除后不会再有写入
+        String lockKey = RedisKeys.LOCK.format(conversationId);
+        return distributedLock.waitLockWithWatchdog(lockKey, Boolean.FALSE, () -> {
+            int deleted = chatConversationService.delete(owned.getFirst().getId());
+            runtimeStateFacade.discard(Long.toString(select.getOrganId()), conversationId);
+            return deleted;
+        });
     }
 
     /**

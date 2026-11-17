@@ -74,6 +74,12 @@ public class TaskGraphNodeVo extends BaseVo {
     private Boolean targetClaimed;
 
     /**
+     * 是否由技能契约 provider 声明自动补入
+     */
+    @Schema(description = "是否由技能契约 provider 声明自动补入")
+    private Boolean providerInserted;
+
+    /**
      * 委派深度
      */
     @Schema(description = "委派深度")

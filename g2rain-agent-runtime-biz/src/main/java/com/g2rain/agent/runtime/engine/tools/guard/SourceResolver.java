@@ -1,10 +1,10 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.common.json.JsonCodec;
@@ -88,11 +88,11 @@ public class SourceResolver {
             case CONTRACT -> Objects.nonNull(contract.getConstant()) && JSON.nodesEqual(contract.getConstant(), argVal);
             // 无 from 时模型填的前情值无法按参数名定位，改按实体 id 认定
             case PRIOR_TASK -> Objects.isNull(contract.getValueRef())
-                ? sourceVerifier.matchesPriorId(ctx, argVal)
+                ? sourceVerifier.matchesPriorId(ctx, argVal, contract.getEntity())
                 : matchesWorking(contract, working, path, source, argVal);
             case NODE_OUTPUT, SHARED, SESSION -> matchesWorking(contract, working, path, source, argVal);
             case USER -> sourceVerifier.followUpAccepted(ctx, path) || sourceVerifier.findUserMessageId(ctx, argVal).isPresent();
-            case EVIDENCE -> sourceVerifier.matchesEvidenceValue(ctx, argVal);
+            case EVIDENCE -> sourceVerifier.matchesEvidenceValue(ctx, argVal, contract.getEntity());
             case MODEL -> false;
         };
     }

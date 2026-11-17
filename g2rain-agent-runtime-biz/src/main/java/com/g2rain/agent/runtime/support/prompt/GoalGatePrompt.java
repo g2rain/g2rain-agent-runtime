@@ -44,6 +44,7 @@ public final class GoalGatePrompt {
             - 节点 status 为 SKIPPED 且有 result，表示经查询确认该写操作不需要执行（依据见 result）：goal 中带条件的要求（如「不存在就创建」）视为已满足；goal 无条件要求执行的写操作被跳过，视为未达成。
             - 节点 status 不是 DONE 或 SKIPPED 的，其目标视为未完成。
             - 查询类要求：查询已执行且结果为空并如实告知，视为达成。
+            - 节点 result 中的数据须能在该节点或其前置节点的 evidence 中找到依据；对不上时以 evidence 为准，不得把没有依据的内容写进答复。
             - 只要 goal 中有一项要求未被执行事实支持，achieved 为 false。
 
             【答复要求】
@@ -61,7 +62,8 @@ public final class GoalGatePrompt {
               - claimed：target 是否由执行中第一次写操作自动记录。
               - writable：节点所用技能是否具备写操作能力。
               - delegated：为 true 表示是为其他节点准备数据的前置步骤。
-              - result：节点完成时写给用户的结论。
+              - result：节点完成时写给用户的结论（由执行时的模型撰写）。
+              - evidence：节点最近几次成功调用的工具与结果摘要（摘要可能被截短），是核对 result 的依据。
             - dialogueTail：最近的对话，用于理解指代，不从中取新的事实。
 
             【输入数据】

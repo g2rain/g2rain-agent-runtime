@@ -261,7 +261,7 @@ flowchart LR
 
 - [Skill](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/hydrate/Skill.java)
 - [SkillContract](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/hydrate/SkillContract.java)
-- [ToolSpec](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/domain/hydrate/ToolSpec.java)
+- [ToolSpec](../g2rain-agent-runtime-api/src/main/java/com/g2rain/agent/runtime/spec/ToolSpec.java)
 - [能力装载 DefaultBundleLoader](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/hydrate/DefaultBundleLoader.java)
 - [前置能力 ProviderNodes](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/flow/plan/ProviderNodes.java)
 - [工具拦截接口 ToolInterceptor](../g2rain-agent-runtime-biz/src/main/java/com/g2rain/agent/runtime/engine/tools/ToolInterceptor.java)

@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 /**
  * 工具成功判定运算符（{@code successOp}）。

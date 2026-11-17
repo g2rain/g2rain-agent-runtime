@@ -1,15 +1,17 @@
 package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ExtractSpec;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.OutputType;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
-import com.g2rain.agent.runtime.domain.hydrate.VerifySpec;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SuccessOp;
+import com.g2rain.agent.runtime.spec.SuccessSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
+import com.g2rain.agent.runtime.spec.VerifySpec;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.utils.Collections;
@@ -17,6 +19,7 @@ import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 
 import java.util.Map;
 import java.util.Objects;
@@ -79,6 +82,8 @@ public class ContractValidator {
                 return false;
             }
 
+            warnIfSuccessMisconfigured(entry.getKey(), tool);
+
             for (Map.Entry<String, ArgSpec> argEntry : tool.getArgs().entrySet()) {
                 ArgSpec arg = argEntry.getValue();
                 if (Strings.isNotBlank(arg.getFrom()) && Objects.nonNull(arg.getConstant())) {
@@ -138,6 +143,34 @@ public class ContractValidator {
         if (platformCatalog.supports(leaf)) {
             log.warn("[ContractValidator] arg {} on tool {} shares platform key {} but has no from: platform.*",
                 argPath, toolName, leaf);
+        }
+    }
+
+    /**
+     * 成功判定配置不完整时打警告，不判失败：没配比较方式运行期按未配置处理；
+     * IN、NOT_IN 的期望值不是数组时运行期判定恒不成立。
+     *
+     * @param toolName 工具名
+     * @param tool     工具契约
+     */
+    private static void warnIfSuccessMisconfigured(String toolName, ToolSpec tool) {
+        SuccessSpec success = tool.getSuccess();
+        if (Objects.isNull(success) || Strings.isBlank(success.getPath())) {
+            return;
+        }
+
+        SuccessOp op = success.getOp();
+        if (Objects.isNull(op)) {
+            log.warn("[ContractValidator] success on tool {} has path {} but no op, treated as unconfigured",
+                toolName, success.getPath());
+            return;
+        }
+
+        JsonNode value = success.getValue();
+        boolean listOp = op == SuccessOp.IN || op == SuccessOp.NOT_IN;
+        if (listOp && (Objects.isNull(value) || !value.isArray())) {
+            log.warn("[ContractValidator] success on tool {} uses {} but value is not an array, never satisfied",
+                toolName, op);
         }
     }
 

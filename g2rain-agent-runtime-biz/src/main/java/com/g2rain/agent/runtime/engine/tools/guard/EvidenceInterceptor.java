@@ -3,7 +3,7 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
@@ -13,7 +13,6 @@ import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolErrors;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.utils.Strings;
 import org.springframework.core.annotation.Order;
@@ -32,7 +31,7 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/8/21
  */
-@Order(7)
+@Order(7000)
 @Component
 public class EvidenceInterceptor implements ToolInterceptor {
 
@@ -71,7 +70,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
         if (Strings.isNotBlank(evidenceId)) {
             stateFacade.settle(request.context().scope(), evidenceId, toolResult);
         } else {
-            JsonNode args = RuntimeUtils.argsNode(request.arguments());
+            JsonNode args = request.args();
             ToolCall call = new ToolCall(request.toolName(), args, null, SideEffect.NONE, request.contract());
             stateFacade.record(request.context().scope(), call, toolResult);
         }
@@ -112,7 +111,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
             counts = EvidenceSemantics.extractCounts(request.contract(), observation.data());
             empty = EvidenceSemantics.empty(request.contract(), observation.data(), callLayerOk);
             entities = EvidenceSemantics.entitiesJson(
-                request.contract(), observation.data(), RuntimeUtils.argsNode(request.arguments()), callLayerOk
+                request.contract(), observation.data(), request.args(), callLayerOk
             );
         }
 

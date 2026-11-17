@@ -1,9 +1,10 @@
 package com.g2rain.agent.runtime.engine.flow.react;
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.MissingSpec;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.MissingSpec;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
@@ -98,7 +99,24 @@ final class ToolCatalogProjector {
             path,
             Strings.blankToNull(arg.getLabel()),
             Objects.isNull(missing) ? null : missing.actionOrDefault().name(),
-            Objects.isNull(missing) ? null : Strings.blankToNull(missing.getTool())
+            Objects.isNull(missing) ? null : Strings.blankToNull(missing.getTool()),
+            arg.getEnumValues().isEmpty() ? null : List.copyOf(arg.getEnumValues()),
+            injected(arg) ? Boolean.TRUE : null
         );
+    }
+
+    /**
+     * 参数是否一定由系统填写：取值来自平台字段或契约常量，模型给的值总会被覆盖。
+     *
+     * @param arg 参数声明
+     * @return 由系统填写时为 {@code true}
+     */
+    private static boolean injected(ArgSpec arg) {
+        if (Objects.nonNull(arg.getConstant())) {
+            return true;
+        }
+
+        ValueRef ref = arg.getValueRef();
+        return Objects.nonNull(ref) && ref.bag() == ValueRef.Bag.PLATFORM;
     }
 }

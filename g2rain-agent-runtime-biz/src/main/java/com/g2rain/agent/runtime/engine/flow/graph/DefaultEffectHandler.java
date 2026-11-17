@@ -4,11 +4,11 @@ package com.g2rain.agent.runtime.engine.flow.graph;
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
+import com.g2rain.agent.runtime.spec.ArgSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
@@ -18,6 +18,7 @@ import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.engine.state.DefaultTurnScope;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
@@ -29,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -54,6 +56,31 @@ public class DefaultEffectHandler implements EffectHandler {
      * 解析待批参数。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 实体键中类型与标识的分隔符：{@code type:id}。
+     */
+    private static final String KEY_SEPARATOR = ":";
+
+    /**
+     * 审批明细中参数名与值的分隔符。
+     */
+    private static final String LABEL_SEPARATOR = "：";
+
+    /**
+     * 审批明细中参数之间的分隔符。
+     */
+    private static final String FIELD_SEPARATOR = "，";
+
+    /**
+     * 审批明细中明细行序号的后缀：{@code 1. }。
+     */
+    private static final String ROW_INDEX_SUFFIX = ". ";
+
+    /**
+     * 契约参数路径中数组项字段的分隔符：{@code 字段名[].子字段}。
+     */
+    private static final String PATH_SEPARATOR = ".";
 
     /**
      * 按顺序应用副作用；列表空则直接返回。
@@ -84,8 +111,8 @@ public class DefaultEffectHandler implements EffectHandler {
     /**
      * 挂起：写 {@link com.g2rain.agent.runtime.domain.state.TurnScope#suspend}，不整图 saveGraph。
      *
-     * <p>节点找不到则什么也不写。审批挂起时把待执行参数拼进问题，
-     * 让用户确认的正是即将执行的那组参数；结果帧由收尾统一下发。</p>
+     * <p>节点找不到则什么也不写。审批挂起时由系统给出要执行的操作与参数，
+     * 让用户确认的正是即将执行的那个工具和那组参数；结果帧由收尾统一下发。</p>
      *
      * @param frame 当前图执行帧
      * @param save  挂起副作用，含节点、检查点类型和待处理动作
@@ -97,41 +124,59 @@ public class DefaultEffectHandler implements EffectHandler {
         }
 
         TaskCheckpoint checkpoint = save.toCheckpoint();
-        if (checkpoint.getType() == CheckpointType.APPROVAL) {
-            String detail = approvalDetail(frame, save.nodeId(), checkpoint.getPendingAction());
-            if (Strings.isNotBlank(detail)) {
-                checkpoint.setQuestion(Strings.isBlank(checkpoint.getQuestion())
-                    ? detail : checkpoint.getQuestion().trim() + "\n" + detail);
-            }
+        PendingAction pending = checkpoint.getPendingAction();
+        if (checkpoint.getType() == CheckpointType.APPROVAL && Objects.nonNull(pending)) {
+            checkpoint.setQuestion(approvalQuestion(frame, save.nodeId(), checkpoint.getQuestion(), pending));
         }
         frame.turn().suspend(checkpoint);
         frame.turn().focus(save.nodeId());
     }
 
     /**
+     * 审批问题：首行由系统给出工具展示名，模型摘要只作补充，末行是参数明细。
+     *
+     * <p>操作名取自契约而非模型摘要，摘要与实际调用不一致时用户也能看出要执行的是什么。</p>
+     *
+     * @param frame   当前图执行帧
+     * @param nodeId  挂起节点 id
+     * @param summary 模型给出的摘要；可空
+     * @param pending 待批准的写动作
+     * @return 如「即将执行：发布文章\n发布新版官网文章\n文章标题：G2rain 2.0」
+     */
+    private String approvalQuestion(GraphFrame frame, String nodeId, @Nullable String summary, PendingAction pending) {
+        ToolSpec spec = toolSpec(frame, nodeId, pending.toolName());
+        String label = Objects.nonNull(spec) && Strings.isNotBlank(spec.getLabel()) ? spec.getLabel() : pending.toolName();
+        List<String> lines = new ArrayList<>();
+        lines.add(RuntimeMessage.APPROVAL_ACTION.text("tool", label));
+        if (Strings.isNotBlank(summary)) {
+            lines.add(summary.trim());
+        }
+
+        String detail = approvalDetail(frame, spec, pending);
+        if (Strings.isNotBlank(detail)) {
+            lines.add(detail);
+        }
+
+        return String.join("\n", lines);
+    }
+
+    /**
      * 待批参数的可读明细：用户据此授权，内容须完整。
      *
      * <p>按契约渲染，不区分技能：参数脱敏后不截断；平台注入的参数不展示；只能取自查询结果的引用参数
-     * 换成对象名称展示，找不到名称时不展示。</p>
+     * 换成对象名称展示，找不到名称时展示原值。对象数组（如订单明细）在普通参数之后逐行展示，
+     * 每行字段名取契约 {@code 字段名[].子字段} 的 label。</p>
      *
-     * @param frame   当前图执行帧，用于取技能契约与会话实体
-     * @param nodeId  挂起节点 id
-     * @param pending 待批准的写动作；为空时不生成明细
-     * @return 如「文章标题：G2rain 2.0，内容空间：官网」；没有可展示参数时为 {@code null}
+     * @param frame   当前图执行帧，用于取会话实体
+     * @param spec    待批工具规格；可空
+     * @param pending 待批准的写动作
+     * @return 如「标题：示例，明细：\n1. 名称：A，数量：2」；没有可展示参数时为 {@code null}
      */
-    private @Nullable String approvalDetail(GraphFrame frame, String nodeId, @Nullable PendingAction pending) {
-        if (Objects.isNull(pending)) {
-            return null;
-        }
-
-        ToolSpec spec = toolSpec(frame, nodeId, pending.toolName());
-        JsonNode masked = JSON.str2node(ArgsBrief.of(pending.args(), spec, Integer.MAX_VALUE));
-        if (Objects.isNull(masked) || !masked.isObject()) {
-            return null;
-        }
-
+    private @Nullable String approvalDetail(GraphFrame frame, @Nullable ToolSpec spec, PendingAction pending) {
+        ObjectNode masked = ArgsBrief.masked(pending.args(), spec);
         Map<String, String> names = entityNames(frame);
         List<String> parts = new ArrayList<>();
+        List<String> rows = new ArrayList<>();
         for (Map.Entry<String, JsonNode> field : masked.properties()) {
             ArgSpec arg = argOf(spec, field.getKey());
             if (isPlatform(arg)) {
@@ -139,17 +184,99 @@ public class DefaultEffectHandler implements EffectHandler {
             }
 
             JsonNode value = field.getValue();
-            String text = isReference(arg) ? referenceText(names, value)
-                : value.isValueNode() ? value.asString() : JSON.obj2str(value);
-            if (Objects.isNull(text)) {
+            String label = labelOf(arg, field.getKey());
+            if (isObjectArray(value)) {
+                rows.add(label + LABEL_SEPARATOR);
+                rows.addAll(rowLines(names, spec, field.getKey(), value));
                 continue;
             }
 
-            String label = Objects.nonNull(arg) && Strings.isNotBlank(arg.getLabel()) ? arg.getLabel() : field.getKey();
-            parts.add(label + "：" + text);
+            parts.add(label + LABEL_SEPARATOR + valueText(names, arg, value));
         }
 
-        return parts.isEmpty() ? null : String.join("，", parts);
+        List<String> lines = new ArrayList<>();
+        if (!parts.isEmpty()) {
+            lines.add(String.join(FIELD_SEPARATOR, parts));
+        }
+
+        lines.addAll(rows);
+        return lines.isEmpty() ? null : String.join("\n", lines);
+    }
+
+    /**
+     * 对象数组逐行渲染：每行「序号. 字段：值，字段：值」，平台注入的字段不展示。
+     *
+     * @param names 对象名称表，键形如 {@code type:id}
+     * @param spec  工具规格；可空
+     * @param param 数组参数名
+     * @param items 数组值，元素均为对象
+     * @return 各行文本
+     */
+    private static List<String> rowLines(Map<String, String> names, @Nullable ToolSpec spec, String param, JsonNode items) {
+        List<String> lines = new ArrayList<>();
+        String prefix = param + RuntimeUtils.WILDCARD_ARRAY_INDEX + PATH_SEPARATOR;
+        for (int i = 0, j = items.size(); i < j; i++) {
+            List<String> cells = new ArrayList<>();
+            for (Map.Entry<String, JsonNode> cell : items.get(i).properties()) {
+                ArgSpec arg = Objects.isNull(spec) ? null : spec.getArgs().get(prefix + cell.getKey());
+                if (isPlatform(arg)) {
+                    continue;
+                }
+
+                cells.add(labelOf(arg, cell.getKey()) + LABEL_SEPARATOR + valueText(names, arg, cell.getValue()));
+            }
+
+            lines.add((i + 1) + ROW_INDEX_SUFFIX + String.join(FIELD_SEPARATOR, cells));
+        }
+
+        return lines;
+    }
+
+    /**
+     * 参数值的展示文本：引用参数换成对象名称，标量取原文，其余序列化为 JSON。
+     *
+     * @param names 对象名称表
+     * @param arg   参数契约；可空
+     * @param value 参数值
+     * @return 展示文本
+     */
+    private static String valueText(Map<String, String> names, @Nullable ArgSpec arg, JsonNode value) {
+        if (isReference(arg)) {
+            return referenceText(names, entityType(arg), value);
+        }
+
+        return value.isValueNode() ? value.asString() : JSON.obj2str(value);
+    }
+
+    /**
+     * 参数展示名：契约 label，未配置时用参数名。
+     *
+     * @param arg  参数契约；可空
+     * @param name 参数名
+     * @return 展示名
+     */
+    private static String labelOf(@Nullable ArgSpec arg, String name) {
+        return Objects.nonNull(arg) && Strings.isNotBlank(arg.getLabel()) ? arg.getLabel() : name;
+    }
+
+    /**
+     * 是否为非空的对象数组（明细行）。
+     *
+     * @param value 参数值
+     * @return 每个元素都是对象时为 {@code true}
+     */
+    private static boolean isObjectArray(JsonNode value) {
+        if (!value.isArray() || value.isEmpty()) {
+            return false;
+        }
+
+        for (JsonNode item : value) {
+            if (!item.isObject()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -169,25 +296,50 @@ public class DefaultEffectHandler implements EffectHandler {
     }
 
     /**
-     * 引用参数的展示文本：标识换成对象名称，数组逐个换后以「、」连接。
+     * 引用参数的展示文本：标识换成对象名称，找不到名称时保留原值；数组逐个换后以「、」连接。
      *
      * @param names 对象名称表，键形如 {@code type:id}
+     * @param type  参数指向的实体类型；未声明为 {@code null}
      * @param value 参数值
-     * @return 名称文本；一个名称都找不到为 {@code null}
+     * @return 展示文本
      */
-    private static @Nullable String referenceText(Map<String, String> names, JsonNode value) {
+    private static String referenceText(Map<String, String> names, @Nullable String type, JsonNode value) {
         if (!value.isArray()) {
-            return entityName(names, value.asString());
+            return nameOrId(names, type, value.asString());
         }
 
-        List<String> found = new ArrayList<>();
-        value.forEach(item -> {
-            String name = entityName(names, item.asString());
-            if (Objects.nonNull(name)) {
-                found.add(name);
-            }
-        });
-        return found.isEmpty() ? null : String.join("、", found);
+        List<String> parts = new ArrayList<>();
+        value.forEach(item -> parts.add(nameOrId(names, type, item.asString())));
+        return String.join("、", parts);
+    }
+
+    /**
+     * 参数指向的实体类型：优先取参数契约的 {@code entity}，其次从 {@code from: prior.<type>.<attr>}
+     * 或 {@code prior.<type:id>.<attr>} 中解析。
+     *
+     * @param arg 参数契约；可空
+     * @return 实体类型；未声明为 {@code null}
+     */
+    private static @Nullable String entityType(@Nullable ArgSpec arg) {
+        if (Objects.isNull(arg)) {
+            return null;
+        }
+
+        String declared = arg.getEntity();
+        if (Strings.isNotBlank(declared)) {
+            return declared.trim();
+        }
+
+        ValueRef ref = arg.getValueRef();
+        if (Objects.isNull(ref) && ValueRef.isKnown(arg.getFrom())) {
+            ref = ValueRef.parse(Objects.requireNonNull(arg.getFrom()));
+        }
+        if (Objects.isNull(ref) || ref.bag() != ValueRef.Bag.PRIOR) {
+            return null;
+        }
+
+        String head = ref.path().split("\\.", 2)[0];
+        return head.split(KEY_SEPARATOR, 2)[0];
     }
 
     /**
@@ -211,7 +363,7 @@ public class DefaultEffectHandler implements EffectHandler {
         Map<String, String> names = new LinkedHashMap<>();
         // 只有 id 没有名称的实体（展示名回落为 id）不占位，留给本轮证据补上名称
         frame.turn().entities().forEach((key, entry) -> {
-            if (!key.endsWith(":" + entry.displayName())) {
+            if (!key.endsWith(KEY_SEPARATOR + entry.displayName())) {
                 names.put(key, entry.displayName());
             }
         });
@@ -229,7 +381,7 @@ public class DefaultEffectHandler implements EffectHandler {
                 .forEach(entities -> entities.forEach(entity -> {
                     String name = JSON.asString(entity.get("displayName"));
                     if (Strings.isNotBlank(name)) {
-                        names.putIfAbsent(JSON.asString(entity.get("type")) + ":" + JSON.asString(entity.get("id")), name);
+                        names.putIfAbsent(JSON.asString(entity.get("type")) + KEY_SEPARATOR + JSON.asString(entity.get("id")), name);
                     }
                 }))
         ));
@@ -237,19 +389,28 @@ public class DefaultEffectHandler implements EffectHandler {
     }
 
     /**
-     * 按标识找对象名称。
+     * 按标识找对象名称，找不到或无法确定时返回标识本身。
+     *
+     * <p>知道类型时按 {@code type:id} 精确查找；不知道类型时只有唯一一个名称匹配才采用，
+     * 不同类型的对象标识相同时宁可显示标识，也不显示可能张冠李戴的名称。</p>
      *
      * @param names 对象名称表，键形如 {@code type:id}
+     * @param type  实体类型；未知为 {@code null}
      * @param id    参数值
-     * @return 对象名称；找不到为 {@code null}
+     * @return 对象名称或标识
      */
-    private static @Nullable String entityName(Map<String, String> names, String id) {
-        String suffix = ":" + id;
-        return names.entrySet().stream()
+    private static String nameOrId(Map<String, String> names, @Nullable String type, String id) {
+        if (Strings.isNotBlank(type)) {
+            return Objects.requireNonNullElse(names.get(type + KEY_SEPARATOR + id), id);
+        }
+
+        String suffix = KEY_SEPARATOR + id;
+        List<String> found = names.entrySet().stream()
             .filter(entry -> entry.getKey().endsWith(suffix))
             .map(Map.Entry::getValue)
-            .findFirst()
-            .orElse(null);
+            .distinct()
+            .toList();
+        return found.size() == 1 ? found.getFirst() : id;
     }
 
     /**
@@ -269,9 +430,9 @@ public class DefaultEffectHandler implements EffectHandler {
      * @param frame    当前图执行帧
      * @param nodeId   挂起节点 id
      * @param toolName 待批准工具名；空白则不查
-     * @return 用于脱敏的工具规格；找不到时为 {@code null}，摘要只做长度裁剪
+     * @return 工具规格；找不到时为 {@code null}
      */
-    private static @Nullable ToolSpec toolSpec(GraphFrame frame, String nodeId, @Nullable String toolName) {
+    private static @Nullable ToolSpec toolSpec(GraphFrame frame, String nodeId, String toolName) {
         if (Strings.isBlank(toolName)) {
             return null;
         }

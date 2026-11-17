@@ -75,6 +75,9 @@
                         <ports>
                             <port>8080</port>
                         </ports>
+                        <extraClasspath>
+                            <path>/app/plugins/*</path>
+                        </extraClasspath>
                         <labels>
                             <org.opencontainers.image.source>https://github.com/g2rain/g2rain-agent-runtime</org.opencontainers.image.source>
                             <org.opencontainers.image.licenses>Apache-2.0</org.opencontainers.image.licenses>

@@ -8,6 +8,7 @@ import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -214,18 +215,18 @@ public final class RuntimeUtils {
             return null;
         }
 
+        // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
         return JSON.str2obj(JSON.obj2str(node), Object.class);
     }
 
     /**
      * 工具入参文本转 JSON 节点。
      *
-     * @param arguments 原始入参；空白或非法按 {@code {}}
+     * @param arguments 原始入参；空白按 {@code {}}
      * @return 非空 JSON 节点
      */
     public static JsonNode argsNode(@Nullable String arguments) {
-        JsonNode node = JSON.str2node(Strings.defaultIfBlank(arguments, "{}"));
-        return Objects.isNull(node) ? JSON.str2node("{}") : node;
+        return Strings.isBlank(arguments) ? JsonNodeFactory.instance.objectNode() : JSON.str2node(arguments);
     }
 
     /**
@@ -315,7 +316,7 @@ public final class RuntimeUtils {
      * 计算工具参数摘要，用于确认绑定与写操作去重。
      * <p>入参为 {@link JsonNode}；按键名排序后序列化，取 SHA-256 的前 16 位十六进制。参数为空时按空对象计算。</p>
      * <pre>{@code
-     * JsonNode args = JSON.str2node("{\"amount\":100,\"buyer\":\"百望\"}");
+     * JsonNode args = JSON.str2node("{\"amount\":100,\"buyer\":\"示例\"}");
      * String hash = RuntimeUtils.argsHash(args);
      * // 返回 16 位十六进制；对象字段顺序不同，结果相同
      * }</pre>
@@ -325,7 +326,7 @@ public final class RuntimeUtils {
      */
     public static String argsHash(@Nullable JsonNode args) {
         // 空入参按空对象摘要，保证确认绑定总能算出稳定 hash
-        JsonNode node = Objects.isNull(args) || args.isNull() ? JSON.str2node("{}") : args;
+        JsonNode node = Objects.isNull(args) || args.isNull() ? JsonNodeFactory.instance.objectNode() : args;
         String sorted = JSON.sort(JSON.obj2byte(node));
         return sha256Hex(sorted.getBytes(StandardCharsets.UTF_8)).substring(0, 16);
     }

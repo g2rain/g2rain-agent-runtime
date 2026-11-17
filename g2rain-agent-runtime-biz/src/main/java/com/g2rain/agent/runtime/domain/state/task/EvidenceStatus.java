@@ -1,5 +1,6 @@
 package com.g2rain.agent.runtime.domain.state.task;
 
+import org.jspecify.annotations.Nullable;
 
 /**
  * 工具证据的生命周期状态。
@@ -48,5 +49,19 @@ public enum EvidenceStatus {
     /**
      * 调用前登记的持久化结果不确定；在核查并收口前严禁调用工具。
      */
-    UNKNOWN_PRE_CALL
+    UNKNOWN_PRE_CALL;
+
+    /**
+     * 写证据是否仍占用幂等槽（预写去重的统一口径）：算成功的 SUCCESS，以及 STARTED / UNKNOWN / UNKNOWN_PRE_CALL。
+     *
+     * @param businessOk 业务是否成功；可空，只对 SUCCESS 有意义
+     * @return {@code true} 表示不得再发起同键写调用
+     */
+    public boolean holdsSlot(@Nullable Boolean businessOk) {
+        if (this == SUCCESS) {
+            return !Boolean.FALSE.equals(businessOk);
+        }
+
+        return this == STARTED || this == UNKNOWN || this == UNKNOWN_PRE_CALL;
+    }
 }

@@ -1,7 +1,9 @@
 package com.g2rain.agent.runtime.service.impl;
 
+import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.agent.runtime.engine.TurnPipeline;
+import com.g2rain.agent.runtime.engine.TurnRequest;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.event.EventPublisher;
 import com.g2rain.agent.runtime.event.StepEvents;
@@ -24,12 +26,15 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,15 +46,19 @@ class ConversationServiceImplChatTest {
     private ChatConversationService chatConversationService;
     private ChatMessageService chatMessageService;
     private ChatProgressService chatProgressService;
+    private DistributedLock distributedLock;
+    private RuntimeStateFacade runtimeStateFacade;
 
     @BeforeEach
     void setUp() {
         chatConversationService = mock(ChatConversationService.class);
         chatMessageService = mock(ChatMessageService.class);
         chatProgressService = mock(ChatProgressService.class);
-        service = new ConversationServiceImpl(mock(DistributedLock.class), mock(RuntimeStateFacade.class),
+        distributedLock = mock(DistributedLock.class);
+        runtimeStateFacade = mock(RuntimeStateFacade.class);
+        service = new ConversationServiceImpl(distributedLock, runtimeStateFacade,
             mock(TurnPipeline.class), mock(EventPublisher.class), mock(StepEvents.class),
-            chatConversationService, chatMessageService, chatProgressService);
+            chatConversationService, chatMessageService, chatProgressService, new RuntimeProperties());
     }
 
     @Test
@@ -74,6 +83,33 @@ class ConversationServiceImplChatTest {
             assertEquals(RuntimeErrorCode.CONVERSATION_FORBIDDEN.code(), ex.getErrorCode());
         });
         verify(chatMessageService, never()).selectList(any());
+    }
+
+    @Test
+    void send_withTooLongInput_shouldBeRejectedBeforeLocking() {
+        TurnRequest request = new TurnRequest();
+        request.setChannel("web");
+        request.setUserInput("字".repeat(new RuntimeProperties().getState().getUserInputMaxChars() + 1));
+
+        runAs(77L, () -> {
+            BusinessException ex = assertThrows(BusinessException.class, () -> service.send(request));
+            assertEquals(SystemErrorCode.PARAM_EXCEEDS_SIZE.code(), ex.getErrorCode());
+        });
+        verify(chatConversationService, never()).selectSummaryList(any());
+    }
+
+    @Test
+    void send_withUnknownConversationId_shouldBeForbiddenWithoutCreating() {
+        when(chatConversationService.selectSummaryList(any())).thenReturn(List.of());
+        TurnRequest request = new TurnRequest();
+        request.setChannel("web");
+        request.setConversationId("c-unknown");
+
+        runAs(77L, () -> {
+            BusinessException ex = assertThrows(BusinessException.class, () -> service.send(request));
+            assertEquals(RuntimeErrorCode.CONVERSATION_FORBIDDEN.code(), ex.getErrorCode());
+        });
+        verify(chatConversationService, never()).save(any());
     }
 
     @Test
@@ -131,10 +167,13 @@ class ConversationServiceImplChatTest {
         ChatConversationVo own = new ChatConversationVo();
         own.setId(9L);
         when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(own));
+        when(distributedLock.waitLockWithWatchdog(anyString(), anyBoolean(), any()))
+            .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(2).get());
 
         runAs(77L, () -> service.deleteConversation("c-own"));
 
         verify(chatConversationService).delete(9L);
+        verify(runtimeStateFacade).discard("10001", "c-own");
     }
 
     @Test

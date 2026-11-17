@@ -8,14 +8,14 @@ import com.g2rain.agent.runtime.domain.graph.TaskEdge;
 import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
@@ -29,8 +29,6 @@ import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
 import com.g2rain.agent.runtime.support.tool.BuiltinTools;
 import com.g2rain.common.exception.BusinessException;
-import com.g2rain.common.json.JsonCodec;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
@@ -56,11 +54,6 @@ import java.util.Set;
 @Component
 @RequiredArgsConstructor
 public class ControlBuiltinTools implements BuiltinTools {
-
-    /**
-     * JSON 编解码。
-     */
-    private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
      * 节点收口：finish 门槛、落产出与实体沉淀。
@@ -478,13 +471,7 @@ public class ControlBuiltinTools implements BuiltinTools {
      * @return 被拦下的调用（绑定后参数 + 摘要）
      */
     private static PendingAction gatedWrite(ToolExecutionContext ctx, String toolName) {
-        Object raw = ctx.scope().note(NodeNoteKey.GATED_WRITE);
-        PendingAction gated = switch (raw) {
-            case null -> null;
-            case PendingAction typed -> typed;
-            // 跨轮水合后便签为通用结构，按 JSON 还原
-            default -> JSON.str2obj(JSON.obj2str(raw), PendingAction.class);
-        };
+        PendingAction gated = PendingAction.from(ctx.scope().note(NodeNoteKey.GATED_WRITE));
 
         if (Objects.isNull(gated)) {
             throw new ToolRejectedException(RuntimeErrorCode.APPROVAL_NOT_GATED, ModelHint.NEXT_CALL_WRITE.text(), toolName);

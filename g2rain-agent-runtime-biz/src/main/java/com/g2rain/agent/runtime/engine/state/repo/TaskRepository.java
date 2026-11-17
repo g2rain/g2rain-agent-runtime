@@ -34,8 +34,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -108,6 +108,7 @@ public class TaskRepository {
             }
             metadata.setTraceId(vo.getTraceId());
             metadata.setSourceMessageId(vo.getSourceMessageId());
+            metadata.setSkillVersions(parseSkillVersions(vo.getSkillVersions()));
             return metadata;
         } catch (Exception e) {
             log.warn("[TaskRepository] loadMetadata failed taskId={}", taskId, e);
@@ -179,41 +180,24 @@ public class TaskRepository {
      *
      * @param conversationId 会话 id
      * @param limit          最多条数
-     * @return 回合摘要（已结束任务留在会话上的短纪要）；没有为空列表
+     * @return 回合摘要（已结束任务留在会话上的短纪要），时间正序；没有为空列表
      */
     public List<TaskRecord> loadRecords(String conversationId, int limit) {
-        TaskInstanceSelectDto query = new TaskInstanceSelectDto();
-        query.setConversationId(conversationId);
-        List<TaskInstanceVo> rows = taskInstanceService.selectList(query);
-        if (Collections.isEmpty(rows)) {
+        if (limit <= 0) {
             return List.of();
         }
+
         List<TaskRecord> records = new ArrayList<>();
-        // 只取有纪要的任务，按结束时间倒序（未结束排后）截取，再反序列化
-        rows.stream()
+        // 只取有纪要的任务；查询按最近结束在前截取，返回与 Redis 读回一致的时间正序
+        taskInstanceService.selectLatest(conversationId, limit).stream()
             .filter(vo -> Strings.isNotBlank(vo.getTaskRecord()))
-            .sorted((a, b) -> {
-                LocalDateTime fa = a.getFinishedTime();
-                LocalDateTime fb = b.getFinishedTime();
-                if (Objects.isNull(fa) && Objects.isNull(fb)) {
-                    return 0;
-                }
-                if (Objects.isNull(fa)) {
-                    return 1;
-                }
-                if (Objects.isNull(fb)) {
-                    return -1;
-                }
-                return fb.compareTo(fa);
-            })
-            .limit(Math.max(0, limit))
             .forEach(vo -> {
                 TaskRecord record = RepoSupport.JSON.str2obj(vo.getTaskRecord(), TaskRecord.class);
                 if (Objects.nonNull(record)) {
                     records.add(record);
                 }
             });
-        return records;
+        return records.reversed();
     }
 
     /**
@@ -248,6 +232,9 @@ public class TaskRepository {
         dto.setShared(RepoSupport.toJson(shared));
         dto.setPrior(Objects.isNull(prior) ? null : RepoSupport.toJson(prior));
         dto.setTaskRecord(RepoSupport.toJson(record));
+        // 空 map 写 null，与列默认一致
+        dto.setSkillVersions(Collections.isEmpty(metadata.getSkillVersions())
+            ? null : RepoSupport.toJson(metadata.getSkillVersions()));
         if (Objects.nonNull(metadata.getSuspendedAt())) {
             dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
         }
@@ -265,16 +252,15 @@ public class TaskRepository {
     }
 
     /**
-     * 挂起：upsert {@code task_checkpoint}，并同步任务状态 SUSPENDED。
+     * 挂起：upsert {@code task_checkpoint}。
+     *
+     * <p>任务行（状态 SUSPENDED、挂起时间）已由 {@link #save} 按栅栏版本写入，这里不再整行重写。</p>
      *
      * @param taskId     任务 id
      * @param checkpoint 挂起检查点（问题、允许动作、待确认字段等）
-     * @param metadata   任务元数据；可空。非空时带当前节点并同步状态
-     * @return 本次新建了任务行
      */
-    public boolean suspend(String taskId, TaskCheckpoint checkpoint, @Nullable TaskMetadata metadata) {
+    public void suspend(String taskId, TaskCheckpoint checkpoint) {
         try {
-            // checkpoint 行 upsert，并把任务状态同步为 SUSPENDED
             TaskCheckpointVo existing = findCheckpoint(taskId);
             TaskCheckpointDto dto = Objects.nonNull(existing)
                 ? TaskCheckpointConverter.INSTANCE.vo2dto(existing)
@@ -294,8 +280,6 @@ public class TaskRepository {
             dto.setSuggestions(RepoSupport.toJson(checkpoint.getSuggestions()));
             dto.setPendingAction(RepoSupport.toJson(checkpoint.getPendingAction()));
             taskCheckpointService.save(dto);
-
-            return syncSuspended(taskId, metadata);
         } catch (Exception e) {
             log.warn("[TaskRepository] suspend failed taskId={}", taskId, e);
             throw RepoSupport.unavailable(e);
@@ -336,42 +320,6 @@ public class TaskRepository {
             log.warn("[TaskRepository] consumeCheckpoint failed taskId={} action={}", taskId, action, e);
             throw RepoSupport.unavailable(e);
         }
-    }
-
-    /**
-     * 把任务挂起状态同步到 {@code task_instance}。
-     *
-     * @param taskId   任务 id
-     * @param metadata 可选元数据补丁；可空
-     * @return 本次新建了任务行
-     */
-    private boolean syncSuspended(String taskId, @Nullable TaskMetadata metadata) {
-        TaskInstanceVo existing = findTask(taskId);
-        var dto = Objects.nonNull(existing) ? TaskInstanceConverter.INSTANCE.vo2dto(existing) : new TaskInstanceDto();
-
-        if (Objects.nonNull(metadata)) {
-            dto.setConversationId(metadata.getConversationId());
-            dto.setAgentId(metadata.getAgentId());
-            dto.setGoalSummary(metadata.getGoalSummary());
-            dto.setRequest(metadata.getRequest());
-            dto.setCurrentNodeId(metadata.getCurrentNodeId());
-            dto.setFinalMessage(RuntimeUtils.clip(metadata.getFinalMessage(), TASK_FINAL_MESSAGE_MAX));
-            if (Objects.isNull(existing)) {
-                applyOrigin(dto, metadata);
-                dto.setStateVersion(0L);
-            }
-            if (Objects.nonNull(metadata.getSuspendedAt())) {
-                dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
-            }
-        } else if (Objects.isNull(existing)) {
-            dto.setStateVersion(0L);
-        }
-
-        dto.setTaskId(taskId);
-        dto.setStatus(TaskStatus.SUSPENDED.name());
-        dto.setFinishedTime(null);
-        taskInstanceService.save(dto);
-        return Objects.isNull(existing);
     }
 
     /**
@@ -447,6 +395,25 @@ public class TaskRepository {
         }
 
         return RepoSupport.JSON.str2obj(json, STRING_LIST);
+    }
+
+    /**
+     * 解析 {@code skill_versions} JSON 为技能键 → pin。
+     *
+     * @param json JSON 对象文本；可空
+     * @return 可写 map；空白为空 map
+     */
+    private static Map<String, String> parseSkillVersions(@Nullable String json) {
+        if (Strings.isBlank(json)) {
+            return new LinkedHashMap<>();
+        }
+
+        Map<String, String> parsed = RepoSupport.JSON.str2obj(json, RepoSupport.STRING_MAP);
+        if (parsed.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+
+        return new LinkedHashMap<>(parsed);
     }
 
     /**

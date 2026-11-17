@@ -120,6 +120,7 @@ mvn -pl g2rain-agent-runtime-startup -am spring-boot:run "-Dspring-boot.run.prof
 - 稳定版使用 `1.0.0` 这类版本标签，并同时发布 `sha-<完整提交 SHA>` 可追溯标签；不会更新 `latest`。
 - 包公开后可拉取：`docker pull ghcr.io/g2rain/g2rain-agent-runtime:1.0.0`。
 - 仅推送精确格式的 `v<major>.<minor>.<patch>` Git tag 才会触发发布；tag 提交必须在 `main` 历史中，并含同名发布说明和匹配的 Maven 版本。普通分支、Pull Request 和手动触发不会发布。
+- 使用插件时，以本镜像为基础再做一层镜像，把插件 jar 放入 `/app/plugins/`，或部署时挂载该目录（开源镜像中该目录为空，已加入 Jib `extraClasspath`）。
 
 完整的 GHCR 权限、首次公开、发布顺序、配置与部署说明见[构建与部署](docs/operations/deployment.md#ghcr-发布)。镜像发布不代表在线演示可用，也不代表已在目标环境完成部署验证。
 

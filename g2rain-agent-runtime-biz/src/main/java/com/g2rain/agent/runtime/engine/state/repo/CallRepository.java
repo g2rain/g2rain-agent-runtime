@@ -4,7 +4,7 @@ import com.g2rain.agent.runtime.converter.ToolCallRecordConverter;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.dto.ToolCallRecordDto;
 import com.g2rain.agent.runtime.dto.ToolCallRecordSelectDto;
 import com.g2rain.agent.runtime.service.ToolCallRecordService;
@@ -20,8 +20,10 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 工具调用仓储：{@code tool_call_record} 的读写，证据头的冷存储。
@@ -129,7 +131,7 @@ public class CallRepository {
             }
             for (ToolCallRecordVo vo : list) {
                 EvidenceHead head = toHead(vo);
-                if (Objects.nonNull(head) && isLiveWrite(head)) {
+                if (Objects.nonNull(head) && head.status().holdsSlot(head.businessOk())) {
                     return Optional.of(head);
                 }
             }
@@ -194,6 +196,49 @@ public class CallRepository {
         if (Objects.isNull(existing)) {
             return;
         }
+
+        toolCallRecordService.save(merge(existing, head, response, durationMs));
+    }
+
+    /**
+     * 轮末把证据头状态追到调用记录：一次查出本任务的调用行，只写有变化的；没有记录的证据跳过。
+     *
+     * @param taskId 任务 id
+     * @param heads  证据头
+     */
+    public void syncHeads(String taskId, Collection<EvidenceHead> heads) {
+        if (heads.isEmpty()) {
+            return;
+        }
+
+        ToolCallRecordSelectDto query = new ToolCallRecordSelectDto();
+        query.setTaskId(taskId);
+        Map<String, ToolCallRecordVo> byCallId = toolCallRecordService.selectList(query).stream()
+            .collect(Collectors.toMap(ToolCallRecordVo::getCallId, vo -> vo, (a, _) -> a));
+        heads.forEach(head -> {
+            ToolCallRecordVo existing = byCallId.get(head.evidenceId());
+            if (Objects.isNull(existing)) {
+                return;
+            }
+
+            ToolCallRecordDto merged = merge(existing, head, existing.getResponse(), null);
+            if (!merged.equals(ToolCallRecordConverter.INSTANCE.vo2dto(existing))) {
+                toolCallRecordService.save(merged);
+            }
+        });
+    }
+
+    /**
+     * 在已有调用行上叠加证据头的状态与业务语义字段。
+     *
+     * @param existing   已有调用行
+     * @param head       证据头
+     * @param response   响应 JSON；可空
+     * @param durationMs 耗时毫秒；为空时保留原值
+     * @return 待保存的调用行
+     */
+    private static ToolCallRecordDto merge(ToolCallRecordVo existing, EvidenceHead head, @Nullable String response,
+                                           @Nullable Long durationMs) {
         ToolCallRecordDto dto = ToolCallRecordConverter.INSTANCE.vo2dto(existing);
         dto.setCallStatus(head.status().name());
         dto.setResponse(response);
@@ -211,22 +256,7 @@ public class CallRepository {
         if (Objects.nonNull(durationMs)) {
             dto.setDurationMs(durationMs);
         }
-        toolCallRecordService.save(dto);
-    }
-
-    /**
-     * 轮末把证据头状态追到调用记录；没有记录的证据跳过。
-     *
-     * @param heads 证据头
-     */
-    public void syncHeads(Collection<EvidenceHead> heads) {
-        heads.forEach(head -> {
-            ToolCallRecordVo existing = find(head.evidenceId());
-            if (Objects.isNull(existing)) {
-                return;
-            }
-            update(head, existing.getResponse());
-        });
+        return dto;
     }
 
     /**
@@ -234,33 +264,20 @@ public class CallRepository {
      *
      * @param vo 表行
      * @return 证据头；缺 callId 为 {@code null}
+     * @throws IllegalArgumentException 状态、副作用或失败类别不是已知枚举值时抛出
      */
     private @Nullable EvidenceHead toHead(ToolCallRecordVo vo) {
         if (Strings.isBlank(vo.getCallId())) {
             return null;
         }
-        EvidenceStatus status;
-        try {
-            status = Strings.isBlank(vo.getCallStatus()) ? EvidenceStatus.STARTED : EvidenceStatus.valueOf(vo.getCallStatus());
-        } catch (IllegalArgumentException e) {
-            status = EvidenceStatus.STARTED;
-        }
-        SideEffect sideEffect = SideEffect.NONE;
-        if (Strings.isNotBlank(vo.getSideEffect())) {
-            try {
-                sideEffect = SideEffect.valueOf(vo.getSideEffect());
-            } catch (IllegalArgumentException ignored) {
 
-            }
-        }
-        FailureKind kind = FailureKind.NONE;
-        if (Strings.isNotBlank(vo.getFailureKind())) {
-            try {
-                kind = FailureKind.valueOf(vo.getFailureKind());
-            } catch (IllegalArgumentException ignored) {
-
-            }
-        }
+        // 空值按正常缺省；不认识的值直接抛出（调用方转为状态不可用），不静默降级：写记录读成「无副作用」会脱离写保护
+        EvidenceStatus status = Strings.isBlank(vo.getCallStatus())
+            ? EvidenceStatus.STARTED : EvidenceStatus.valueOf(vo.getCallStatus());
+        SideEffect sideEffect = Strings.isBlank(vo.getSideEffect())
+            ? SideEffect.NONE : SideEffect.valueOf(vo.getSideEffect());
+        FailureKind kind = Strings.isBlank(vo.getFailureKind())
+            ? FailureKind.NONE : FailureKind.valueOf(vo.getFailureKind());
         int round = Objects.isNull(vo.getRound()) ? 0 : vo.getRound();
         return new EvidenceHead(vo.getCallId(), vo.getToolName(), sideEffect, status, flag(vo.getBusinessOk()),
             flag(vo.getEmptyResult()), null, kind, vo.getIdempotencyKey(), vo.getArgsHash(), null,
@@ -279,21 +296,5 @@ public class CallRepository {
             return null;
         }
         return value != 0;
-    }
-
-    /**
-     * 写证据是否仍占用幂等槽。
-     *
-     * @param head 证据头
-     * @return STARTED / UNKNOWN / 算成功的 SUCCESS 为 {@code true}
-     */
-    private static boolean isLiveWrite(EvidenceHead head) {
-        EvidenceStatus status = head.status();
-        if (status == EvidenceStatus.SUCCESS) {
-            return !Boolean.FALSE.equals(head.businessOk());
-        }
-        return status == EvidenceStatus.STARTED
-            || status == EvidenceStatus.UNKNOWN
-            || status == EvidenceStatus.UNKNOWN_PRE_CALL;
     }
 }

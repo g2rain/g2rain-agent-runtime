@@ -207,15 +207,23 @@ public class TurnSessionHydrate {
         TaskCheckpoint checkpoint = null;
         Map<String, Sourced<?>> shared = new LinkedHashMap<>();
         Prior prior = null;
-        if (Strings.isNotBlank(fence.activeTaskId())) {
-            String activeTaskId = fence.activeTaskId();
+        String activeTaskId = fence.activeTaskId();
+        if (Strings.isNotBlank(activeTaskId)) {
             task = HashCodec.toObject(store.hGetAll(keys.metadata(activeTaskId)), TaskMetadata.class);
             if (Objects.isNull(task)) {
                 task = tasks.loadMetadata(activeTaskId);
             } else if (Strings.isBlank(task.getTaskId())) {
                 task.setTaskId(activeTaskId);
             }
-            if (Objects.nonNull(task) && Strings.isBlank(task.getConversationId())) {
+        }
+        // 活动任务标识悬空（Redis 与库都取不到元数据）：清掉标识，本轮按无活动任务处理，轮末随栅栏落盘
+        if (Strings.isNotBlank(activeTaskId) && Objects.isNull(task)) {
+            log.warn("active task missing, cleared conversationId={} taskId={}", conversationId, activeTaskId);
+            fence = new ConversationFence(conversationId, fence.userId(), null, fence.version(), fence.lastTraceId(),
+                fence.updatedAt());
+        }
+        if (Strings.isNotBlank(activeTaskId) && Objects.nonNull(task)) {
+            if (Strings.isBlank(task.getConversationId())) {
                 task.setConversationId(conversationId);
             }
             graph = HashCodec.graphOf(store.hGetAll(keys.graph(activeTaskId)));

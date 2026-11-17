@@ -14,6 +14,7 @@ import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
+import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +49,11 @@ public class ReactProjectionFactory {
      * 序列化投影值与反序列化委托结果。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 委派结果块标签；组装方据此确认块已送达后再清一次性便签。
+     */
+    public static final String DELEGATE_RESULT_TAG = "delegate_result";
 
     /**
      * 当前节点的执行提示。
@@ -85,6 +92,8 @@ public class ReactProjectionFactory {
         add(blocks, "node_goal", nodeGoal(request));
         add(blocks, "task_plan", taskPlan(request));
         add(blocks, "checkpoint", pendingCheckpoint(request));
+        // 委派结果是一次性便签且体积很小，排在前面，提示词超长从队尾丢块时不会先被丢
+        add(blocks, DELEGATE_RESULT_TAG, delegateResult(request));
         add(blocks, "input_schema", inputSchema(request));
         add(blocks, "tool_catalog", ToolCatalogProjector.of(request.toolCallbacks(), request.contract()));
         add(blocks, "evidence_digest", evidenceDigest(request));
@@ -93,7 +102,6 @@ public class ReactProjectionFactory {
         add(blocks, "dependency_outputs", dependencyOutputs(request));
         add(blocks, "shared", shared(request));
         add(blocks, "prior", prior(request));
-        add(blocks, "delegate_result", delegateResult(request));
         return blocks;
     }
 
@@ -191,7 +199,7 @@ public class ReactProjectionFactory {
             spec.isRequired(),
             Strings.blankToNull(spec.getFrom()),
             Strings.blankToNull(spec.getProvider()),
-            Objects.isNull(bound) ? null : clip(bound.value()),
+            Objects.isNull(bound) ? null : visible(bound),
             Objects.isNull(bound) ? null : bound.source().type(),
             missing ? Boolean.TRUE : null
         );
@@ -431,9 +439,8 @@ public class ReactProjectionFactory {
             return null;
         }
 
+        // 投影不清便签：由组装方确认块进入最终提示词后再清
         DelegateResult result = typedDelegateResult(raw);
-        // 一次性便签：投影后清掉，避免下一轮重复展示
-        request.node().note(NodeNoteKey.DELEGATE_RESULT, null);
         if (Objects.isNull(result)) {
             return null;
         }
@@ -458,6 +465,7 @@ public class ReactProjectionFactory {
         }
 
         try {
+            // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
             return JSON.str2obj(JSON.obj2str(raw), DelegateResult.class);
         } catch (RuntimeException ex) {
             log.warn("[Projection] delegateResult convert failed type={}", raw.getClass().getName(), ex);
@@ -488,11 +496,21 @@ public class ReactProjectionFactory {
         return values.entrySet().stream()
             .map(entry -> new ReactProjection.SourcedEntry(
                 entry.getKey(),
-                clip(entry.getValue().value()),
+                visible(entry.getValue()),
                 entry.getValue().source().type(),
                 Strings.blankToNull(entry.getValue().source().ref())
             ))
             .toList();
+    }
+
+    /**
+     * 带源值给模型看的内容：敏感值显示为 {@link ArgsBrief#MASK}，其余按长度上限收成 JSON 节点。
+     *
+     * @param sourced 带源值
+     * @return JSON 节点
+     */
+    private JsonNode visible(Sourced<?> sourced) {
+        return sourced.sensitive() ? JsonNodeFactory.instance.stringNode(ArgsBrief.MASK) : clip(sourced.value());
     }
 
     /**
@@ -515,7 +533,7 @@ public class ReactProjectionFactory {
     private JsonNode clip(@Nullable Object value, int max) {
         JsonNode node = JSON.obj2node(value);
         if (Objects.isNull(node) || node.isNull()) {
-            return JSON.str2node("{}");
+            return JsonNodeFactory.instance.objectNode();
         }
 
         String raw = JSON.obj2str(node);

@@ -36,10 +36,13 @@ public enum ModelHint {
     USER_ANSWERED_PLAIN("model.user.answered_plain", "用户回答了追问「{question}」：{answer}"),
 
     WRITE_NEED_APPROVAL("model.write.need_approval", "该写操作须经用户确认"),
+    WRITE_GATED_PENDING("model.write.gated_pending", "已有待确认的写操作 [{tool}]，一次只能申请确认一个写操作"),
     WRITE_REUSED("model.write.reused", "已复用历史写证据"),
     WRITE_OUT_OF_SCOPE("model.write.out_of_scope", "[{tool}] 是步骤「{node}」的完成目标，由该步骤执行"),
 
     FINGERPRINT_TRIP("model.fingerprint.trip", "已连续用相同参数调用 [{tool}]，本节点已终止"),
+
+    GUARD_UNAVAILABLE("model.guard.unavailable", "调用前检查暂时不可用，本次调用未执行"),
 
     CATALOG_DENIED("model.catalog.denied", "工具 [{tool}] 不在本节点可用工具中"),
 
@@ -106,7 +109,12 @@ public enum ModelHint {
     PHASE_OUTPUTS_MISSING("model.phase.outputs_missing", "必填 outputs 尚未写入：{keys}"),
     PHASE_TARGET_PENDING("model.phase.target_pending", "完成目标 {tool} 尚未成功调用"),
     PHASE_TARGET_DONE("model.phase.target_done", "完成目标 {tool} 已成功调用"),
-    PHASE_WRITE_DONE("model.phase.write_done", "已完成写操作 {tool}；用户诉求如还有未完成的写操作就继续，否则调用 builtin_node_finish");
+    PHASE_WRITE_DONE("model.phase.write_done", "已完成写操作 {tool}；用户诉求如还有未完成的写操作就继续，否则调用 builtin_node_finish"),
+    OBSERVATION_CLIPPED("model.observation.clipped", "（结果过长，已截短部分长文本或省略部分内容；不要依据被省略的内容作答）"),
+    TOOL_TIMED_OUT("model.tool.timed_out", "工具调用超时"),
+    TOOL_UNREACHABLE("model.tool.unreachable", "工具服务连接失败"),
+    TOOL_IO_BROKEN("model.tool.io_broken", "工具调用时通信中断"),
+    TOOL_FAILED("model.tool.failed", "工具调用出错");
 
     private final String code;
     private final String zhCn;

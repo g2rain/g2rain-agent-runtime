@@ -33,6 +33,15 @@ public interface TaskInstanceService {
     PageData<TaskInstanceVo> selectPage(PageSelectListDto<TaskInstanceSelectDto> selectDto);
 
     /**
+     * 查询会话最近结束的若干个任务，不统计总数；未结束的任务结束时间为空，排在最后
+     *
+     * @param conversationId 会话 id
+     * @param limit          最多条数
+     * @return VO 对象列表，按结束时间倒序（最近结束的在前）
+     */
+    List<TaskInstanceVo> selectLatest(String conversationId, int limit);
+
+    /**
      * 控制台摘要列表（不含大字段）
      *
      * @param selectDto 查询条件

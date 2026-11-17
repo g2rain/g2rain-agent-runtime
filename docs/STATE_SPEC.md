@@ -75,10 +75,10 @@
 | Key | 类型 | 内容 | TTL |
 |---|---|---|---|
 | `g2rain:rt:{c}:state` | Hash | 会话栅栏：`userId`、`activeTaskId`、`version`、`lastTraceId`、`updatedAt` | `state.conversation-ttl`（默认 7 天），每轮续期 |
-| `g2rain:rt:{c}:dialogue` | List | 对话消息 JSON，表头为最新；保留最近 `state.dialogue-max` 条 | 不设置 |
-| `g2rain:rt:{c}:records` | List | 已结束任务的 `TaskRecord` JSON；保留最近 `state.records-max` 条 | 不设置 |
-| `g2rain:rt:{c}:entities` | Hash | 实体索引：field 为 `type:id`，value 为 `EntityEntry` JSON | 不设置 |
-| `g2rain:rt:{c}:shared` | Hash | 会话级共享值：field 为键名，value 为 `Sourced` JSON | 会话 TTL，每轮续期 |
+| `g2rain:rt:{c}:dialogue` | List | 对话消息 JSON，表头为最新；保留最近 `state.dialogue-max` 条 | 会话 TTL，每轮 flush 设置 |
+| `g2rain:rt:{c}:records` | List | 已结束任务的 `TaskRecord` JSON；保留最近 `state.records-max` 条；读回为时间正序 | 会话 TTL，每轮 flush 设置 |
+| `g2rain:rt:{c}:entities` | Hash | 实体索引：field 为 `type:id`，value 为 `EntityEntry` JSON | 会话 TTL，每轮 flush 设置 |
+| `g2rain:rt:{c}:shared` | Hash | 会话级共享值：field 为键名，value 为 `Sourced` JSON | 会话 TTL，每轮续期并在 flush 设置 |
 
 **任务层**（任务进行中存在，终态落库成功后删除）
 
@@ -234,7 +234,7 @@
 | `goal` | String? | 任务目标摘要 |
 | `status` | TaskStatus | 终态 |
 | `summary` | String? | 收口文案 |
-| `entities` | Map<String, EntityEntry> | 结束时的实体索引 |
+| `entityKeys` | List<String> | 本任务涉及的实体键（实体上记的最近任务为本任务） |
 | `artifacts` | List | 产物引用（当前为空） |
 | `closedAt` | long | 结束时间 |
 
@@ -287,6 +287,7 @@
 | `request` | String? | 开任务时的用户原文；节点提示词的 `userGoal` 取它，摘要会丢细节 |
 | `finalMessage` | String? | 终态文案 |
 | `suspendedAt` | Long? | 挂起时间 |
+| `skillVersions` | Map（技能键 → pin） | 开任务时锁定的动作语义版本；后续轮次装载原样传入，已有键不覆盖；落库列 `task_instance.skill_versions`，空 map 存 `null` |
 
 | TaskStatus | 含义 | 是否终态 |
 |---|---|---|
@@ -304,8 +305,9 @@
 | `title` | String? | 节点标题，用作过程提示 |
 | `objective` | String? | 节点目标 |
 | `skillKey` | String? | 执行的技能 |
-| `target` | String? | 完成目标：要完成的写工具；取值顺序为规划输出 → 契约 `target` → 首个实际写调用（该工具已是其他未结束节点的目标时不认领），见契约规范第 10 节 |
-| `targetClaimed` | boolean | 完成目标是否由首个写调用自动记录；为 true 时 GoalGate 不直接采用节点结论，交模型核验 |
+| `target` | String? | 完成目标：要完成的写工具；取值顺序为规划输出 → 契约 `target` → 实际发起的写调用（该工具已是其他未结束节点的目标时不认领；自动认领的目标在写成功前可被下一次写调用替换），见契约规范第 10 节 |
+| `targetClaimed` | boolean | 完成目标是否由写调用自动记录；为 true 时 GoalGate 不直接采用节点结论，交模型核验 |
+| `providerInserted` | boolean | 是否由技能契约 `inputs.provider` 自动补入的前置节点；只有这类节点在共享产出已存在时 `SKIPPED` |
 | `result` | String? | 节点结论：完成时 finish 的 output，GoalGate 据此核验目标并合成答复 |
 | `status` | NodeStatus | 节点状态，默认 `PENDING` |
 | `dependsOn` | List<String> | 依赖的节点 |
@@ -601,7 +603,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|---|
 | FOLLOW_UP | REPLY | 唤醒节点；用户回答作为该节点的历史消息交给模型 |
 | APPROVAL | CONFIRM | 校验参数摘要后执行待批写操作，再继续该节点 |
-| APPROVAL | REJECT | 不执行待批写操作；节点 `CANCELLED`，任务 `CANCELED`，回复"已取消，未执行：{审批摘要}。如需换个做法，直接告诉我。" |
+| APPROVAL | REJECT | 不执行待批写操作；节点 `CANCELLED`，任务 `CANCELED`，回复"已取消，未执行：{工具展示名}。如需换个做法，直接告诉我。"；之前已完成写步骤时先列"已完成：{步骤}。" |
 | VERIFY | CONFIRM | 不确定的证据改为 `SUCCESS`，不重复执行 |
 | VERIFY | REJECT | 不确定的证据改为 `FAILED`，模型可以重新发起 |
 | 任意 | CANCEL | 节点 `CANCELLED`，任务 `CANCELED` |
@@ -682,7 +684,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|
 | 关闭 | 任务到终态时只修改内存中的状态；`activeTaskId` 在 persist 成功后才清空 |
 | 记录 | persist 成功后生成 `TaskRecord`，写入 `task_instance.task_record`，并追加到 Redis `records` |
-| 实体 | persist 时从本轮成功证据的 `entities` 和已完成节点的 `entityOutputs` 合并实体索引；超过 `state.entities-max` 时淘汰最早加入的 |
+| 实体 | persist 时从本轮成功证据的 `entities` 和已完成节点的 `entityOutputs` 合并实体索引；超过 `state.entities-max` 时淘汰最久未提及的（按 `seenAt`），并从 Redis 删除 |
 | 换任务 | 开新任务时，旧任务打包为 `ClosedTask`，随本轮 persist 一起落库，再删除旧任务组 |
 
 ### 5.9 前情
@@ -691,7 +693,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|
 | 生成时机 | 开新任务时 |
 | tasks | 最近 `state.prior-tasks-max` 条任务记录 |
-| entities | 最多 `state.prior-entities-max` 个实体 |
+| entities | 最近提及的 `state.prior-entities-max` 个实体（按 `seenAt`） |
 | 使用方 | 节点输入绑定（`prior.<type>[.<attr>]`）、参数绑定、节点提示词、规划提示词 |
 
 ### 5.10 共享值与大对象
@@ -714,7 +716,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|---|
 | 工具报文 | `state.payload-inline-max-bytes` | Redis 保存完整报文；MySQL 另存 `task_node_payload`（`ARTIFACT`），证据头记录 `payloadId` |
 | 节点空间单个字段 | `state.space-field-max-bytes` | MySQL 另存 `task_node_payload`（`OUTPUT`），Redis 中存放溢出占位 `{kind: "SPACE_SPILL", payloadId}` |
-| 用户消息 | `state.message-max-bytes` | 截断 |
+| 用户消息 | `state.user-input-max-chars` | 超出时拒绝本轮请求（`PARAM_EXCEEDS_SIZE`），不截断 |
 
 报文读取顺序：本轮内存 → Redis → `tool_call_record.response` → `task_node_payload`。
 
@@ -737,7 +739,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 用户回应断点 | `SUSPENDED` → `READY` |
 | 前置节点到达终态 | `WAITING_DELEGATE` → `READY` |
 | 中断规整 | `RUNNING` → `READY` |
-| 所需共享值已存在 | → `SKIPPED` |
+| provider 补入的节点，所需共享值已存在 | → `SKIPPED` |
 | 检测到不确定写操作且需用户核实 | → `SUSPENDED` |
 | 本轮异常 | 当前节点和运行中的节点 → `FAILED` |
 
@@ -761,7 +763,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | `state.payload-done-ttl` | 1h | 节点完成后报文的 TTL；0 表示立即删除 |
 | `state.state-size-log-enabled` | true | 是否记录状态大小日志 |
 | `state.space-field-max-bytes` | 65536 | 节点空间字段溢出阈值 |
-| `state.message-max-bytes` | 4096 | 用户消息截断长度 |
+| `state.user-input-max-chars` | 20000 | 用户单条输入字符上限，超出拒绝 |
 | `state.dialogue-max` | 60 | 对话窗口条数 |
 | `state.records-max` | 20 | 任务记录条数 |
 | `state.entities-max` | 200 | 实体索引上限 |
@@ -808,7 +810,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 
 | # | 约束 |
 |---|---|
-| 1 | Redis 中 `dialogue`、`records`、`entities` 三个 key 不设置 TTL；`entities` 没有 MySQL 回灌 |
+| 1 | `entities` 没有 MySQL 回灌 |
 | 2 | 任务组回灌按 key 逐个进行：Redis 中缺哪个 key 就从 MySQL 读哪个，不做整组替换 |
 | 3 | 每次 flush 都整体重写本轮涉及的状态，而不是只写变化的字段 |
 | 4 | MySQL 各表没有业务唯一索引，写入采用"先查后写" |

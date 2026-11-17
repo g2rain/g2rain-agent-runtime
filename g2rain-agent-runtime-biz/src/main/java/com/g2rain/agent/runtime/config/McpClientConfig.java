@@ -72,16 +72,9 @@ public class McpClientConfig {
             .addHttpRequestCustomizer(requestCustomizer(originResolver, tracer, propagator))
             .build();
 
-        // readTimeoutMs=0 → 近似无限等 MCP 返回；否则按毫秒封顶
-        Duration requestTimeout;
-        if (mcp.getReadTimeoutMs() == 0) {
-            requestTimeout = Duration.ofDays(3650);
-        } else {
-            requestTimeout = Duration.ofMillis(mcp.getReadTimeoutMs());
-        }
-
         return McpClient.sync(transport)
-            .requestTimeout(requestTimeout)
+            // 等工具返回的兜底上限；超时由 Invoker 归为工具超时
+            .requestTimeout(Duration.ofMillis(mcp.getReadTimeoutMs()))
             // clientInfo 标明本 Runtime 身份
             .clientInfo(McpSchema.Implementation.builder(applicationName, "1.0.0").build())
             // 每次调用前把当前线程主体塞进传输上下文，供请求定制读头

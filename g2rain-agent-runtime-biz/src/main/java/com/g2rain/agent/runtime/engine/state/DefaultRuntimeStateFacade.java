@@ -149,7 +149,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             return turn;
         }
 
-        DialogueMessage user = new DialogueMessage(DialogueRole.USER, flushPlan.clipMessage(request.getUserInput()));
+        DialogueMessage user = new DialogueMessage(DialogueRole.USER, request.getUserInput());
         user.setMessageId(RuntimeUtils.uuid());
         user.setTraceId(turn.traceId());
         user.setType(MessageType.USER_TEXT);
@@ -209,7 +209,8 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             if (Objects.isNull(graphNode) || !Objects.equals(graphNode.getStatus(), NodeStatus.DONE)) {
                 return;
             }
-            upstream.put(pred, Map.copyOf(hydrate.openSpace(scope, SessionKeys.of(scope), pred).outputs()));
+            // outputs() 已是不可变快照
+            upstream.put(pred, hydrate.openSpace(scope, SessionKeys.of(scope), pred).outputs());
         });
         // 只绑 DONE 上游 outputs；未完成节点不进本节点任务记忆入参
         node.bind(InputBinder.resolve(scope, nodeId, contract, upstream));
@@ -409,7 +410,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         String taskId = current.turn().task().map(TaskMetadata::getTaskId).orElse(null);
         return NodeHistory.build(current, tools, evidenceId -> Strings.isBlank(taskId)
             ? NullNode.getInstance()
-            : payload(current.turn(), taskId, evidenceId));
+            : payload(current.turn(), taskId, evidenceId), properties.getReact().getObservationMaxChars());
     }
 
     /**
@@ -528,5 +529,17 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
             return scope;
         }
         throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
+    }
+
+    /**
+     * 删除会话级热态 key。
+     *
+     * @param organId        机构 id
+     * @param conversationId 会话 id
+     */
+    @Override
+    public void discard(String organId, String conversationId) {
+        SessionKeys keys = new SessionKeys(organId, conversationId);
+        store.del(keys.state(), keys.sessionShared(), keys.dialogue(), keys.records(), keys.entities());
     }
 }

@@ -81,6 +81,11 @@ public final class DefaultTurnScope implements TurnScope {
     private final Map<String, EntityEntry> entities;
 
     /**
+     * 本轮超出上限被淘汰的实体键，flush 时从 Redis 删除。
+     */
+    private final Set<String> evictedEntities = new LinkedHashSet<>();
+
+    /**
      * 活跃任务；无任务为空。
      */
     private @Nullable TaskMetadata task;
@@ -321,6 +326,16 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
+     * 返回最近结束的一条任务记录。
+     *
+     * @return 记录列表末尾一条；没有为空
+     */
+    @Override
+    public Optional<TaskRecord> latestRecord() {
+        return records.isEmpty() ? Optional.empty() : Optional.of(records.getLast());
+    }
+
+    /**
      * 返回会话实体索引的只读快照。
      *
      * @return 实体键到实体条目的映射
@@ -337,6 +352,23 @@ public final class DefaultTurnScope implements TurnScope {
      */
     Map<String, EntityEntry> entityIndex() {
         return entities;
+    }
+
+    /**
+     * 淘汰一个实体：移出索引并记下键，flush 时发 HDEL。
+     *
+     * @param key 实体键 {@code type:id}
+     */
+    void evictEntity(String key) {
+        entities.remove(key);
+        evictedEntities.add(key);
+    }
+
+    /**
+     * @return 本轮被淘汰的实体键
+     */
+    Set<String> evictedEntities() {
+        return Set.copyOf(evictedEntities);
     }
 
     /**

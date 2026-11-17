@@ -1,6 +1,6 @@
 -- KEYS[1] = state
 -- ARGV[1] = 本轮栅栏版本
--- ARGV[2] = 改动列表 JSON：[{op, key, field, value, ttl}]
+-- ARGV[2] = 改动列表 JSON：[{op, key, field, value, ttl, maxLen}]
 local current = redis.call('HGET', KEYS[1], 'version')
 if (not current) or (tostring(current) ~= tostring(ARGV[1])) then
   return 0
@@ -12,12 +12,15 @@ end
 local function has_ttl(op)
   return op.ttl and op.ttl ~= cjson.null
 end
+-- 同一 Hash 多个字段只设一次过期
+local expired = {}
 for _, op in ipairs(ops) do
   local name = op.op
   if name == 'HSET' then
     redis.call('HSET', op.key, op.field, op.value)
-    if has_ttl(op) then
+    if has_ttl(op) and not expired[op.key] then
       redis.call('PEXPIRE', op.key, op.ttl)
+      expired[op.key] = true
     end
   elseif name == 'HDEL' then
     redis.call('HDEL', op.key, op.field)
@@ -31,8 +34,8 @@ for _, op in ipairs(ops) do
     redis.call('DEL', op.key)
   elseif name == 'LPUSH_TRIM' then
     redis.call('LPUSH', op.key, op.value)
-    if has_ttl(op) then
-      redis.call('LTRIM', op.key, 0, tonumber(op.ttl) - 1)
+    if op.maxLen and op.maxLen ~= cjson.null then
+      redis.call('LTRIM', op.key, 0, tonumber(op.maxLen) - 1)
     end
   elseif name == 'EXPIRE' then
     redis.call('PEXPIRE', op.key, op.ttl)

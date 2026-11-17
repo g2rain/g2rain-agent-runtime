@@ -1,6 +1,5 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

@@ -3,7 +3,7 @@ package com.g2rain.agent.runtime.engine.tools;
 
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.enums.ModelHint;
@@ -16,7 +16,7 @@ import java.util.Objects;
  * 工具调用层错误码到失败分类、证据状态与模型下一步的对照表。
  *
  * <p>调用层错误码必须落在本表；表外错误码视为业务失败（由 ResponseContractInterceptor 写出）。
- * 例：{@code ToolErrors.TOOL_TIMEOUT.observe("read timed out")} 得到带超时下一步的失败观测。</p>
+ * 例：{@code ToolErrors.TOOL_TIMEOUT.observe()} 得到原因为「工具调用超时」、带超时下一步的失败观测。</p>
  *
  * @author alpha
  * @since 2026/10/4
@@ -26,37 +26,44 @@ public enum ToolErrors {
     /**
      * 调用超时：读工具记 TIMEOUT，写工具结果未知记 UNKNOWN，提示模型按超时处理。
      */
-    TOOL_TIMEOUT(RuntimeErrorCode.TOOL_TIMEOUT, FailureKind.TIMEOUT, EvidenceStatus.TIMEOUT, EvidenceStatus.UNKNOWN, ModelHint.NEXT_TIMEOUT),
+    TOOL_TIMEOUT(RuntimeErrorCode.TOOL_TIMEOUT, FailureKind.TIMEOUT, EvidenceStatus.TIMEOUT, EvidenceStatus.UNKNOWN, ModelHint.NEXT_TIMEOUT,
+        ModelHint.TOOL_TIMED_OUT),
 
     /**
      * 工具不可达：请求未发出，读写都记 FAILED，提示模型可重试。
      */
-    TOOL_UNREACHABLE(RuntimeErrorCode.TOOL_UNREACHABLE, FailureKind.TRANSPORT_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_RETRY),
+    TOOL_UNREACHABLE(RuntimeErrorCode.TOOL_UNREACHABLE, FailureKind.TRANSPORT_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_RETRY,
+        ModelHint.TOOL_UNREACHABLE),
 
     /**
      * 传输中断：读工具记 FAILED，写工具可能已生效记 UNKNOWN，提示模型按超时处理。
      */
-    TOOL_IO_ERROR(RuntimeErrorCode.TOOL_IO_ERROR, FailureKind.TRANSPORT_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_TIMEOUT),
+    TOOL_IO_ERROR(RuntimeErrorCode.TOOL_IO_ERROR, FailureKind.TRANSPORT_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_TIMEOUT,
+        ModelHint.TOOL_IO_BROKEN),
 
     /**
      * 未分类的调用异常：读工具记 FAILED，写工具记 UNKNOWN，提示模型可重试。
      */
-    TOOL_ERROR(RuntimeErrorCode.TOOL_ERROR, FailureKind.UNKNOWN, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_RETRY),
+    TOOL_ERROR(RuntimeErrorCode.TOOL_ERROR, FailureKind.UNKNOWN, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_RETRY,
+        ModelHint.TOOL_FAILED),
 
     /**
      * MCP 工具返回错误结果：按业务失败处理，读写都记 FAILED。
      */
-    MCP_TOOL_ERROR(RuntimeErrorCode.MCP_TOOL_ERROR, FailureKind.BUSINESS_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_BUSINESS),
+    MCP_TOOL_ERROR(RuntimeErrorCode.MCP_TOOL_ERROR, FailureKind.BUSINESS_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_BUSINESS,
+        null),
 
     /**
      * MCP 参数校验失败：读写都记 FAILED，提示模型修正入参。
      */
-    MCP_INVALID_PARAMS(RuntimeErrorCode.MCP_INVALID_PARAMS, FailureKind.PARAMETER_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_FIX_ARGS),
+    MCP_INVALID_PARAMS(RuntimeErrorCode.MCP_INVALID_PARAMS, FailureKind.PARAMETER_FAILURE, EvidenceStatus.FAILED, EvidenceStatus.FAILED, ModelHint.NEXT_FIX_ARGS,
+        null),
 
     /**
      * MCP 协议层错误：读工具记 FAILED，写工具记 UNKNOWN，提示模型可重试。
      */
-    MCP_RPC_ERROR(RuntimeErrorCode.MCP_RPC_ERROR, FailureKind.UNKNOWN, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_RETRY);
+    MCP_RPC_ERROR(RuntimeErrorCode.MCP_RPC_ERROR, FailureKind.UNKNOWN, EvidenceStatus.FAILED, EvidenceStatus.UNKNOWN, ModelHint.NEXT_RETRY,
+        null);
 
     /**
      * 对应的运行时错误码。
@@ -84,19 +91,27 @@ public enum ToolErrors {
     private final ModelHint next;
 
     /**
+     * 归类后的失败原因：传输层与未分类异常的原文可能含内部地址与底层报错，只进日志，给模型用这句；
+     * MCP 工具与业务返回的错误本就写给调用方，原样给出，此处为空。
+     */
+    private final @Nullable ModelHint reason;
+
+    /**
      * @param errorCode   运行时错误码
      * @param failureKind 失败分类
      * @param readStatus  读工具失败时的证据状态
      * @param writeStatus 写工具失败时的证据状态
      * @param next        给模型的下一步
+     * @param reason      归类后的失败原因；原样给出错误时为空
      */
     ToolErrors(RuntimeErrorCode errorCode, FailureKind failureKind, EvidenceStatus readStatus,
-               EvidenceStatus writeStatus, ModelHint next) {
+               EvidenceStatus writeStatus, ModelHint next, @Nullable ModelHint reason) {
         this.errorCode = errorCode;
         this.failureKind = failureKind;
         this.readStatus = readStatus;
         this.writeStatus = writeStatus;
         this.next = next;
+        this.reason = reason;
     }
 
     /**
@@ -127,6 +142,15 @@ public enum ToolErrors {
      */
     public Observation observe(String reason) {
         return Observation.failed(errorCode, reason, next.text());
+    }
+
+    /**
+     * 按本项生成执行失败观测，原因用归类后的说明，不带异常原文。
+     *
+     * @return 执行失败观测
+     */
+    public Observation observe() {
+        return observe(Objects.requireNonNull(reason, name()).text());
     }
 
     /**

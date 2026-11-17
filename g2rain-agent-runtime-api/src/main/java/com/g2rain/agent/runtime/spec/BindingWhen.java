@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 /**
  * 参数从数据源绑定到节点输入的时机。

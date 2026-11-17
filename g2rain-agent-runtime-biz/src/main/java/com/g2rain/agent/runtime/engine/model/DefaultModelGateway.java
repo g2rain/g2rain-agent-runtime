@@ -4,7 +4,6 @@ package com.g2rain.agent.runtime.engine.model;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
@@ -97,7 +96,7 @@ public class DefaultModelGateway implements ModelGateway {
     public ChatCompletionResponse chat(ModelUse use, @Nullable String model, ChatCompletionRequest request) {
         long start = System.nanoTime();
         // 模型步骤只显示用途与耗时，不显示模型名与 token 用量
-        String stepId = stepEvents.start(StepStage.MODEL, RuntimeMessage.valueOf("MODEL_" + use.name()).text());
+        String stepId = stepEvents.start(StepStage.MODEL, use.message().text());
         // 本轮指定了模型才写入，未指定保持请求原值
         if (Strings.isNotBlank(model)) {
             request.setModel(model.trim());

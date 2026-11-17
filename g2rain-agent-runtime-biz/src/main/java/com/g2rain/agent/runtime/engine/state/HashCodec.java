@@ -10,6 +10,8 @@ import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,11 +19,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * Redis Hash 与领域对象互转。
  *
- * <p>Hash field 对应对象属性（或约定 field）。嵌套对象与集合写成 JSON 字符串，标量写成字面量。</p>
+ * <p>Hash field 对应对象属性（或约定 field）。每个值都按 JSON 编码写入、按 JSON 解析读回，读写对称；
+ * 字符串因此带引号存储，以 {@code {} 或 {@code [} 开头的自由文本不会被误当成结构。</p>
  *
  * @author alpha
  * @since 2026/10/3
@@ -68,25 +72,19 @@ public final class HashCodec {
      *
      * @param obj  领域对象
      * @param skip 不写入的属性名
-     * @return field → 字符串值
+     * @return field → JSON 文本
      */
-    @SuppressWarnings("ConstantConditions")
     public static Map<String, String> toHash(Object obj, String... skip) {
         Set<String> ignored = Set.of(skip);
         Map<String, String> hash = new LinkedHashMap<>();
-        Map<String, Object> properties = JSON.str2map(JSON.obj2str(obj));
-        if (Collections.isEmpty(properties)) {
-            return hash;
-        }
-
-        properties.forEach((field, value) -> {
+        for (Map.Entry<String, JsonNode> property : JSON.obj2node(obj).properties()) {
             // null 属性不写入：由 deletedFields 生成 HDEL，HSET 不能携带空值
-            if (ignored.contains(field) || Objects.isNull(value)) {
-                return;
+            if (ignored.contains(property.getKey()) || property.getValue().isNull()) {
+                continue;
             }
 
-            hash.put(field, scalar(value) ? String.valueOf(value) : JSON.obj2str(value));
-        });
+            hash.put(property.getKey(), JSON.obj2str(property.getValue()));
+        }
 
         return hash;
     }
@@ -101,23 +99,17 @@ public final class HashCodec {
     public static List<String> deletedFields(Object obj, String... skip) {
         Set<String> ignored = Set.of(skip);
         List<String> fields = new ArrayList<>();
-        Map<String, Object> properties = JSON.str2map(JSON.obj2str(obj));
-        if (Collections.isEmpty(properties)) {
-            return fields;
-        }
-
-        properties.forEach((field, value) -> {
-            //noinspection ConstantValue
-            if (!ignored.contains(field) && Objects.isNull(value)) {
-                fields.add(field);
+        for (Map.Entry<String, JsonNode> property : JSON.obj2node(obj).properties()) {
+            if (!ignored.contains(property.getKey()) && property.getValue().isNull()) {
+                fields.add(property.getKey());
             }
-        });
+        }
 
         return fields;
     }
 
     /**
-     * Hash → 对象。每个 field 若是 JSON 对象/数组则先解析再绑定。
+     * Hash → 对象。每个值已是 JSON 文本，拼成一个 JSON 对象后一次绑定。
      *
      * @param hash Redis hGetAll
      * @param type 目标类型
@@ -128,14 +120,14 @@ public final class HashCodec {
         if (Collections.isEmpty(hash)) {
             return null;
         }
-        Map<String, Object> fields = new LinkedHashMap<>();
+
+        StringJoiner json = new StringJoiner(",", "{", "}");
         hash.forEach((field, raw) -> {
-            Object value = decode(raw);
-            if (Objects.nonNull(value)) {
-                fields.put(field, value);
+            if (Strings.isNotBlank(raw)) {
+                json.add(JSON.obj2str(JsonNodeFactory.instance.stringNode(field)) + ":" + raw);
             }
         });
-        return JSON.str2obj(JSON.obj2str(fields), type);
+        return JSON.str2obj(json.toString(), type);
     }
 
     /**
@@ -189,33 +181,5 @@ public final class HashCodec {
         List<TaskEdge> parsed = JSON.str2obj(edges, EDGES);
         graph.setEdges(parsed);
         return graph;
-    }
-
-    /**
-     * 解析单个 Hash 值：JSON 对象/数组进树，其余当字符串。
-     *
-     * @param raw Redis 字符串
-     * @return 解码后的值；空白 field 为 {@code null}
-     */
-    private static @Nullable Object decode(String raw) {
-        if (Strings.isBlank(raw)) {
-            return null;
-        }
-        String text = raw.trim();
-        if (text.startsWith("{") || text.startsWith("[")) {
-            return JSON.str2node(text);
-        }
-        return raw;
-    }
-
-    /**
-     * 标量直接写字面量，避免再包一层 JSON 引号。
-     *
-     * @param value 属性值
-     * @return 是否为字符串、数字、布尔或枚举
-     */
-    private static boolean scalar(Object value) {
-        return value instanceof String || value instanceof Number || value instanceof Boolean
-            || value instanceof Enum<?>;
     }
 }

@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
@@ -32,7 +32,7 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/8/21
  */
-@Order(8)
+@Order(8000)
 @Component
 public class ResponseContractInterceptor implements ToolInterceptor {
 

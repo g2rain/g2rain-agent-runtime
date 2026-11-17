@@ -32,6 +32,13 @@ final class RepoSupport {
     };
 
     /**
+     * 技能版本 Map：技能键 → pin。
+     */
+    static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {
+
+    };
+
+    /**
      * traceId 列宽上限。
      */
     static final int TRACE_MAX = 64;

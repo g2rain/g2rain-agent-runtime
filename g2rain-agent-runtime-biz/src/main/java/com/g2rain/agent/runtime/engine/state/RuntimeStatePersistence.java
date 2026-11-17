@@ -94,14 +94,10 @@ public class RuntimeStatePersistence {
                 conversations.bindTask(task.getSourceMessageId(), task.getTaskId());
             }
             graphs.save(task.getTaskId(), scope.graph(), spacesOf(scope.nodes()));
-            calls.syncHeads(headsOf(scope.nodes()));
+            calls.syncHeads(task.getTaskId(), headsOf(scope.nodes()));
             scope.lastResumeAction().ifPresent(action -> tasks.consumeCheckpoint(task.getTaskId(), action,
                 scope.lastResumeMessageId().orElse(""), scope.lastResumeAt()));
-            scope.checkpoint().ifPresent(checkpoint -> {
-                if (tasks.suspend(task.getTaskId(), checkpoint, task)) {
-                    conversations.bindTask(task.getSourceMessageId(), task.getTaskId());
-                }
-            });
+            scope.checkpoint().ifPresent(checkpoint -> tasks.suspend(task.getTaskId(), checkpoint));
         });
 
         scope.pendingPersistDialogue().forEach(message -> {

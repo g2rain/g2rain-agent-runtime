@@ -3,7 +3,6 @@ package com.g2rain.agent.runtime.engine.state;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.graph.NodeStatus;
-import com.g2rain.agent.runtime.domain.hydrate.EntitySpec;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.ShareScope;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
@@ -16,6 +15,7 @@ import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.spec.EntitySpec;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
@@ -32,6 +32,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -116,14 +117,18 @@ public class EntityExtractor {
             return;
         }
 
-        // 并入成功证据带出的实体，以及已完成节点产出声明的实体
+        // 并入本轮产生的成功证据带出的实体，以及已完成节点产出声明的实体；
+        // 节点跨轮重开时会读回此前轮次的证据，只并本轮的，避免重复计数并把旧实体误刷成刚提及
+        String traceId = scope.traceId();
         scope.nodes().values().forEach(node -> {
             node.evidence().stream()
-                .filter(head -> head.status() == EvidenceStatus.SUCCESS)
+                .filter(head -> head.status() == EvidenceStatus.SUCCESS && Objects.equals(traceId, head.traceId()))
                 .forEach(head -> mergeSeeds(scope, parse(head.entities()), head.evidenceId(), taskId, false));
-            if (done(scope, node.nodeId())) {
-                Object raw = node.note(NodeNoteKey.ENTITY_OUTPUTS);
+            Object raw = node.note(NodeNoteKey.ENTITY_OUTPUTS);
+            if (Objects.nonNull(raw) && done(scope, node.nodeId())) {
                 mergeSeeds(scope, parse(JSON.obj2str(raw)), null, taskId, true);
+                // 一次性便签：并入后清掉，之后再重开该节点不再重复并入
+                node.note(NodeNoteKey.ENTITY_OUTPUTS, null);
             }
         });
 
@@ -138,11 +143,15 @@ public class EntityExtractor {
             }
         }
 
-        // 超过上限时从最早写入的开始淘汰
-        int max = Math.max(0, runtimeProperties.getState().getEntitiesMax());
-        while (scope.entityIndex().size() > max) {
-            String first = scope.entityIndex().keySet().iterator().next();
-            scope.entityIndex().remove(first);
+        // 超过上限时淘汰最久未被提及的，flush 时一并从 Redis 删除
+        int overflow = scope.entityIndex().size() - Math.max(0, runtimeProperties.getState().getEntitiesMax());
+        if (overflow > 0) {
+            scope.entityIndex().entrySet().stream()
+                .sorted(EntityEntry.LEAST_RECENT)
+                .limit(overflow)
+                .map(Map.Entry::getKey)
+                .toList()
+                .forEach(scope::evictEntity);
         }
     }
 
@@ -194,7 +203,7 @@ public class EntityExtractor {
             return null;
         }
         JsonNode node = value instanceof JsonNode json ? json : JSON.obj2node(value);
-        return entity.seed(JsonNodeFactory.instance.objectNode(), node);
+        return EntitySeeds.of(entity, JsonNodeFactory.instance.objectNode(), node);
     }
 
     /**

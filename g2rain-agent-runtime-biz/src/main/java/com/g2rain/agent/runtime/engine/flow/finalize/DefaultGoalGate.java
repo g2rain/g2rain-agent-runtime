@@ -11,6 +11,7 @@ import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
+import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -73,6 +74,11 @@ public final class DefaultGoalGate implements GoalGate {
     private final StepEvents stepEvents;
 
     /**
+     * 状态门面：读取各节点的证据头，供核验对照节点结论。
+     */
+    private final RuntimeStateFacade stateFacade;
+
+    /**
      * 呈现最终答复：未成功退回草稿 → 可直接采用的单节点结论 → 模型核验 → 拼接节点结论。
      *
      * @param ctx       本轮上下文
@@ -89,7 +95,8 @@ public final class DefaultGoalGate implements GoalGate {
         }
 
         RuntimeProperties.GoalGate cfg = runtimeProperties.getGoalGate();
-        GoalEvidencePack pack = GoalEvidenceAssembler.assemble(ctx, cfg);
+        GoalEvidencePack pack = GoalEvidenceAssembler.assemble(ctx, cfg,
+            nodeId -> stateFacade.evidenceOf(ctx.getTurn(), nodeId));
         String adopted = adoptable(pack);
         if (Objects.nonNull(adopted)) {
             return traced(adopted, ReplySource.NODE);
@@ -226,14 +233,16 @@ public final class DefaultGoalGate implements GoalGate {
      * @param writable  技能是否有写工具
      * @param delegated 是否为委派前置节点
      * @param result    节点结论；可空
+     * @param evidence  节点最近的成功调用摘要
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record NodeView(@Nullable String title, @Nullable String objective, String status, @Nullable String target,
-                            boolean claimed, boolean writable, boolean delegated, @Nullable String result) {
+                            boolean claimed, boolean writable, boolean delegated, @Nullable String result,
+                            List<GoalNodeSummary.Call> evidence) {
 
         static NodeView from(GoalNodeSummary node, int maxChars) {
             return new NodeView(node.title(), clip(node.objective(), maxChars), node.status(), node.target(),
-                node.claimed(), node.writable(), node.delegated(), clip(node.result(), maxChars));
+                node.claimed(), node.writable(), node.delegated(), clip(node.result(), maxChars), node.evidence());
         }
     }
 

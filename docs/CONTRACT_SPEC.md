@@ -76,6 +76,7 @@ skill_contract
 ├── mode                    执行模式
 ├── delegatable             能否被委派
 ├── target                  默认完成目标（写工具）
+├── source                  动作语义来源（可选；有则整体替换 tools）
 ├── inputs.<name>           节点输入
 │   ├── from
 │   ├── required
@@ -101,7 +102,7 @@ skill_contract
     │   ├── missing { action, tool, message }
     │   ├── sensitive
     │   ├── label
-    │   └── fresh
+    │   └── entity
     ├── success { path, op, value }
     ├── error { code, message }
     ├── extracts[] { key, path, fields, entity }
@@ -118,6 +119,7 @@ skill_contract
 | `mode` | `REACT` / `PLAN` | `REACT` | 执行模式 | 规划时候选技能只有一个且为 `REACT` → 跳过大模型规划，直接生成单节点图；否则由大模型规划 |
 | `delegatable` | boolean | `false` | 能否被其他节点委派调用 | 为 `true` 时进入同一数字员工的委派目录；要求 `tools` 中没有写工具 |
 | `target` | String | 无 | 默认完成目标：本技能的一个写工具名 | 规划未给节点指定完成目标时采用（见第 10 节）；只做一种写操作的技能配置，承担多种操作的技能留空 |
+| `source` | Object | 无 | 动作语义来源声明；内容对 Runtime 不透明 | 无 `source`：用契约自己的 `tools`。有 `source` 且存在可用的 `SpecSource`：用其返回的 `tools` **整体替换**契约的 `tools`，并把返回的版本标记 `pin` 记到任务。有 `source` 但无可用实现或加载失败：该技能不可用，**不退回**契约自带的 `tools` |
 | `inputs` | Map | `{}` | 节点开始时绑定的输入 | 见第 7 节 |
 | `outputs` | Map | `{}` | 节点允许写入的产出 | 见第 8 节 |
 | `tools` | Map | `{}` | 各业务工具的契约 | 见第 4 节 |
@@ -170,7 +172,7 @@ key 为参数路径，点分写法，`[]` 表示数组中的每一项：
 | `missing` | Object | `{action: ASK_USER}` | 必填参数缺值时的处理（见 5.5） |
 | `sensitive` | boolean | `false` | 敏感参数：在参数摘要、审批文案中打码 |
 | `label` | String | 无 | 参数展示名：用于审批文案（"标签：值"）、追问字段名、工具目录 |
-| `fresh` | Boolean | 无 | 当前未生效 |
+| `entity` | String | 无 | 参数指向的实体类型，与抽取项 `entity.type` 同名（如 `article`）。配置后 `EVIDENCE`、`PRIOR_TASK` 来源按该类型对象的标识精确比对；审批文案按该类型查对象名称 |
 
 ### 5.3 参数值的判定流程
 
@@ -200,10 +202,10 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 | sources 中的值 | 匹配条件 |
 |---|---|
-| `USER` | 当前追问断点的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2） |
-| `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等 |
+| `USER` | 当前追问断点的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2）；值首尾为英文字母或数字时，命中处前后不能紧挨英文字母或数字（「2012」中不认「12」），原文空白处视为边界 |
+| `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等；参数配置了 `entity` 时，改为值等于这些证据中该类型实体的标识 |
 | `NODE_OUTPUT` / `SHARED` / `SESSION` | 以参数路径为键，在对应数据中查到相同的值 |
-| `PRIOR_TASK` | 值等于任务前情中某个实体的 id（实体来自查询或保存结果中配置了 `entity` 的抽取项）；配置了 `from: prior.*` 时按该路径比对 |
+| `PRIOR_TASK` | 值等于任务前情中某个实体的 id（实体来自查询或保存结果中配置了 `entity` 的抽取项）；参数配置了 `entity` 时还要求类型一致；配置了 `from: prior.*` 时按该路径比对 |
 | `PLATFORM` / `CONTRACT` | 不会匹配（这两类来源只能通过 `from`/`const` 产生） |
 | `MODEL` | 总是允许 |
 
@@ -241,7 +243,12 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `ALWAYS` | 取到值就绑定 |
 | `UNIQUE` | 只在候选唯一时绑定：`evidence.*` 表达式要求取到的值是长度为 1 的数组（绑定的是数组本身）；其他表达式要求路径中第一个 `[` 之前的数组长度为 1 |
 
-数组模板：参数路径和 `from` 都包含 `[]` 时，按下标逐项填充，只填模型没给值的下标。`evidence.*` 不支持数组模板。
+数组模板：参数路径和 `from` 都包含 `[]` 时，按下标逐项填充，只填模型没给值的下标。`evidence.*` 也支持：先按抽取键取一条证据的抽取内容，再逐行展开，所有行都来自同一次调用结果，行与行一一对应。例如开票明细逐行取自订单查询：
+
+```json
+"invoiceDetailList[].goodsName":  { "from": "evidence.order_lines[].goodsName" },
+"invoiceDetailList[].totalPrice": { "from": "evidence.order_lines[].amount" }
+```
 
 ### 5.5 missing：缺值处理
 
@@ -351,7 +358,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 - 不能是自身，必须属于同一数字员工。
 - `from` 为 `shared.` / `session.` 且值已存在时，不插入前置节点。
-- 前置节点声明的所有共享产出都已存在时，该节点在执行时直接跳过（`SKIPPED`）。
+- 由 provider 自动补入的前置节点，其声明的所有共享产出都已存在时，执行时直接跳过（`SKIPPED`）；规划器显式安排的节点照常执行。
 
 ---
 
@@ -370,7 +377,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `entity` | Object | 无 | 实体识别 `{type, id, name, scalar}` | 节点完成时生成实体：值为对象时按 `id`/`name` 字段名取（默认 `id`、`name`）；值为标量时按 `scalar` 命名成字段后再取 |
 | `sources` | List<SourceType> | `[]` | 允许的来源 | 写入和完成时校验；为空表示除 `MODEL` 外都允许；`MODEL` 永远不允许 |
 | `constant` | JSON | 无 | 常量 | 来源为 `CONTRACT` 时，值必须等于它 |
-| `sensitive` | boolean | `false` | — | 当前未生效 |
+| `sensitive` | boolean | `false` | 敏感产出 | 值随产出流向下游输入与共享值时一并标记；提示词中显示为 `***`，`builtin_output_set` 的参数摘要中打码；下游参数绑定仍取原值 |
 
 约束：
 
@@ -417,7 +424,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 |---|---|---|
 | 1 | 规划输出 | 规划模型按本轮目标给节点指定；必须是该技能的写工具（`tools` 中 `sideEffect: WRITE` 且在 `toolNames` 内），否则丢弃 |
 | 2 | 契约 `target` | 规划未指定（单候选直接出图、规划失败走保底、或模型未填）时采用；同样须是该技能的写工具 |
-| 3 | 首个实际写调用 | 节点仍无目标时，执行中第一次发起的写调用（无论是否被拦下）成为目标，并标记 `targetClaimed`；它可能只是前置写操作，GoalGate 会交模型核验目标是否达成 |
+| 3 | 实际写调用 | 节点仍无目标时，执行中第一次发起的写调用（无论是否被拦下）成为目标，并标记 `targetClaimed`；在它写成功（或仍在进行、有待确认的写调用）之前，下一次发起的其他写调用替换它。它可能只是前置写操作，GoalGate 会交模型核验目标是否达成 |
 
 纯查询节点没有完成目标。一个节点最多一个完成目标；多个写操作由规划拆成多个节点。
 
@@ -453,7 +460,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `organType` | 枚举 | 机构类型 |
 | `deptPath` | String | 部门路径 |
 
-`passportId`、`clientId`、`sessionType`、`adminUser`、`adminCompany` 不开放（配置项 `platform.hidden`）。
+只开放上表字段（白名单，配置项 `platform.exposed`）；`passportId`、`clientId`、`sessionType`、`adminUser`、`adminCompany` 及身份上新增的属性默认不开放。
 
 规则：
 
@@ -493,18 +500,21 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 ## 13. 工具调用处理链
 
 业务工具每次调用依次经过以下处理。before 阶段任一环节拒绝，调用即结束，不登记证据。
+「顺序」与拦截器 `@Order` 一致，步长 1000，便于中间插入新环节而不改已有编号。
 
 | 顺序 | 环节 | 生效的契约属性 | 拒绝时返回 |
 |---|---|---|---|
-| 1 | 参数规范（ArgPolicy） | 工具 schema；`from`/`const` 参数免除 schema 必填检查 | `ARG_JSON_INVALID`、`ARG_REJECTED` |
-| 2 | 参数绑定（ArgBinding） | `from`、`const`、`when` | 不拒绝 |
-| 3 | 参数契约（ParamContract） | `required`、`sources`、`enum`、`missing` | `PARAM_PROVENANCE_*` |
-| 4 | 重复调用熔断（Fingerprint） | — | 同工具同参数连续成功调用达到上限（默认 3 次）→ `FINGERPRINT_TRIP`，节点失败 |
-| 5 | 写入闸门（WriteGate） | `sideEffect`、`confirm`、`idempotencyKey` | `APPROVAL_REQUIRED`、`WRITE_IN_FLIGHT`、`WRITE_PENDING_VERIFY` |
+| 0 | 写范围（WriteScope） | `sideEffect`、节点完成目标 | `WRITE_OUT_OF_SCOPE` |
+| 1000 | 参数规范（ArgPolicy） | 工具 schema；`from`/`const` 参数免除 schema 必填检查 | `ARG_JSON_INVALID`、`ARG_REJECTED` |
+| 2000 | 参数绑定（ArgBinding） | `from`、`const`、`when` | 不拒绝 |
+| 3000 | 参数契约（ParamContract） | `required`、`sources`、`enum`、`missing` | `PARAM_PROVENANCE_*` |
+| 4000 | 附加检查（ToolGuard） | 插件实现的前置条件 | `GUARD_DENIED`、`GUARD_UNAVAILABLE` |
+| 5000 | 重复调用熔断（Fingerprint） | — | 同工具同参数连续成功调用达到上限（默认 3 次）→ `FINGERPRINT_TRIP`，节点失败 |
+| 6000 | 写入闸门（WriteGate） | `sideEffect`、`confirm`、`idempotencyKey` | `APPROVAL_REQUIRED`、`WRITE_IN_FLIGHT`、`WRITE_PENDING_VERIFY` |
 | — | 调用工具 | — | 调用异常转为错误码（见 14.4） |
-| 6 | 业务判定（ResponseContract） | `success`、`error` | 业务失败 → `TOOL_BUSINESS_FAILED` 或 `error.code` 的值 |
-| 7 | 证据登记（Evidence） | `extracts` | — |
-| 8 | 熔断计数（Fingerprint） | — | — |
+| 7000 | 证据登记（Evidence） | `extracts` | — |
+| 8000 | 业务判定（ResponseContract） | `success`、`error` | 业务失败 → `TOOL_BUSINESS_FAILED` 或 `error.code` 的值 |
+| — | 熔断计数（Fingerprint after） | — | — |
 
 模型只能看到观测中的文字说明，Runtime 根据错误码决定后续处理（审批、去重、无进展计数）。
 
@@ -540,6 +550,8 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | 失败 / 业务失败 / 不存在 | 正常调用 |
 
 建议为每个写工具配置能表达"同一业务动作"的 `idempotencyKey`，例如创建文章用 `spaceId + title`。
+
+选键原则：幂等键要包含所有决定"是不是同一次写入"的参数。同一任务内，键相同的第二次写入不会执行，直接返回上一次的结果，所以凡是"值不同就应该再写一次"的参数都要放进键里。例如修改文章时只用 `id + title` 作键，同一任务内再改这篇文章的正文会被当成重复写入；修改类工具应把会变化的内容字段（如正文）也纳入，或者不配置幂等键（此时用全部参数的摘要）。
 
 ### 14.3 核实（VERIFY）
 
@@ -646,6 +658,8 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.42237` | `DELEGATE_FORBIDDEN` | 禁止委派 |
 | `agent_runtime.42239` | `DELEGATE_REPEATED` | 重复委派 |
 | `agent_runtime.42212` | `PROVIDER_UNAVAILABLE` | `inputs.provider` 不可用（规划失败） |
+| `agent_runtime.42252` | `GUARD_DENIED` | 调用被前置条件拦下 |
+| `agent_runtime.50012` | `GUARD_UNAVAILABLE` | 调用前检查不可用 |
 
 ---
 
@@ -683,7 +697,5 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 
 | 属性 | 状态 |
 |---|---|
-| `args.*.fresh` | 不读取 |
-| `outputs.*.sensitive` | 不读取 |
 | `outputs.*.minItems`、`outputs.*.hint`、`outputs.*.fields` | 只投影进提示词，不参与校验（`LIST` 的 `fields` 非空校验除外） |
 | `inputs.*.required` | 只在提示词中标记缺失，不阻止执行 |

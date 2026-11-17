@@ -1,8 +1,7 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.g2rain.agent.runtime.domain.state.SourceType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -81,9 +80,12 @@ public class ArgSpec {
     private @Nullable String label;
 
     /**
-     * 是否只允许当前任务数据；写操作未配置时按 {@code true} 处理，避免复用旧任务参数。
+     * 参数指向的实体类型，与抽取项 {@code entity.type} 同一套命名，如 {@code article}。
+     *
+     * <p>配置后，「查询结果」来源要求值等于成功证据中该类型对象的标识，「之前任务」来源要求前情中存在该类型、
+     * 该标识的对象；未配置时按值在证据或前情中出现即认。</p>
      */
-    private @Nullable Boolean fresh;
+    private @Nullable String entity;
 
     /**
      * @return 未配置时默认必填

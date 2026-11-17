@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,8 +11,7 @@ import java.util.List;
 /**
  * 从工具响应抽取记录：path 取数组或对象、fields 投影列、key 写入证据语义键。
  *
- * <p>抽取结果进入 {@link com.g2rain.agent.runtime.domain.state.task.EvidenceHead} 的计数与实体候选，
- * 完成条件 {@code evidence.<key> exists} 依赖本规格。</p>
+ * <p>抽取结果进入证据头的计数与实体候选，完成条件 {@code evidence.<key> exists} 依赖本规格。</p>
  *
  * @author alpha
  * @since 2026/10/3
@@ -38,7 +37,7 @@ public class ExtractSpec {
     private List<String> fields = new ArrayList<>();
 
     /**
-     * 可选实体声明；有则抽取后生成 {@link com.g2rain.agent.runtime.domain.state.task.EntitySeed}。
+     * 可选实体声明；有则抽取后生成实体候选。
      */
     private @Nullable EntitySpec entity;
 }

@@ -1,10 +1,12 @@
 package com.g2rain.agent.runtime.domain.hydrate;
 
-import com.g2rain.agent.runtime.domain.state.task.SideEffect;
+import com.g2rain.agent.runtime.spec.SideEffect;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.JsonNode;
 
 import java.util.HashMap;
 import java.util.List;
@@ -50,6 +52,11 @@ public class SkillContract {
      * <p>只做一种写操作的技能配置；承担多种操作的技能留空，由规划按节点决定。</p>
      */
     private @Nullable String target;
+
+    /**
+     * 动作语义来源声明；有则由 {@code SpecSource} 提供 {@link #tools}，Runtime 不解释内容。
+     */
+    private @Nullable JsonNode source;
 
     /**
      * 工具注册名到工具用法的映射；只列出当前 Skill 实际允许调用的工具。

@@ -40,14 +40,15 @@ g2rain:
         endpoint: ${G2RAIN_MCP_REGISTRY_ENDPOINT:lb://g2rain-mcp-registry}
         path: /mcp
         connect-timeout-ms: 3000
-        # 0 = 读不超时，等工具返回
-        read-timeout-ms: 0
+        # 等工具返回的兜底上限（5 分钟）；超时后写操作结果不确定，转回查。须小于 mcp-registry 的出站读超时（6 分钟）
+        read-timeout-ms: 300000
         # 仅 listTools 建连失败；不含首次；callTool 不重试
         max-retries: 2
       plan:
         max-candidates: 32
         max-skills-per-agent: 8
         max-skills-total: 48
+        max-graph-steps: 256
       react:
         max-rounds: 32
         max-no-progress-rounds: 3
@@ -55,6 +56,7 @@ g2rain:
         value-summary-max-chars: 256
         repair-max-rounds: 8
         observation-error-max-chars: 2048
+        observation-max-chars: 8000
         brief-max-chars: 200
         fingerprint-trip-limit: 3
       goal-gate:
@@ -64,6 +66,7 @@ g2rain:
         prompt-max-chars: 500
         node-summaries-max: 12
         dialogue-tail: 6
+        evidence-per-node-max: 5
       state:
         conversation-ttl: 7d
         task-ttl-running: 24h
@@ -73,7 +76,7 @@ g2rain:
         payload-done-ttl: 1h
         state-size-log-enabled: true
         space-field-max-bytes: 65536
-        message-max-bytes: 4096
+        user-input-max-chars: 20000
         dialogue-max: 60
         records-max: 20
         entities-max: 200

@@ -156,4 +156,14 @@ public interface RuntimeStateFacade {
      * @param turn 本轮视图
      */
     void persist(TurnScope turn);
+
+    /**
+     * 删除会话时清理 Redis 中会话级的热态：状态、会话共享值、对话、任务记录与实体。
+     *
+     * <p>任务级 key 不逐个查找，按任务 TTL 自然过期；会话状态删除后它们不会再被读到。须在会话锁内调用。</p>
+     *
+     * @param organId        机构 id
+     * @param conversationId 会话 id
+     */
+    void discard(String organId, String conversationId);
 }

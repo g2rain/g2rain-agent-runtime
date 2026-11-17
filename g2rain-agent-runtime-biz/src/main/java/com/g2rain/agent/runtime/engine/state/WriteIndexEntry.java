@@ -51,12 +51,6 @@ public record WriteIndexEntry(String evidenceId, EvidenceStatus status, @Nullabl
      * @return {@code true} 表示不得再发起同键写调用
      */
     public boolean live() {
-        if (status == EvidenceStatus.SUCCESS) {
-            return !Boolean.FALSE.equals(businessOk);
-        }
-
-        return status == EvidenceStatus.STARTED
-            || status == EvidenceStatus.UNKNOWN
-            || status == EvidenceStatus.UNKNOWN_PRE_CALL;
+        return status.holdsSlot(businessOk);
     }
 }

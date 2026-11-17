@@ -2,13 +2,14 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
-import com.g2rain.agent.runtime.domain.hydrate.ExtractSpec;
+import com.g2rain.agent.runtime.spec.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
+import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -19,6 +20,7 @@ import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayDeque;
@@ -43,6 +45,13 @@ public class EvidenceReader {
      * JSON 编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * 证据头上实体候选列表的反序列化类型。
+     */
+    private static final TypeReference<List<EntitySeed>> ENTITY_SEEDS = new TypeReference<>() {
+
+    };
 
     /**
      * 运行时状态门面：读节点证据与载荷。
@@ -121,6 +130,35 @@ public class EvidenceReader {
      */
     public boolean matchesExact(ToolExecutionContext ctx, JsonNode argVal) {
         return findMatchingEvidenceSource(ctx, argVal).isPresent();
+    }
+
+    /**
+     * 参数值是否等于某条成功证据中指定类型实体的标识；按证据头上已抽出的实体比对，不读报文。
+     *
+     * @param ctx    当前工具执行上下文
+     * @param type   实体类型
+     * @param argVal 待比对的入参值
+     * @return 存在类型与标识都一致的实体
+     */
+    public boolean matchesEntityId(ToolExecutionContext ctx, String type, JsonNode argVal) {
+        if (!JSON.hasValue(argVal) || !argVal.isValueNode()) {
+            return false;
+        }
+
+        String id = argVal.asString().trim();
+        for (OwnedEvidence owned : successfulEvidenceNewestFirst(ctx)) {
+            String entities = owned.head().entities();
+            if (Strings.isBlank(entities)) {
+                continue;
+            }
+
+            List<EntitySeed> seeds = Objects.requireNonNullElse(JSON.str2obj(entities, ENTITY_SEEDS), List.of());
+            if (seeds.stream().anyMatch(seed -> type.equals(seed.type()) && id.equals(seed.id()))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -275,40 +313,71 @@ public class EvidenceReader {
     }
 
     /**
+     * 本节点及上游成功证据按抽取项取出的原文。
+     *
+     * <p>本节点在前，上游按距离由近到远；只取配置了 extracts 的工具，每个抽取项一条。</p>
+     *
+     * @param ctx 当前工具执行上下文
+     * @return 本节点与上游抽取原文；没有为空列表
+     */
+    public List<EvidenceExtract> nodeExtracts(ToolExecutionContext ctx) {
+        List<EvidenceExtract> extracts = new ArrayList<>();
+        appendExtracts(extracts, ctx, ctx.getNodeId(), ctx.scope().evidence());
+        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
+            appendExtracts(extracts, ctx, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
+        }
+
+        return extracts;
+    }
+
+    /**
      * 上游节点成功证据按抽取项取出的原文，供下游节点直接使用。
      *
-     * <p>上游按距离由近到远；只取配置了 extracts 的工具，每个抽取项一条。</p>
+     * <p>上游按距离由近到远；只取配置了 extracts 的工具，每个抽取项一条。不含本节点。</p>
      *
      * @param ctx 当前工具执行上下文
      * @return 上游抽取原文；没有为空列表
      */
-    public List<UpstreamExtract> upstreamExtracts(ToolExecutionContext ctx) {
-        List<UpstreamExtract> extracts = new ArrayList<>();
+    public List<EvidenceExtract> upstreamExtracts(ToolExecutionContext ctx) {
+        List<EvidenceExtract> extracts = new ArrayList<>();
         for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
-            List<OwnedEvidence> heads = new ArrayList<>();
-            addNewestFirst(heads, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
-            for (OwnedEvidence owned : heads) {
-                ToolSpec tool = toolOf(ctx, owner, owned.head().toolName());
-                if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
-                    continue;
-                }
-
-                JsonNode payload = stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), owned.head().evidenceId());
-                for (ExtractSpec extract : tool.getExtracts()) {
-                    if (Strings.isBlank(extract.getPath())) {
-                        continue;
-                    }
-
-                    JsonNode value = JSON.lookupNode(payload, extract.getPath().trim());
-                    if (JSON.hasValue(value)) {
-                        extracts.add(new UpstreamExtract(owner, owned.head().evidenceId(), owned.head().toolName(),
-                            extract.getKey(), extract.getPath().trim(), value));
-                    }
-                }
-            }
+            appendExtracts(extracts, ctx, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
         }
 
         return extracts;
+    }
+
+    /**
+     * 把某节点成功证据的抽取项追加到列表。
+     *
+     * @param extracts 输出列表
+     * @param ctx      执行上下文
+     * @param owner    证据所属节点
+     * @param evidence 该节点全部证据（按发生顺序）
+     */
+    private void appendExtracts(List<EvidenceExtract> extracts, ToolExecutionContext ctx, String owner,
+                                List<EvidenceHead> evidence) {
+        List<OwnedEvidence> heads = new ArrayList<>();
+        addNewestFirst(heads, owner, evidence);
+        for (OwnedEvidence owned : heads) {
+            ToolSpec tool = toolOf(ctx, owner, owned.head().toolName());
+            if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
+                continue;
+            }
+
+            JsonNode payload = stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), owned.head().evidenceId());
+            for (ExtractSpec extract : tool.getExtracts()) {
+                if (Strings.isBlank(extract.getPath())) {
+                    continue;
+                }
+
+                JsonNode value = JSON.lookupNode(payload, extract.getPath().trim());
+                if (JSON.hasValue(value)) {
+                    extracts.add(new EvidenceExtract(owner, owned.head().evidenceId(), owned.head().toolName(),
+                        extract.getKey(), extract.getPath().trim(), value));
+                }
+            }
+        }
     }
 
     /**
@@ -417,16 +486,16 @@ public class EvidenceReader {
     }
 
     /**
-     * 上游节点一条抽取项的原文。
+     * 一条证据抽取项的原文。
      *
-     * @param nodeId     所属上游节点
+     * @param nodeId     所属节点
      * @param evidenceId 证据标识
      * @param tool       工具名
      * @param key        抽取键
      * @param path       报文路径
      * @param value      路径上的原值
      */
-    public record UpstreamExtract(String nodeId, String evidenceId, String tool, @Nullable String key, String path,
+    public record EvidenceExtract(String nodeId, String evidenceId, String tool, @Nullable String key, String path,
                                   JsonNode value) {
 
     }

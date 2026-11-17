@@ -30,7 +30,7 @@ import java.util.Optional;
  * @author alpha
  * @since 2026/8/21
  */
-@Order(4)
+@Order(5000)
 @Component
 public class FingerprintInterceptor implements ToolInterceptor {
 

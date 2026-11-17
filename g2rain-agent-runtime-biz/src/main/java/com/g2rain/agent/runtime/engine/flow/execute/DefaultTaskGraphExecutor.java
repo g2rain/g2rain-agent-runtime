@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.execute;
 
 
+import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.GraphStep;
@@ -46,6 +47,11 @@ public class DefaultTaskGraphExecutor implements TaskGraphExecutor {
     private final GraphTransitionReducer graphTransitionReducer;
 
     /**
+     * 运行时配置：任务图调度步数上限。
+     */
+    private final RuntimeProperties runtimeProperties;
+
+    /**
      * 执行任务图直至完成、挂起或失败，并把 {@link ExecutorResult} 写入上下文。
      *
      * @param context 本轮上下文（须已有会话与 Task）
@@ -60,20 +66,22 @@ public class DefaultTaskGraphExecutor implements TaskGraphExecutor {
         }
 
         GraphFrame frame = context.graphFrame();
-        while (!frame.terminal()) {
+        int maxSteps = runtimeProperties.getPlan().getMaxGraphSteps();
+        int steps = 0;
+        while (!frame.terminal() && steps++ < maxSteps) {
             GraphStep step = graphKernel.next(frame);
             var reduce = graphTransitionReducer.reduce(frame, step);
             effectHandler.apply(frame, reduce);
         }
 
-        ExecutorResult halt = frame.halt();
-        // 停图副作用未挂回执时按成功收口，避免空结果阻断 finalize
-        ExecutorResult result;
-        if (Objects.nonNull(halt)) {
-            result = halt;
-        } else {
-            result = new ExecutorResult(TaskStatus.SUCCEEDED);
+        // 调度来回打转时不能无限跑下去：超出步数上限按失败收口
+        if (!frame.terminal()) {
+            Trace.at(TraceStage.GRAPH, "step_limit").kv("maxSteps", maxSteps).error();
+            frame.halt(new ExecutorResult(TaskStatus.FAILED));
         }
+
+        // 循环只在停图后退出，回执必然存在
+        ExecutorResult result = Objects.requireNonNull(frame.halt());
 
         turn.task().ifPresent(meta -> {
             meta.setStatus(result.status());

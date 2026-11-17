@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.domain.state.task;
 
 
+import com.g2rain.common.json.JsonCodec;
+import com.g2rain.common.json.JsonCodecFactory;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
@@ -22,6 +24,11 @@ import tools.jackson.databind.JsonNode;
 public record PendingAction(String toolName, JsonNode args, @Nullable String argsHash) {
 
     /**
+     * JSON 编解码。
+     */
+    private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
      * 创建尚未计算参数摘要的待确认动作。
      *
      * @param toolName 工具名
@@ -29,5 +36,22 @@ public record PendingAction(String toolName, JsonNode args, @Nullable String arg
      */
     public PendingAction(String toolName, JsonNode args) {
         this(toolName, args, null);
+    }
+
+    /**
+     * 从节点便签值还原待确认动作。
+     *
+     * <p>同一轮内便签保存的是本类型；跨轮水合后为通用结构，按 JSON 还原。</p>
+     *
+     * @param raw 便签值；可空
+     * @return 待确认动作；便签为空时为 {@code null}
+     */
+    public static @Nullable PendingAction from(@Nullable Object raw) {
+        return switch (raw) {
+            case null -> null;
+            case PendingAction typed -> typed;
+            // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
+            default -> JSON.str2obj(JSON.obj2str(raw), PendingAction.class);
+        };
     }
 }

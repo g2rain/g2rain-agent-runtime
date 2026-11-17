@@ -5,7 +5,7 @@ import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.hydrate.ExecutionMode;
 import com.g2rain.agent.runtime.domain.hydrate.OutputType;
 import com.g2rain.agent.runtime.domain.hydrate.ShareScope;
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
@@ -211,11 +211,12 @@ public final class ReactProjection {
     }
 
     /**
-     * 工具参数路径及缺参处理提示。
+     * 工具参数路径、缺参处理提示、允许取值（契约 {@code enumValues}，未配置不输出）与是否由平台填写
+     * （取值来自平台或契约常量时为 {@code true}，否则不输出）。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ArgItemView(String path, @Nullable String label, @Nullable String missingAction,
-                              @Nullable String missingTool) {
+                              @Nullable String missingTool, @Nullable List<String> allowed, @Nullable Boolean injected) {
 
     }
 }

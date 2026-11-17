@@ -1,6 +1,6 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
-import com.g2rain.agent.runtime.domain.hydrate.ValueRef;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Platform;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
@@ -10,6 +10,7 @@ import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.Map;
@@ -42,7 +43,7 @@ final class WorkingTree {
      * @return {@code {inputs, outputs, shared, session, prior, platform}}
      */
     static JsonNode of(ToolExecutionContext ctx) {
-        ObjectNode root = (ObjectNode) JSON.str2node("{}");
+        ObjectNode root = JsonNodeFactory.instance.objectNode();
         root.set(ValueRef.Bag.INPUTS.wirePrefix(), bag(ctx.scope().inputs()));
         root.set(ValueRef.Bag.OUTPUTS.wirePrefix(), bag(ctx.scope().outputs()));
         root.set(ValueRef.Bag.SHARED.wirePrefix(), bag(ctx.getFrame().turn().shared()));
@@ -85,7 +86,7 @@ final class WorkingTree {
      * @return 对象节点；空 Map 为空对象
      */
     private static JsonNode bag(Map<String, Sourced<?>> sourced) {
-        ObjectNode node = (ObjectNode) JSON.str2node("{}");
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
         sourced.forEach((key, value) -> {
             if (Strings.isBlank(key)) {
                 return;
@@ -109,7 +110,7 @@ final class WorkingTree {
      * @return prior 对象；无前情为空对象
      */
     private static JsonNode priorBag(ToolExecutionContext ctx) {
-        ObjectNode node = (ObjectNode) JSON.str2node("{}");
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
         ctx.getFrame().turn().prior().ifPresent(prior -> prior.entities().forEach((key, entry) -> {
             int colon = key.indexOf(':');
             if (colon <= 0 || colon == key.length() - 1) {
@@ -132,7 +133,7 @@ final class WorkingTree {
      * @return 对象节点
      */
     private static JsonNode priorEntityNode(String id, EntityEntry entry) {
-        ObjectNode node = (ObjectNode) JSON.str2node("{}");
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
         JsonNode attrs = entry.attrs();
         if (JSON.hasValue(attrs) && attrs.isObject()) {
             attrs.properties().forEach(field -> node.set(field.getKey(), field.getValue()));

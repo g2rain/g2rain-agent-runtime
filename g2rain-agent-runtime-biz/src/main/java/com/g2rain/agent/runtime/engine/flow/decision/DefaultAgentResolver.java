@@ -7,6 +7,7 @@ import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
+import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnDecision;
 import com.g2rain.agent.runtime.engine.TurnResult;
@@ -76,9 +77,12 @@ public final class DefaultAgentResolver implements AgentResolver {
 
         // 续跑且无显式 id：锁任务已绑定的 Agent，避免中途换人
         if (decision.shouldContinue()) {
-            AgentSelection fromTask = resolveTaskAgent(ctx.getTurn().task().orElse(null));
+            TaskMetadata task = ctx.getTurn().task().orElse(null);
+            AgentSelection fromTask = resolveTaskAgent(task);
             if (Objects.isNull(fromTask)) {
-                failNoMatch(ctx, RuntimeMessage.AGENT_MISSING, TurnStatus.FAILED, null);
+                Long boundAgentId = Objects.isNull(task) ? null : task.getAgentId();
+                RuntimeMessage reason = Objects.isNull(boundAgentId) ? RuntimeMessage.AGENT_MISSING : RuntimeMessage.AGENT_DISABLED;
+                failNoMatch(ctx, reason, TurnStatus.FAILED, boundAgentId);
                 return;
             }
 
@@ -132,7 +136,7 @@ public final class DefaultAgentResolver implements AgentResolver {
      * 从任务元数据解析绑定的 Agent。
      *
      * @param meta 当前任务元数据；可空
-     * @return 选中画像；无法解析则为 {@code null}
+     * @return 选中画像；未绑定或绑定的 Agent 未启用则为 {@code null}（不兜底）
      */
     private @Nullable AgentSelection resolveTaskAgent(@Nullable TaskMetadata meta) {
         if (Objects.isNull(meta)) {
@@ -140,16 +144,7 @@ public final class DefaultAgentResolver implements AgentResolver {
         }
 
         Long agentId = meta.getAgentId();
-        if (Objects.nonNull(agentId)) {
-            AgentSelection byId = agentCatalog.findActiveById(agentId);
-            if (Objects.nonNull(byId)) {
-                return byId;
-            }
-
-            return AgentSelection.of(agentId, null, null);
-        }
-
-        return null;
+        return Objects.isNull(agentId) ? null : agentCatalog.findActiveById(agentId);
     }
 
     /**
@@ -159,11 +154,7 @@ public final class DefaultAgentResolver implements AgentResolver {
      * @return 选中画像；无前情 Agent 或格式非法则为 {@code null}
      */
     private @Nullable AgentSelection resolveContinuityAgent(TurnScope turn) {
-        if (turn.records().isEmpty()) {
-            return null;
-        }
-
-        String agentId = turn.records().getFirst().agentId();
+        String agentId = turn.latestRecord().map(TaskRecord::agentId).orElse(null);
         if (Strings.isBlank(agentId)) {
             return null;
         }

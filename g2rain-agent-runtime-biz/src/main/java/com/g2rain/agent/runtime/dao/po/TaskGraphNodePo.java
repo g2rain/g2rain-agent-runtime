@@ -62,6 +62,11 @@ public class TaskGraphNodePo extends BasePo {
     private Boolean targetClaimed;
 
     /**
+     * 是否由技能契约 provider 声明自动补入
+     */
+    private Boolean providerInserted;
+
+    /**
      * 委派深度
      */
     private Integer delegateDepth;

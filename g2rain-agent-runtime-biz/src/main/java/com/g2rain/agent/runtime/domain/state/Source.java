@@ -1,5 +1,6 @@
 package com.g2rain.agent.runtime.domain.state;
 
+import com.g2rain.agent.runtime.spec.SourceType;
 
 /**
  * 值的可追溯来源。

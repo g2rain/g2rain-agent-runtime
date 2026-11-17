@@ -42,5 +42,5 @@ public record PromptAssembleRequest(List<ChatMessage> historyMessages, List<Tool
                                     @Nullable String profileText,
                                     @Nullable JsonNode ambient, @Nullable SkillContract contract,
                                     @Nullable String target, boolean targetClaimed,
-                                    List<EvidenceReader.UpstreamExtract> upstream) {
+                                    List<EvidenceReader.EvidenceExtract> upstream) {
 }

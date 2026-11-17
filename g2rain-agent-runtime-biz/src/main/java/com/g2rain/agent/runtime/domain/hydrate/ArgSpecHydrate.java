@@ -1,6 +1,8 @@
 package com.g2rain.agent.runtime.domain.hydrate;
 
 
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.common.utils.Strings;
 
 /**

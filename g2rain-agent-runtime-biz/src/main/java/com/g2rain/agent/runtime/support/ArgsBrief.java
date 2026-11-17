@@ -1,8 +1,8 @@
 package com.g2rain.agent.runtime.support;
 
 
-import com.g2rain.agent.runtime.domain.hydrate.ArgSpec;
-import com.g2rain.agent.runtime.domain.hydrate.ToolSpec;
+import com.g2rain.agent.runtime.spec.ArgSpec;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -42,9 +42,9 @@ public final class ArgsBrief {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 敏感字段替换值。
+     * 敏感值的替换文本：参数摘要、提示词中统一使用。
      */
-    private static final String MASK = "***";
+    public static final String MASK = "***";
 
     /**
      * 入参摘要工具；禁止实例化。
@@ -69,29 +69,24 @@ public final class ArgsBrief {
      * @return 合法 JSON 字符串，至少 {@code {}}
      */
     public static String of(@Nullable JsonNode args, @Nullable ToolSpec contract, int maxChars) {
-        int max = Math.max(1, maxChars);
+        return JsonClip.of(masked(args, contract), maxChars);
+    }
+
+    /**
+     * 脱敏后的入参副本，不裁剪长度；供需要逐字段读取的调用方直接使用，免去先序列化再解析。
+     *
+     * <pre>{@code
+     * ObjectNode masked = ArgsBrief.masked(pending.args(), spec);
+     * }</pre>
+     *
+     * @param args     原始入参；为空或非对象时按空对象或 {@code value} 包装处理
+     * @param contract 工具契约；为空则不屏蔽敏感字段
+     * @return 脱敏后的对象副本
+     */
+    public static ObjectNode masked(@Nullable JsonNode args, @Nullable ToolSpec contract) {
         ObjectNode root = copyObject(args);
         maskSensitive(root, contract);
-        String json = JSON.obj2str(root);
-        if (Strings.isBlank(json)) {
-            // 序列化失败也给合法 JSON，避免上游拼出空 brief
-            return "{}";
-        }
-
-        // 已在上限内则不再截短，保留脱敏后的完整结构
-        if (json.length() <= max) {
-            return json;
-        }
-
-        // 先截最长字符串叶子，尽量保住对象结构
-        shrinkStringLeaves(root, max);
-        json = JSON.obj2str(root);
-        if (json.length() <= max) {
-            return json;
-        }
-
-        // 字符串截短仍超长时折叠最大容器，保证输出始终是合法 JSON
-        return collapseToFit(root, max);
+        return root;
     }
 
     /**
@@ -182,177 +177,5 @@ public final class ArgsBrief {
         }
 
         return paths;
-    }
-
-    /**
-     * 保留键名，把最长的字符串叶子逐步截短，直到序列化长度不超过上限。
-     *
-     * @param root 就地修改的对象副本
-     * @param max  序列化长度上限
-     */
-    private static void shrinkStringLeaves(ObjectNode root, int max) {
-        for (int guard = 0; guard < 64; guard++) {
-            String json = JSON.obj2str(root);
-            if (Strings.isBlank(json) || json.length() <= max) {
-                return;
-            }
-
-            List<StringLeaf> leaves = collectStringLeaves(root);
-            // 没有字符串叶子可截则停，避免空转
-            if (leaves.isEmpty()) {
-                return;
-            }
-
-            leaves.sort((a, b) -> Integer.compare(b.value().length(), a.value().length()));
-            StringLeaf longest = leaves.getFirst();
-            int excess = json.length() - max;
-            int keep = Math.max(0, longest.value().length() - excess - 1);
-            setAt(root, longest.path(), JsonNodeFactory.instance.stringNode(
-                keep == 0 ? "" : longest.value().substring(0, keep)
-            ));
-        }
-    }
-
-    /**
-     * 仍超长时把最大的非标量节点收成空对象或空数组，保证合法 JSON。
-     *
-     * @param root 就地修改的对象副本
-     * @param max  序列化长度上限
-     * @return 不超过上限的 JSON；无法再折则 {@code {}}
-     */
-    private static String collapseToFit(ObjectNode root, int max) {
-        for (int guard = 0; guard < 32; guard++) {
-            String json = JSON.obj2str(root);
-            if (Strings.isBlank(json)) {
-                return "{}";
-            }
-
-            if (json.length() <= max) {
-                return json;
-            }
-
-            List<ContainerLeaf> containers = collectContainers(root);
-            // 没有可折叠容器则退回空对象，保证输出仍是合法 JSON
-            if (containers.isEmpty()) {
-                return "{}";
-            }
-
-            containers.sort((a, b) -> Integer.compare(b.size(), a.size()));
-            ContainerLeaf biggest = containers.getFirst();
-            setAt(root, biggest.path(), biggest.array()
-                ? JsonNodeFactory.instance.arrayNode()
-                : JsonNodeFactory.instance.objectNode());
-        }
-
-        String json = JSON.obj2str(root);
-        // 折叠次数用尽仍超长则退回空对象，保证调用方拿到合法 JSON
-        return Strings.isBlank(json) || json.length() > max ? "{}" : json;
-    }
-
-    /**
-     * 深度收集字符串叶子，供截短时挑选最长项。
-     *
-     * @param root 当前树
-     * @return 路径与字符串值
-     */
-    private static List<StringLeaf> collectStringLeaves(JsonNode root) {
-        List<StringLeaf> leaves = new ArrayList<>();
-        Deque<Frame> stack = new ArrayDeque<>();
-        stack.push(new Frame(root, ""));
-        while (!stack.isEmpty()) {
-            Frame frame = stack.pop();
-            JsonNode node = frame.node();
-            if (node.isString()) {
-                leaves.add(new StringLeaf(frame.path(), node.asString()));
-                continue;
-            }
-
-            if (node.isObject()) {
-                for (var field : node.properties()) {
-                    String child = Strings.isBlank(frame.path()) ? field.getKey() : frame.path() + "." + field.getKey();
-                    stack.push(new Frame(field.getValue(), child));
-                }
-            } else if (node.isArray()) {
-                for (int i = 0, n = node.size(); i < n; i++) {
-                    String child = frame.path() + "[" + i + "]";
-                    stack.push(new Frame(node.get(i), child));
-                }
-            }
-        }
-
-        return leaves;
-    }
-
-    /**
-     * 深度收集非根的非空对象或数组，供折叠时挑选最大项。
-     *
-     * @param root 当前树
-     * @return 路径、子项数量和是否数组
-     */
-    private static List<ContainerLeaf> collectContainers(JsonNode root) {
-        List<ContainerLeaf> containers = new ArrayList<>();
-        Deque<Frame> stack = new ArrayDeque<>();
-        stack.push(new Frame(root, ""));
-        while (!stack.isEmpty()) {
-            Frame frame = stack.pop();
-            JsonNode node = frame.node();
-            if (node.isObject()) {
-                if (Strings.isNotBlank(frame.path()) && !node.isEmpty()) {
-                    containers.add(new ContainerLeaf(frame.path(), node.size(), false));
-                }
-
-                for (var field : node.properties()) {
-                    String child = Strings.isBlank(frame.path()) ? field.getKey() : frame.path() + "." + field.getKey();
-                    stack.push(new Frame(field.getValue(), child));
-                }
-            } else if (node.isArray()) {
-                if (Strings.isNotBlank(frame.path()) && !node.isEmpty()) {
-                    containers.add(new ContainerLeaf(frame.path(), node.size(), true));
-                }
-
-                for (int i = 0, n = node.size(); i < n; i++) {
-                    stack.push(new Frame(node.get(i), frame.path() + "[" + i + "]"));
-                }
-            }
-        }
-
-        return containers;
-    }
-
-    /**
-     * 按路径覆盖节点；空路径不写，避免把整棵树换成标量。
-     *
-     * @param root  对象根
-     * @param path  点/下标路径
-     * @param value 新值
-     */
-    private static void setAt(ObjectNode root, String path, JsonNode value) {
-        // 空路径不覆盖根，避免把整棵树换成标量后无法再当对象摘要
-        if (Strings.isBlank(path)) {
-            return;
-        }
-
-        JSON.upsertNode(root, path, value, true);
-    }
-
-    /**
-     * 遍历帧：当前节点及其路径。
-     */
-    private record Frame(JsonNode node, String path) {
-
-    }
-
-    /**
-     * 字符串叶子：路径与原文。
-     */
-    private record StringLeaf(String path, String value) {
-
-    }
-
-    /**
-     * 可折叠容器：路径、子项数、是否数组。
-     */
-    private record ContainerLeaf(String path, int size, boolean array) {
-
     }
 }

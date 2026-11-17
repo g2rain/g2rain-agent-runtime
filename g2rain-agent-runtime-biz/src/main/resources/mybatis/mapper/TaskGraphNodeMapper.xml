@@ -19,6 +19,7 @@
         <result column="skill_key" property="skillKey" jdbcType="VARCHAR"/>
         <result column="target" property="target" jdbcType="VARCHAR"/>
         <result column="target_claimed" property="targetClaimed" jdbcType="TINYINT"/>
+        <result column="provider_inserted" property="providerInserted" jdbcType="TINYINT"/>
         <result column="delegate_depth" property="delegateDepth" jdbcType="INTEGER"/>
         <result column="status" property="status" jdbcType="VARCHAR"/>
         <result column="result" property="result" jdbcType="VARCHAR"/>
@@ -127,7 +128,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, provider_inserted, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -138,7 +139,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{target, jdbcType=VARCHAR}, #{targetClaimed, jdbcType=TINYINT}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{result, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{state, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{objective, jdbcType=VARCHAR}, #{skillKey, jdbcType=VARCHAR}, #{target, jdbcType=VARCHAR}, #{targetClaimed, jdbcType=TINYINT}, #{providerInserted, jdbcType=TINYINT}, #{delegateDepth, jdbcType=INTEGER}, #{status, jdbcType=VARCHAR}, #{result, jdbcType=VARCHAR}, #{errorCode, jdbcType=VARCHAR}, #{errorMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{state, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -179,6 +180,9 @@
             <if test="targetClaimed != null">
                 target_claimed = #{targetClaimed, jdbcType=TINYINT},
             </if>
+            <if test="providerInserted != null">
+                provider_inserted = #{providerInserted, jdbcType=TINYINT},
+            </if>
             <if test="delegateDepth != null">
                 delegate_depth = #{delegateDepth, jdbcType=INTEGER},
             </if>
@@ -217,7 +221,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, provider_inserted, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -236,7 +240,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, provider_inserted, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -340,7 +344,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, provider_inserted, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -353,7 +357,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.target, jdbcType=VARCHAR}, #{item.targetClaimed, jdbcType=TINYINT}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.result, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.state, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.objective, jdbcType=VARCHAR}, #{item.skillKey, jdbcType=VARCHAR}, #{item.target, jdbcType=VARCHAR}, #{item.targetClaimed, jdbcType=TINYINT}, #{item.providerInserted, jdbcType=TINYINT}, #{item.delegateDepth, jdbcType=INTEGER}, #{item.status, jdbcType=VARCHAR}, #{item.result, jdbcType=VARCHAR}, #{item.errorCode, jdbcType=VARCHAR}, #{item.errorMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.state, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -399,6 +403,9 @@
             </if>
             <if test="targetClaimed != null">
                 target_claimed = #{targetClaimed, jdbcType=TINYINT},
+            </if>
+            <if test="providerInserted != null">
+                provider_inserted = #{providerInserted, jdbcType=TINYINT},
             </if>
             <if test="delegateDepth != null">
                 delegate_depth = #{delegateDepth, jdbcType=INTEGER},

@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.domain.hydrate;
 
-import com.g2rain.agent.runtime.domain.state.SourceType;
+import com.g2rain.agent.runtime.spec.EntitySpec;
+import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.common.utils.Collections;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -57,7 +58,7 @@ public class OutputSpec {
     private @Nullable ShareScope share;
 
     /**
-     * 敏感值只存 handle。
+     * 敏感产出：提示词中显示为 {@code ***}、写入调用的参数摘要中打码；下游参数绑定仍取原值。
      */
     private boolean sensitive;
 

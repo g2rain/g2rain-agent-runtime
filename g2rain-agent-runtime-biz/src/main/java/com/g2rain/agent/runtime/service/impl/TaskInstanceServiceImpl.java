@@ -90,6 +90,18 @@ public class TaskInstanceServiceImpl implements TaskInstanceService {
     }
 
     @Override
+    public List<TaskInstanceVo> selectLatest(String conversationId, int limit) {
+        TaskInstanceSelectDto query = new TaskInstanceSelectDto();
+        query.setConversationId(conversationId);
+        query.setSorts(List.of("finishedTime,desc", "id,desc"));
+        Page<TaskInstancePo> page = PageContext.of(1, limit, false, () -> taskInstanceDao.selectList(query));
+        return page.getResult()
+            .stream()
+            .map(TaskInstanceConverter.INSTANCE::po2vo)
+            .toList();
+    }
+
+    @Override
     public Long save(TaskInstanceDto dto) {
         if (Objects.isNull(dto.getOrganId())) {
             dto.setOrganId(PrincipalContextHolder.getOrganId());

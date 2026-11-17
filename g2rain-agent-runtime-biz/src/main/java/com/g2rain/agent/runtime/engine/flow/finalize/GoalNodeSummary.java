@@ -3,6 +3,8 @@ package com.g2rain.agent.runtime.engine.flow.finalize;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
+
 /**
  * 证据包里单个节点的事实。
  *
@@ -17,11 +19,25 @@ import org.jspecify.annotations.Nullable;
  * @param writable  节点所用技能是否有写工具
  * @param delegated 是否为委派出的前置节点
  * @param result    节点结论；未完成为空
+ * @param evidence  节点最近的成功调用摘要，用于核对结论是否有依据
  * @author alpha
  * @since 2026/8/21
  */
 public record GoalNodeSummary(String nodeId, @Nullable String title, @Nullable String objective, String status,
                               @Nullable String target, boolean claimed, boolean writable, boolean delegated,
-                              @Nullable String result) {
+                              @Nullable String result, List<Call> evidence) {
 
+    public GoalNodeSummary {
+        evidence = List.copyOf(evidence);
+    }
+
+    /**
+     * 一次成功调用的摘要。
+     *
+     * @param tool   工具注册名
+     * @param result 结果摘要
+     */
+    public record Call(String tool, String result) {
+
+    }
 }

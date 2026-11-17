@@ -1,4 +1,4 @@
-package com.g2rain.agent.runtime.domain.hydrate;
+package com.g2rain.agent.runtime.spec;
 
 
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * 参数 {@code from} 解析结果：数据袋 + 袋内相对路径。
  *
- * <p>装载期由 {@link ArgSpecHydrate} 调用 {@link #parse(String)}；非法前缀抛
+ * <p>装载期由契约装载逻辑调用 {@link #parse(String)}；非法前缀抛
  * {@code ILLEGAL_SOURCE}。{@link #isKnown} 只做形态判断，不抛异常。</p>
  *
  * @param bag  数据袋

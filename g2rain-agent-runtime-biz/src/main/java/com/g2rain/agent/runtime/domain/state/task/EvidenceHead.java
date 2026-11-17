@@ -1,7 +1,7 @@
 package com.g2rain.agent.runtime.domain.state.task;
 
-
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;

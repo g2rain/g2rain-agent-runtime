@@ -68,9 +68,14 @@ public interface TurnScope {
     List<DialogueMessage> allDialogue();
 
     /**
-     * @return 已结束任务的回合摘要
+     * @return 已结束任务的回合摘要，时间正序（最新一条在末尾）
      */
     List<TaskRecord> records();
+
+    /**
+     * @return 最近结束的一条任务记录；没有为空
+     */
+    Optional<TaskRecord> latestRecord();
 
     /**
      * @return 会话记忆实体索引，field = type:id

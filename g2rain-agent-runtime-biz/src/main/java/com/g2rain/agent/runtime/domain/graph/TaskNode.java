@@ -47,7 +47,7 @@ public class TaskNode {
 
     /**
      * 完成目标：本节点要完成的写工具注册名；纯查询节点为空。
-     * <p>取值顺序：规划输出 → 技能契约默认 target → 执行中首个实际发起的写调用。finish 时须该工具成功。</p>
+     * <p>取值顺序：规划输出 → 技能契约默认 target → 执行中实际发起的写调用（自动认领的目标在写成功前可被下一次写调用替换）。finish 时须该工具成功。</p>
      */
     private @Nullable String target;
 
@@ -55,6 +55,11 @@ public class TaskNode {
      * 完成目标是否由执行中首个写调用自动记录；为 {@code true} 时它可能只是前置写操作，GoalGate 须交模型核验。
      */
     private boolean targetClaimed;
+
+    /**
+     * 是否由技能契约 {@code inputs.provider} 自动补入的前置节点；仅此类节点在共享产出已存在时可 SKIPPED。
+     */
+    private boolean providerInserted;
 
     /**
      * 当前生命周期状态；新建节点默认等待依赖检查。

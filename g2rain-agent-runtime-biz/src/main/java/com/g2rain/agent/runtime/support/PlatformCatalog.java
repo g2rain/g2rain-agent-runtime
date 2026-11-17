@@ -24,7 +24,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 平台字段目录：构造时内省 {@link BasePrincipal}，按 hidden 过滤后供本轮快照与契约校验。
+ * 平台字段目录：构造时内省 {@link BasePrincipal}，只保留 exposed 白名单内的属性，供本轮快照与契约校验。
  *
  * <p>getter 表在 Bean 生命周期内只读。{@link #capture} 把当前 principal 写成
  * {@link Platform} 快照；{@link #supports} 判断契约 {@code from: platform.x} 是否合法。
@@ -52,20 +52,20 @@ public class PlatformCatalog {
     private final Set<String> keys;
 
     /**
-     * 按配置的 hidden 列表内省 {@link BasePrincipal}。
+     * 按配置的 exposed 白名单内省 {@link BasePrincipal}。
      *
-     * @param runtimeProperties 提供 platform.hidden；被列出的属性不会进入目录
+     * @param runtimeProperties 提供 platform.exposed；只有列出的属性进入目录
      */
     public PlatformCatalog(RuntimeProperties runtimeProperties) {
-        Set<String> hidden = new LinkedHashSet<>(runtimeProperties.getPlatform().getHidden());
+        Set<String> exposed = runtimeProperties.getPlatform().getExposed();
         Map<String, Method> map = new LinkedHashMap<>();
         try {
             BeanInfo info = Introspector.getBeanInfo(BasePrincipal.class, Object.class);
             for (PropertyDescriptor pd : info.getPropertyDescriptors()) {
                 String name = pd.getName();
                 Method read = pd.getReadMethod();
-                // 无 getter 或配置为 hidden 的属性不进入目录
-                if (Strings.isBlank(name) || Objects.isNull(read) || hidden.contains(name)) {
+                // 无 getter 或不在白名单内的属性不进入目录
+                if (Strings.isBlank(name) || Objects.isNull(read) || !exposed.contains(name)) {
                     continue;
                 }
 
@@ -120,7 +120,7 @@ public class PlatformCatalog {
      * 判断契约 {@code from: platform.x} 是否指向目录内字段。
      *
      * @param key 平台字段名；空白则不支持
-     * @return 是否存在且未被 hidden
+     * @return 是否存在且在白名单内
      */
     public boolean supports(@Nullable String key) {
         return Strings.isNotBlank(key) && getters.containsKey(key.trim());
