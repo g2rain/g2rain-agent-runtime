@@ -87,7 +87,7 @@ public class WriteGateInterceptor implements ToolInterceptor {
 
         JsonNode args = request.args();
         String idempotencyKey = IdempotencyKeyBuilder.effectiveKey(request.toolName(), contract, args);
-        ToolCall call = new ToolCall(request.toolName(), args, idempotencyKey, SideEffect.WRITE, contract);
+        ToolCall call = new ToolCall(request.callId(), request.toolName(), args, idempotencyKey, SideEffect.WRITE, contract);
         // 同一写操作已成功则直接复用、仍在进行或待核实则等待，都不再申请确认
         Optional<PrewriteResult> existing = stateFacade.existing(request.context().scope(), call);
         if (existing.isPresent()) {

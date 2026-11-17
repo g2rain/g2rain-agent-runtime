@@ -177,6 +177,7 @@
 | `task_checkpoint` | 断点：`checkpoint_id`、`node_id`、`type`、`question`、`expected_fields`、`allowed_actions`、`suggestions`、`pending_action` | 轮末写；断点被消费时逻辑删除（`delete_flag=1`） | 断点回灌 |
 | `task_resume_record` | 断点恢复记录：`resume_id`、`checkpoint_id`、`message_id`、`resume_action`、`acted_at` | 断点被消费时插入 | 审计用 |
 | `tool_call_record` | 工具调用：`call_id`（即 evidenceId）、`tool_name`、`side_effect`、`request`、`args_hash`、`idempotency_key`、`round`、`response`、`result_summary`、`entities`、`payload_id`、`call_status`、`business_ok`、`empty_result`、`failure_kind`、`error_code`、`error_message`、`duration_ms` | 写工具在 S2 插入、S3 更新；读工具在结算时插入；轮末补写证据状态 | 证据回灌、写操作去重 |
+| `tool_block_record` | 业务工具拦截：`call_id`（与证据同源）、`skill_key`、`skill_pin`、`tool_name`、`blocked_by`、`error_code`、`reason_code`、`message`、`next_step`、`args`（脱敏摘要）、`round`、`trace_id` | 拦截器 before 短路业务工具时同步插入；写入失败不影响拦截结论 | 会话轨迹与工具调用按时间合并展示 |
 | `task_node_payload` | 大对象：`payload_id`、`payload_type`（`ARTIFACT` 报文 / `OUTPUT` 节点空间字段）、`payload_data` | 报文或节点空间字段超过阈值时写 | 读取超大报文或溢出字段 |
 
 ---

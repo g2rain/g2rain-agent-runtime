@@ -9,9 +9,10 @@ import tools.jackson.databind.JsonNode;
 /**
  * 一次待执行工具调用的不可变描述。
  *
- * <p>对象把工具名、业务参数、副作用等级和契约绑定在一起，供预写校验、幂等计算和实际
+ * <p>对象把调用标识、工具名、业务参数、副作用等级和契约绑定在一起，供预写校验、幂等计算和实际
  * 调用共同使用。未声明业务幂等键时，调用方应根据规范化后的参数计算兜底指纹。</p>
  *
+ * @param callId         本次调用标识（与证据 id / 拦截记录同源）
  * @param toolName       工具名
  * @param args           业务入参
  * @param idempotencyKey 契约幂等键；未配置为空，由 argsHash 兜底
@@ -20,18 +21,20 @@ import tools.jackson.databind.JsonNode;
  * @author alpha
  * @since 2026/10/3
  */
-public record ToolCall(String toolName, JsonNode args, @Nullable String idempotencyKey, SideEffect sideEffect,
-                       @Nullable ToolSpec contract) {
+public record ToolCall(String callId, String toolName, JsonNode args, @Nullable String idempotencyKey,
+                       SideEffect sideEffect, @Nullable ToolSpec contract) {
 
     /**
      * 创建不带工具契约的调用描述，适用于内置控制工具或测试路径。
      *
+     * @param callId         本次调用标识
      * @param toolName       工具名
      * @param args           工具参数
      * @param idempotencyKey 业务幂等键；可空
      * @param sideEffect     副作用等级
      */
-    public ToolCall(String toolName, JsonNode args, @Nullable String idempotencyKey, SideEffect sideEffect) {
-        this(toolName, args, idempotencyKey, sideEffect, null);
+    public ToolCall(String callId, String toolName, JsonNode args, @Nullable String idempotencyKey,
+                    SideEffect sideEffect) {
+        this(callId, toolName, args, idempotencyKey, sideEffect, null);
     }
 }

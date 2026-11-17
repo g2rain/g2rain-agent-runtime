@@ -342,7 +342,7 @@ public class EvidenceFlow {
      */
     private EvidenceHead startedOf(DefaultNodeScope node, ToolCall call) {
         String argsBrief = ArgsBrief.of(call.args(), call.contract(), properties.getReact().getBriefMaxChars());
-        return new EvidenceHead(RuntimeUtils.uuid(), call.toolName(), call.sideEffect(), EvidenceStatus.STARTED,
+        return new EvidenceHead(call.callId(), call.toolName(), call.sideEffect(), EvidenceStatus.STARTED,
             null, null, null, FailureKind.NONE, liveKey(call), RuntimeUtils.argsHash(call.args()), argsBrief,
             null, null, null, null, node.rounds(), node.turn().traceId(), null);
     }

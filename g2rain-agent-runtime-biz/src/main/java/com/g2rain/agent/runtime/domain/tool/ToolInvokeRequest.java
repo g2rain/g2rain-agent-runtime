@@ -4,6 +4,7 @@ package com.g2rain.agent.runtime.domain.tool;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.Source;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -84,6 +85,11 @@ public final class ToolInvokeRequest {
     private @Nullable Long durationMs;
 
     /**
+     * 本次调用标识；构造时生成，之后不变。
+     */
+    private final String callId;
+
+    /**
      * ArgBinding 写入的参数来源（paramPath → Source）。
      */
     private final Map<String, Source> argSources = new LinkedHashMap<>();
@@ -91,7 +97,7 @@ public final class ToolInvokeRequest {
     /**
      * 组装调用请求并绑定工具回调。
      *
-     * <p>构造时按原文生成指纹，并从当前技能契约解析工具配置。</p>
+     * <p>构造时生成调用标识、按原文生成指纹，并从当前技能契约解析工具配置。</p>
      *
      * @param context  执行上下文
      * @param callback 可用工具回调
@@ -104,6 +110,14 @@ public final class ToolInvokeRequest {
         this.contract = skillTool();
         this.rawArguments = args;
         this.rawFingerprint = ToolExecutionContext.fingerprintOf(toolName, args);
+        this.callId = RuntimeUtils.uuid();
+    }
+
+    /**
+     * @return 本次调用标识
+     */
+    public String callId() {
+        return this.callId;
     }
 
     /**

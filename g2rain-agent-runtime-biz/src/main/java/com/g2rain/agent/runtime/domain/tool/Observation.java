@@ -17,16 +17,17 @@ import java.util.Objects;
  * {@code Observation.rejected(RuntimeErrorCode.ARG_REJECTED, "缺少必填参数 [buyer]", "补齐后再调用")}，
  * 后者的说明为 {@code 缺少必填参数 [buyer]。下一步：补齐后再调用}。</p>
  *
- * @param outcome   结论类型
- * @param text      成功摘要，或非成功的原因
- * @param next      模型下一步；成功时为 {@code null}，非成功时必填
- * @param data      业务载荷；执行前被拦下时为 {@code null}
- * @param errorCode 错误码；成功时为 {@code null}，非成功时必填
+ * @param outcome    结论类型
+ * @param text       成功摘要，或非成功的原因
+ * @param next       模型下一步；成功时为 {@code null}，非成功时必填
+ * @param data       业务载荷；执行前被拦下时为 {@code null}
+ * @param errorCode  错误码；成功时为 {@code null}，非成功时必填
+ * @param reasonCode 扩展点原因编码（如 {@code Denial.code}）；可空
  * @author alpha
  * @since 2026/8/21
  */
 public record Observation(Outcome outcome, String text, @Nullable String next, @Nullable JsonNode data,
-                          @Nullable RuntimeErrorCode errorCode) {
+                          @Nullable RuntimeErrorCode errorCode, @Nullable String reasonCode) {
 
     /**
      * 原因与下一步之间的连接语。
@@ -55,7 +56,7 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * @return 成功观测
      */
     public static Observation success(String message, @Nullable JsonNode data) {
-        return new Observation(Outcome.SUCCESS, message, null, data, null);
+        return new Observation(Outcome.SUCCESS, message, null, data, null, null);
     }
 
     /**
@@ -80,7 +81,7 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * @return 失败观测
      */
     public static Observation failed(RuntimeErrorCode errorCode, String reason, String next, @Nullable JsonNode data) {
-        return new Observation(Outcome.FAILED, reason, next, data, errorCode);
+        return new Observation(Outcome.FAILED, reason, next, data, errorCode, null);
     }
 
     /**
@@ -92,7 +93,21 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * @return 拒绝观测
      */
     public static Observation rejected(RuntimeErrorCode errorCode, String reason, String next) {
-        return new Observation(Outcome.REJECTED, reason, next, null, errorCode);
+        return rejected(errorCode, reason, next, null);
+    }
+
+    /**
+     * 调用违反规则，执行前被拒，并带扩展点原因编码。
+     *
+     * @param errorCode  错误码
+     * @param reason     拒绝原因
+     * @param next       模型下一步
+     * @param reasonCode 扩展点原因编码；可空
+     * @return 拒绝观测
+     */
+    public static Observation rejected(RuntimeErrorCode errorCode, String reason, String next,
+                                       @Nullable String reasonCode) {
+        return new Observation(Outcome.REJECTED, reason, next, null, errorCode, reasonCode);
     }
 
     /**
@@ -104,7 +119,7 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * @return 推迟观测
      */
     public static Observation deferred(RuntimeErrorCode errorCode, String reason, String next) {
-        return new Observation(Outcome.DEFERRED, reason, next, null, errorCode);
+        return new Observation(Outcome.DEFERRED, reason, next, null, errorCode, null);
     }
 
     /**
@@ -116,7 +131,7 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * @return 新观测
      */
     public Observation withNext(String next) {
-        return new Observation(outcome, text, next, data, errorCode);
+        return new Observation(outcome, text, next, data, errorCode, reasonCode);
     }
 
     /**

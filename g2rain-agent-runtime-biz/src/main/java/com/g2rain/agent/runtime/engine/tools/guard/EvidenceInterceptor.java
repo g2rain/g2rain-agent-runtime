@@ -71,7 +71,7 @@ public class EvidenceInterceptor implements ToolInterceptor {
             stateFacade.settle(request.context().scope(), evidenceId, toolResult);
         } else {
             JsonNode args = request.args();
-            ToolCall call = new ToolCall(request.toolName(), args, null, SideEffect.NONE, request.contract());
+            ToolCall call = new ToolCall(request.callId(), request.toolName(), args, null, SideEffect.NONE, request.contract());
             stateFacade.record(request.context().scope(), call, toolResult);
         }
 

@@ -14,6 +14,7 @@ import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
 import com.g2rain.agent.runtime.spi.Fact;
+import com.g2rain.agent.runtime.spi.Lookup;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
@@ -99,6 +100,7 @@ class GuardInterceptorTest {
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
         assertEquals(Outcome.REJECTED, observation.outcome());
         assertEquals(RuntimeErrorCode.GUARD_DENIED, observation.errorCode());
+        assertEquals("SHAPE_FAIL", observation.reasonCode());
         assertEquals("前置不满足", observation.text());
         assertEquals("先补齐事实", observation.next());
     }
@@ -152,6 +154,9 @@ class GuardInterceptorTest {
             JsonCodecFactory.instance().str2node("\"U\""));
         EvidenceReader evidenceReader = mock(EvidenceReader.class);
         when(evidenceReader.nodeExtracts(any())).thenReturn(List.of(local, upstream));
+        when(evidenceReader.nodeLookups(any())).thenReturn(List.of(
+            new Lookup("local_tool", JsonNodeFactory.instance.objectNode().put("q", 1))
+        ));
 
         ToolExecutionContext context = readyContext();
         when(context.getSkill()).thenReturn(new Skill("cms.article", null, List.of("save"), null, null, null, "pin-9"));
@@ -164,6 +169,7 @@ class GuardInterceptorTest {
         when(request.args()).thenReturn(args);
         when(request.argSources()).thenReturn(argSources);
         when(request.toolName()).thenReturn("save");
+        when(request.callId()).thenReturn("call-1");
 
         GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), evidenceReader);
         assertTrue(interceptor.before(request).isEmpty());
@@ -174,6 +180,9 @@ class GuardInterceptorTest {
         assertEquals("cms.article", view.skillKey());
         assertEquals("save", view.toolName());
         assertEquals("pin-9", view.pin());
+        assertEquals("call-1", view.callId());
+        assertEquals(1, view.lookups().size());
+        assertEquals("local_tool", view.lookups().getFirst().toolName());
         assertEquals(SourceType.EVIDENCE, view.sources().get("id"));
         assertEquals(List.of(
             new Fact("local_tool", "localKey", JsonCodecFactory.instance().str2node("\"L\"")),
@@ -231,6 +240,7 @@ class GuardInterceptorTest {
     private static EvidenceReader emptyEvidence() {
         EvidenceReader evidenceReader = mock(EvidenceReader.class);
         when(evidenceReader.nodeExtracts(any())).thenReturn(List.of());
+        when(evidenceReader.nodeLookups(any())).thenReturn(List.of());
         return evidenceReader;
     }
 
@@ -248,6 +258,7 @@ class GuardInterceptorTest {
         when(request.context()).thenReturn(context);
         when(request.toolCallback()).thenReturn(callback);
         when(request.toolName()).thenReturn("save");
+        when(request.callId()).thenReturn("call-test");
         when(request.args()).thenReturn(JsonNodeFactory.instance.objectNode());
         when(request.argSources()).thenReturn(Map.of());
         return request;

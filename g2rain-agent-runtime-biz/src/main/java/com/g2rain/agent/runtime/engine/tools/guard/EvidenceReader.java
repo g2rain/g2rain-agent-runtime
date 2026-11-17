@@ -5,6 +5,7 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.spec.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
@@ -14,6 +15,7 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
+import com.g2rain.agent.runtime.spi.Lookup;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -22,6 +24,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -328,6 +332,65 @@ public class EvidenceReader {
         }
 
         return extracts;
+    }
+
+    /**
+     * 本节点及上游已成功的读工具调用。
+     *
+     * <p>遍历范围与顺序与 {@link #nodeExtracts} 一致；
+     * 条件为 {@code sideEffect == NONE}、{@code status == SUCCESS}、{@code businessOk} 不为 {@code false}，
+     * 不论结果是否为空。入参取证据头 {@code argsBrief} 解析为 JSON；不是合法 JSON 对象时为空对象。</p>
+     *
+     * @param ctx 当前工具执行上下文
+     * @return 已成功读调用；没有为空列表
+     */
+    public List<Lookup> nodeLookups(ToolExecutionContext ctx) {
+        List<Lookup> lookups = new ArrayList<>();
+        appendLookups(lookups, ctx.scope().evidence());
+        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
+            appendLookups(lookups, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
+        }
+
+        return lookups;
+    }
+
+    /**
+     * 把某节点成功读调用追加到列表（新的在前）。
+     *
+     * @param lookups  输出列表
+     * @param evidence 该节点全部证据（按发生顺序）
+     */
+    private static void appendLookups(List<Lookup> lookups, List<EvidenceHead> evidence) {
+        for (int i = evidence.size() - 1; i >= 0; i--) {
+            EvidenceHead head = evidence.get(i);
+            if (head.sideEffect() != SideEffect.NONE || !isToolCallSuccess(head)) {
+                continue;
+            }
+
+            lookups.add(new Lookup(head.toolName(), argsOf(head.argsBrief())));
+        }
+    }
+
+    /**
+     * 证据头参数摘要 → JSON 对象；空白或非法时为空对象。
+     *
+     * @param argsBrief 参数摘要；可空
+     * @return JSON 对象
+     */
+    private static ObjectNode argsOf(@Nullable String argsBrief) {
+        if (Strings.isBlank(argsBrief)) {
+            return JsonNodeFactory.instance.objectNode();
+        }
+
+        try {
+            if (JSON.str2node(argsBrief) instanceof ObjectNode object) {
+                return object;
+            }
+        } catch (RuntimeException _) {
+            // 摘要不是合法 JSON：交给 Guard 空对象，不抛
+        }
+
+        return JsonNodeFactory.instance.objectNode();
     }
 
     /**

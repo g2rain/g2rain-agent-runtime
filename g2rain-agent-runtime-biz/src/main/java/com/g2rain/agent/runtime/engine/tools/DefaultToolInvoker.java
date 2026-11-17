@@ -3,10 +3,14 @@ package com.g2rain.agent.runtime.engine.tools;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
+import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
+import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
+import com.g2rain.agent.runtime.dto.ToolBlockRecordDto;
+import com.g2rain.agent.runtime.engine.state.repo.BlockRepository;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.ArgsBrief;
@@ -20,6 +24,7 @@ import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
+import com.g2rain.common.web.PrincipalContextHolder;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
@@ -98,6 +103,11 @@ public class DefaultToolInvoker implements ToolInvoker {
     private final RuntimeProperties runtimeProperties;
 
     /**
+     * 业务工具拦截记录仓储。
+     */
+    private final BlockRepository blockRepository;
+
+    /**
      * 创建工具调用编排器。
      *
      * <p>拦截器按 Spring 的 order 元数据排序，并在调用结束时反向执行 after 逻辑，
@@ -106,13 +116,15 @@ public class DefaultToolInvoker implements ToolInvoker {
      * @param interceptors      调用前后拦截器；允许为空集合
      * @param toolEvents        工具开始提示发布器
      * @param runtimeProperties 运行时配置
+     * @param blockRepository   拦截记录仓储
      */
     public DefaultToolInvoker(List<ToolInterceptor> interceptors, ToolEvents toolEvents,
-                              RuntimeProperties runtimeProperties) {
+                              RuntimeProperties runtimeProperties, BlockRepository blockRepository) {
         // 构造期按 order 排成固定序列，调用期不再重排，保证 before 正序与 after 逆序成对
         this.interceptors = interceptors.stream().sorted(AnnotationAwareOrderComparator.INSTANCE).toList();
         this.toolEvents = toolEvents;
         this.runtimeProperties = runtimeProperties;
+        this.blockRepository = blockRepository;
     }
 
     /**
@@ -139,8 +151,10 @@ public class DefaultToolInvoker implements ToolInvoker {
         for (ToolInterceptor interceptor : interceptors) {
             Optional<Observation> blocked = interceptor.before(request);
             if (blocked.isPresent()) {
-                trace(request, blocked.get(), interceptor, start);
-                return blocked.get();
+                Observation obs = blocked.get();
+                recordBlock(request, obs, interceptor);
+                trace(request, obs, interceptor, start);
+                return obs;
             }
         }
 
@@ -158,6 +172,53 @@ public class DefaultToolInvoker implements ToolInvoker {
         trace(request, obs, null, start);
         toolEvents.finished(stepId, request, obs, argsBrief(request));
         return obs;
+    }
+
+    /**
+     * 业务工具被 before 短路时写入拦截记录；内置工具跳过。写入失败只记 WARN，不影响拦截结论。
+     *
+     * @param request     工具调用请求
+     * @param obs         短路观测
+     * @param interceptor 拦下调用的拦截器
+     */
+    private void recordBlock(ToolInvokeRequest request, Observation obs, ToolInterceptor interceptor) {
+        RuntimeErrorCode errorCode = obs.errorCode();
+        if (ToolCallbacks.isBuiltin(request.toolCallback()) || Objects.isNull(errorCode)) {
+            return;
+        }
+
+        String blockedBy = ClassUtils.getUserClass(interceptor).getSimpleName();
+        ToolExecutionContext context = request.context();
+        String skillKey = context.getSkillKey();
+        if (Strings.isBlank(skillKey)) {
+            log.warn("skip tool block record: blank skillKey tool={} callId={} blockedBy={}",
+                request.toolName(), request.callId(), blockedBy);
+            return;
+        }
+
+        try {
+            Skill skill = context.getSkill();
+            ToolBlockRecordDto dto = new ToolBlockRecordDto();
+            dto.setOrganId(PrincipalContextHolder.getOrganId());
+            dto.setTaskId(context.getTaskId());
+            dto.setNodeId(context.getNodeId());
+            dto.setRound(context.scope().rounds());
+            dto.setCallId(request.callId());
+            dto.setSkillKey(skillKey);
+            dto.setSkillPin(Objects.isNull(skill) ? null : skill.pin());
+            dto.setToolName(request.toolName());
+            dto.setBlockedBy(blockedBy);
+            dto.setErrorCode(errorCode.code());
+            dto.setReasonCode(obs.reasonCode());
+            dto.setMessage(obs.text());
+            dto.setNextStep(obs.next());
+            dto.setArgs(argsBrief(request));
+            dto.setTraceId(context.scope().turn().traceId());
+            blockRepository.insert(dto);
+        } catch (RuntimeException ex) {
+            log.warn("failed to persist tool block record tool={} callId={} blockedBy={}",
+                request.toolName(), request.callId(), blockedBy, ex);
+        }
     }
 
     /**

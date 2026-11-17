@@ -13,11 +13,13 @@ import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
 import com.g2rain.agent.runtime.spi.Fact;
+import com.g2rain.agent.runtime.spi.Lookup;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Strings;
+import com.g2rain.common.web.PrincipalContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
@@ -82,7 +84,7 @@ public class GuardInterceptor implements ToolInterceptor {
                     Denial denied = denial.get();
                     traceDenied(skillKey, request.toolName(), call.pin(), denied.code());
                     return Optional.of(Observation.rejected(
-                        RuntimeErrorCode.GUARD_DENIED, denied.message(), denied.nextStep()));
+                        RuntimeErrorCode.GUARD_DENIED, denied.message(), denied.nextStep(), denied.code()));
                 }
             } catch (RuntimeException ex) {
                 log.error("[GuardInterceptor] tool guard unavailable skillKey={} tool={}",
@@ -117,9 +119,13 @@ public class GuardInterceptor implements ToolInterceptor {
         List<Fact> facts = evidenceReader.nodeExtracts(context).stream()
             .map(extract -> new Fact(extract.tool(), extract.key(), extract.value()))
             .toList();
+        List<Lookup> lookups = evidenceReader.nodeLookups(context);
         Skill skill = context.getSkill();
         String pin = Objects.isNull(skill) ? null : skill.pin();
-        return new CallView(skillKey, request.toolName(), arguments, sources, facts, pin);
+        Long userId = PrincipalContextHolder.getUserId();
+        String operator = Objects.isNull(userId) ? null : Long.toString(userId);
+        return new CallView(skillKey, request.toolName(), arguments, sources, facts, pin,
+            request.callId(), lookups, operator);
     }
 
     /**
