@@ -321,7 +321,7 @@ public class ControlBuiltinTools implements BuiltinTools {
      * 追问须有依据，否则拒绝：
      * <ol>
      *   <li>缺参：待补参数都是本技能工具中允许来自用户的参数，或须来自查询结果且本节点已查到候选（让用户选）；</li>
-     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空、业务失败，或返回多条候选需要用户选择。</li>
+     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空、业务失败、被前置条件拦下，或返回多条候选需要用户选择。</li>
      * </ol>
      * 没有契约的技能不做判定。
      *
@@ -335,7 +335,7 @@ public class ControlBuiltinTools implements BuiltinTools {
         }
 
         if (expectedFields.isEmpty()) {
-            if (!lastCallUnresolved(ctx) && !lastCallAmbiguous(ctx)) {
+            if (!lastCallUnresolved(ctx) && !lastCallDenied(ctx) && !lastCallAmbiguous(ctx)) {
                 throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
                     ModelHint.FOLLOW_UP_NO_BASIS.text());
             }
@@ -409,6 +409,16 @@ public class ControlBuiltinTools implements BuiltinTools {
             throw new ToolRejectedException(RuntimeErrorCode.SKIP_UNGROUNDED, ModelHint.NEXT_SKIP.text(),
                 ModelHint.SKIP_NO_BASIS.text());
         }
+    }
+
+    /**
+     * 本节点最近一次业务调用被前置条件拦下（{@code GUARD_DENIED}），需要用户决定如何处理。
+     *
+     * @param ctx 节点执行现场
+     * @return 最近一次业务调用被拦下
+     */
+    private static boolean lastCallDenied(ToolExecutionContext ctx) {
+        return Objects.nonNull(ctx.scope().note(NodeNoteKey.GUARD_DENIAL));
     }
 
     /**

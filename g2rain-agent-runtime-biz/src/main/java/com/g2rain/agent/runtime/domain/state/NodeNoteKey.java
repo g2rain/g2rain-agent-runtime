@@ -34,7 +34,14 @@ public enum NodeNoteKey {
      * <p>值为 {@link com.g2rain.agent.runtime.domain.state.task.PendingAction}：写闸以 APPROVAL_REQUIRED
      * 拦下的那次调用（工具名 + 绑定后参数 + 摘要）；审批消费后清除。</p>
      */
-    GATED_WRITE("gatedWrite");
+    GATED_WRITE("gatedWrite"),
+
+    /**
+     * 前置条件拦截。
+     * <p>值为工具名：本节点最近一次业务调用被前置条件以 {@code GUARD_DENIED} 拦下时写入；
+     * 之后任一业务调用放行或因其他原因被拦下时清除。作为澄清追问的依据。</p>
+     */
+    GUARD_DENIAL("guardDenial");
 
     /**
      * Redis / Hash 字段名。
