@@ -215,8 +215,7 @@ public final class RuntimeUtils {
             return null;
         }
 
-        // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
-        return JSON.str2obj(JSON.obj2str(node), Object.class);
+        return JSON.convert(node, Object.class);
     }
 
     /**

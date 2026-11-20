@@ -50,8 +50,7 @@ public record PendingAction(String toolName, JsonNode args, @Nullable String arg
         return switch (raw) {
             case null -> null;
             case PendingAction typed -> typed;
-            // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
-            default -> JSON.str2obj(JSON.obj2str(raw), PendingAction.class);
+            default -> JSON.convert(raw, PendingAction.class);
         };
     }
 }

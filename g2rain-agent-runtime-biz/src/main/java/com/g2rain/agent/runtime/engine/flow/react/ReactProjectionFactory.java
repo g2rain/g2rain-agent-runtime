@@ -465,8 +465,7 @@ public class ReactProjectionFactory {
         }
 
         try {
-            // 经字符串往返做对象转换：最优解是 JsonCodec 提供 convert（Jackson convertValue / treeToValue），待 g2rain-common 调整时替换
-            return JSON.str2obj(JSON.obj2str(raw), DelegateResult.class);
+            return JSON.convert(raw, DelegateResult.class);
         } catch (RuntimeException ex) {
             log.warn("[Projection] delegateResult convert failed type={}", raw.getClass().getName(), ex);
             return null;
