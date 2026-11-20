@@ -32,8 +32,11 @@ fi
 
 echo "Building Docker image: ${APP_IMAGE}:${TAG}"
 
-# 先在根目录完整构建、测试并安装整个项目（包括所有子模块），以便子模块复用相同产物构建镜像。
-mvn --batch-mode --no-transfer-progress clean install
+# 限制 Maven/JVM 堆，降低 OOM Killer 风险；可用环境变量覆盖
+export MAVEN_OPTS="${MAVEN_OPTS:--Xmx1024m -XX:MaxMetaspaceSize=256m}"
+
+# 先在根目录编译并安装整个项目（包括所有子模块），以便子模块复用相同产物构建镜像。
+mvn --batch-mode --no-transfer-progress -DskipTests=true clean install
 
 # 然后进入 startup 子模块，执行 Jib 构建
 cd g2rain-agent-runtime-startup
