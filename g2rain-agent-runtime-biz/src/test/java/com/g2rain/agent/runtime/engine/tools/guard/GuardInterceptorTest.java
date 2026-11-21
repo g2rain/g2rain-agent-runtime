@@ -96,7 +96,7 @@ class GuardInterceptorTest {
     @Test
     void guardDenial_shouldReturnRejectedWithDenialText() {
         ToolGuard guard = mock(ToolGuard.class);
-        when(guard.check(any())).thenReturn(GuardVerdict.deny(new Denial("SHAPE_FAIL", "前置不满足", "先补齐事实")));
+        when(guard.check(any())).thenReturn(GuardVerdict.deny(Denial.refuse("SHAPE_FAIL", "前置不满足", "先补齐事实")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
@@ -125,7 +125,7 @@ class GuardInterceptorTest {
     void firstDenial_shouldSkipLaterGuards() {
         ToolGuard first = mock(ToolGuard.class);
         ToolGuard second = mock(ToolGuard.class);
-        when(first.check(any())).thenReturn(GuardVerdict.deny(new Denial("A", "第一拒绝", "停")));
+        when(first.check(any())).thenReturn(GuardVerdict.deny(Denial.refuse("A", "第一拒绝", "停")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(first, second), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
@@ -138,7 +138,7 @@ class GuardInterceptorTest {
         ToolGuard first = mock(ToolGuard.class);
         ToolGuard second = mock(ToolGuard.class);
         when(first.check(any())).thenReturn(GuardVerdict.allow());
-        when(second.check(any())).thenReturn(GuardVerdict.deny(new Denial("B", "第二拒绝", "改参数")));
+        when(second.check(any())).thenReturn(GuardVerdict.deny(Denial.refuse("B", "第二拒绝", "改参数")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(first, second), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();

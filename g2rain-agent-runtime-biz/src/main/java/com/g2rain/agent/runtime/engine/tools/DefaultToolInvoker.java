@@ -182,13 +182,14 @@ public class DefaultToolInvoker implements ToolInvoker {
 
     /**
      * 业务调用在调用前被拒（如附加检查不通过）时，也在执行过程中显示一步失败，让用户看到被拦下的调用；
-     * 推迟（等待确认等）不显示，由后续步骤表达；内置工具不显示。
+     * 推迟（等待确认等）与需先补查（{@code GUARD_LOOKUP}，随后的查询步骤与重新调用即可表达）不显示；内置工具不显示。
      *
      * @param request 工具调用请求
      * @param obs     短路观测
      */
     private void showRejected(ToolInvokeRequest request, Observation obs) {
-        if (obs.outcome() != Outcome.REJECTED || ToolCallbacks.isBuiltin(request.toolCallback())) {
+        if (obs.outcome() != Outcome.REJECTED || obs.errorCode() == RuntimeErrorCode.GUARD_LOOKUP
+            || ToolCallbacks.isBuiltin(request.toolCallback())) {
             return;
         }
 

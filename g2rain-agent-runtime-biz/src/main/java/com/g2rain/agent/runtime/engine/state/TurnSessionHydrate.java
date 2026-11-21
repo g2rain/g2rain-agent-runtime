@@ -45,6 +45,7 @@ import tools.jackson.core.type.TypeReference;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -335,6 +336,8 @@ public class TurnSessionHydrate {
                 if (evidence.isEmpty()) {
                     evidence.addAll(calls.loadNodeEvidence(taskId, nodeId));
                 }
+                // Redis Hash 不保序：按轮次恢复发生顺序，下游按「新的在前」取调用依赖这一顺序
+                evidence.sort(Comparator.comparingInt(EvidenceHead::round));
             }
             DefaultNodeScope node = new DefaultNodeScope(turn, nodeId, space.inputs(), space.outputs(), space.state(),
                 evidence, space.actions(), space.rounds(), space.tokens());

@@ -264,6 +264,8 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     GUARD_DENIED("agent_runtime.42252", "调用被前置条件拦下：{0:code}"),
 
+    GUARD_LOOKUP("agent_runtime.42253", "调用前需先补查数据：{0:code}"),
+
     GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 
     /**

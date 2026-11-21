@@ -11,7 +11,7 @@ import java.util.Objects;
  * <pre>{@code
  * GuardVerdict.allow();
  * GuardVerdict.allow(List.of(new Notice("article-published-edit", "该文章已发布，修改会直接影响线上内容")));
- * GuardVerdict.deny(new Denial("article-published-undeletable", "已发布的文章不能删除", "向用户说明原因"));
+ * GuardVerdict.deny(Denial.refuse("article-published-undeletable", "已发布的文章不能删除", "向用户说明原因"));
  * }</pre>
  *
  * @param denial  拒绝结果；放行时为 {@code null}

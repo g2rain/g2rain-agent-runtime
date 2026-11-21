@@ -87,8 +87,11 @@ public class GuardInterceptor implements ToolInterceptor {
                 Denial denied = verdict.denial();
                 if (Objects.nonNull(denied)) {
                     traceDenied(skillKey, request.toolName(), call.pin(), denied.code());
+                    RuntimeErrorCode errorCode = denied.lookup()
+                        ? RuntimeErrorCode.GUARD_LOOKUP
+                        : RuntimeErrorCode.GUARD_DENIED;
                     return Optional.of(Observation.rejected(
-                        RuntimeErrorCode.GUARD_DENIED, denied.message(), denied.nextStep(), denied.code()));
+                        errorCode, denied.message(), denied.nextStep(), denied.code()));
                 }
 
                 notices.addAll(verdict.notices());

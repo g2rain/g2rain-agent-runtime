@@ -80,7 +80,7 @@ public class CallRepository {
      *
      * @param taskId 任务 id
      * @param nodeId 节点 id
-     * @return 证据头列表；参数空或没有行为空列表
+     * @return 证据头列表，按发生顺序（旧的在前）；参数空或没有行为空列表
      */
     public List<EvidenceHead> loadNodeEvidence(String taskId, String nodeId) {
         if (Strings.isBlank(taskId) || Strings.isBlank(nodeId)) {
@@ -95,8 +95,9 @@ public class CallRepository {
                 return List.of();
             }
             List<EvidenceHead> heads = new ArrayList<>(list.size());
-            for (ToolCallRecordVo vo : list) {
-                EvidenceHead head = toHead(vo);
+            // 查询按 id 倒序返回，倒着遍历还原发生顺序
+            for (int i = list.size() - 1; i >= 0; i--) {
+                EvidenceHead head = toHead(list.get(i));
                 if (Objects.nonNull(head)) {
                     heads.add(head);
                 }
