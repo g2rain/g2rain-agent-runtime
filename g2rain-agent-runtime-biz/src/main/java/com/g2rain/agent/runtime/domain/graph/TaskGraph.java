@@ -91,12 +91,18 @@ public class TaskGraph {
      * @return 步骤名称；没有为空列表
      */
     public List<String> doneWriteSteps() {
-        return nodes.stream()
-            .filter(node -> node.getStatus() == NodeStatus.DONE && Strings.isNotBlank(node.getTarget()))
-            // 目标说明可能为空，Strings.defaultIfBlank 不接受空的缺省值
-            .map(node -> Strings.isNotBlank(node.getTitle()) ? node.getTitle() : node.getObjective())
-            .filter(Strings::isNotBlank)
-            .toList();
+        List<String> steps = new ArrayList<>();
+        for (TaskNode node : nodes) {
+            if (node.getStatus() != NodeStatus.DONE || Strings.isBlank(node.getTarget())) {
+                continue;
+            }
+            String title = node.getTitle();
+            String step = Strings.isNotBlank(title) ? title : node.getObjective();
+            if (Objects.nonNull(step) && Strings.isNotBlank(step)) {
+                steps.add(step);
+            }
+        }
+        return steps;
     }
 
     /**

@@ -76,7 +76,7 @@ skill_contract
 ├── mode                    执行模式
 ├── delegatable             能否被委派
 ├── target                  默认完成目标（写工具）
-├── source                  动作语义来源（可选；有则整体替换 tools）
+├── source                  动作语义来源（必填；type 决定 tools 来自契约自身或扩展）
 ├── inputs.<name>           节点输入
 │   ├── from
 │   ├── required
@@ -119,7 +119,7 @@ skill_contract
 | `mode` | `REACT` / `PLAN` | `REACT` | 执行模式 | 规划时候选技能只有一个且为 `REACT` → 跳过大模型规划，直接生成单节点图；否则由大模型规划 |
 | `delegatable` | boolean | `false` | 能否被其他节点委派调用 | 为 `true` 时进入同一数字员工的委派目录；要求 `tools` 中没有写工具 |
 | `target` | String | 无 | 默认完成目标：本技能的一个写工具名 | 规划未给节点指定完成目标时采用（见第 10 节）；只做一种写操作的技能配置，承担多种操作的技能留空 |
-| `source` | Object | 无 | 动作语义来源声明；内容对 Runtime 不透明 | 无 `source`：用契约自己的 `tools`。有 `source` 且存在可用的 `SpecSource`：用其返回的 `tools` **整体替换**契约的 `tools`，并把返回的版本标记 `pin` 记到任务。有 `source` 但无可用实现或加载失败：该技能不可用，**不退回**契约自带的 `tools` |
+| `source` | Object | 必填 | 动作语义来源声明，字段见 `SpecSourceField`：`type` 必填，取值见 `SpecSourceType`（`CONTRACT`、`ONTOLOGY`）；`ONTOLOGY` 时 `ontology` 必填、`usages` 可选 | `CONTRACT`：用契约自己的 `tools`。`ONTOLOGY`：由该类型的 `SpecSource` 实现返回的 `tools` **整体替换**契约的 `tools`，并把返回的版本标记 `pin` 记到任务；如 `{"type": "ONTOLOGY", "ontology": "cms", "usages": {…}}`。缺 `type`、`type` 不在枚举内、类型无对应实现或加载失败：该技能不可用，**不退回**契约自带的 `tools`。同一类型只能有一个实现，重复注册启动失败 |
 | `inputs` | Map | `{}` | 节点开始时绑定的输入 | 见第 7 节 |
 | `outputs` | Map | `{}` | 节点允许写入的产出 | 见第 8 节 |
 | `tools` | Map | `{}` | 各业务工具的契约 | 见第 4 节 |

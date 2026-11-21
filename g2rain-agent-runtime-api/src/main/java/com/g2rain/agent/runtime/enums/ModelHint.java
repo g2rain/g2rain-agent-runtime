@@ -43,6 +43,7 @@ public enum ModelHint {
     FINGERPRINT_TRIP("model.fingerprint.trip", "已连续用相同参数调用 [{tool}]，本节点已终止"),
 
     GUARD_UNAVAILABLE("model.guard.unavailable", "调用前检查暂时不可用，本次调用未执行"),
+    GUARD_NOTICE("model.guard.notice", "注意：{message}（已执行，回复用户时一并说明）"),
 
     CATALOG_DENIED("model.catalog.denied", "工具 [{tool}] 不在本节点可用工具中"),
 
@@ -51,6 +52,8 @@ public enum ModelHint {
     BUSINESS_FAILED_CODE("model.business.failed_code", "业务失败 [{code}]：{message}"),
 
     NEXT_FIX_ARGS("model.next.fix_args", "按工具参数说明修正入参后再调用"),
+    MALFORMED_CALL("model.malformed_call", "上一轮没有形成有效的工具调用：工具调用被写进了正文，或调用了当前不可用的工具。只能调用本轮工具列表中的工具，并用原生工具调用发起，不要在正文中书写调用。"),
+    MALFORMED_CALL_LAST("model.malformed_call_last", "最近一次工具返回：{message}。请按其中的下一步执行。"),
     NEXT_USE_TOOLS("model.next.use_tools", "上一轮没有发起工具调用。请直接调用工具：完成用 builtin_node_finish，追问用 builtin_node_follow_up，失败用 builtin_node_fail；不要在正文中写伪工具调用。"),
     FOLLOW_UP_NO_BASIS("model.follow_up.no_basis", "没有待补参数，也不在查询为空、业务失败或返回多条候选之后"),
     FOLLOW_UP_FIELDS_INVALID("model.follow_up.fields_invalid", "参数 [{fields}] 既不能由用户提供，也没有可供选择的查询结果"),

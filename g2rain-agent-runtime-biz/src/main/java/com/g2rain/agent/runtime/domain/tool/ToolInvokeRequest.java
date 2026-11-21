@@ -4,6 +4,7 @@ package com.g2rain.agent.runtime.domain.tool;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.Source;
+import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -13,7 +14,9 @@ import org.springframework.ai.tool.ToolCallback;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -95,6 +98,11 @@ public final class ToolInvokeRequest {
     private final Map<String, Source> argSources = new LinkedHashMap<>();
 
     /**
+     * 附加检查放行时给出的警告。
+     */
+    private final List<Notice> notices = new ArrayList<>();
+
+    /**
      * 组装调用请求并绑定工具回调。
      *
      * <p>构造时生成调用标识、按原文生成指纹，并从当前技能契约解析工具配置。</p>
@@ -136,6 +144,22 @@ public final class ToolInvokeRequest {
      */
     public @Nullable String evidenceId() {
         return this.evidenceId;
+    }
+
+    /**
+     * 记录附加检查放行时给出的警告。
+     *
+     * @param notices 警告
+     */
+    public void notices(List<Notice> notices) {
+        this.notices.addAll(notices);
+    }
+
+    /**
+     * @return 附加检查放行时给出的警告；没有为空列表
+     */
+    public List<Notice> notices() {
+        return List.copyOf(this.notices);
     }
 
     /**

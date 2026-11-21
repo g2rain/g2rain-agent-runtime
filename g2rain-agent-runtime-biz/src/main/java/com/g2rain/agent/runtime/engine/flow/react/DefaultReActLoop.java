@@ -77,6 +77,11 @@ public class DefaultReActLoop implements ReActLoop {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
+     * 模型结束原因：发起工具调用（大小写不敏感比较）。
+     */
+    private static final String FINISH_TOOL_CALLS = "tool_calls";
+
+    /**
      * 运行时配置：最大轮次、无进展上限、是否自动完成等。
      */
     private final RuntimeProperties runtimeProperties;
@@ -141,6 +146,8 @@ public class DefaultReActLoop implements ReActLoop {
 
         // 连续无进展计数
         StallTracker stall = new StallTracker();
+        // 最近一次未成功调用返回给模型的说明；模型调用格式无效时重申给它，成功后清空
+        String lastUnsuccessful = null;
 
         for (int round = 0; round < maxRounds; round++) {
             // 轮次按节点累计（跨轮续跑接着数），与消息、工具调用记录同一计数；下一轮开始时上一轮自动完成
@@ -188,6 +195,12 @@ public class DefaultReActLoop implements ReActLoop {
             }
 
             List<ChatToolCall> toolCalls = assistant.getToolCalls();
+            if (Collections.isEmpty(toolCalls) && malformedCall(response)) {
+                // 声称发起了工具调用却没有结构化调用：按调用格式错误提示，重申最近一次的返回，不计无进展
+                malformedNudge(history, lastUnsuccessful);
+                continue;
+            }
+
             // 有正文但无工具调用：同样提醒并记停滞
             if (Collections.isEmpty(toolCalls)) {
                 if (nudged(history, stall, maxStall)) {
@@ -248,6 +261,7 @@ public class DefaultReActLoop implements ReActLoop {
 
                 // 按结论类型推进：非成功都打断本波改下一轮，其中停滞类记一次无进展；成功清零
                 Outcome outcome = observation.outcome();
+                lastUnsuccessful = outcome == Outcome.SUCCESS ? null : observation.message();
                 // 越界写被拒：该写操作归其他节点，本节点已做完自己的业务调用时直接交接收口
                 if (handOver(toolContext, toolName, observation)) {
                     skipUnexecuted(history, toolCalls, Set.of(toolCall.getId()), ModelHint.SKIP_NODE_EXITED.text());
@@ -367,6 +381,38 @@ public class DefaultReActLoop implements ReActLoop {
             String name = Objects.nonNull(function) ? function.getName() : "tool";
             history.add(ChatMessages.tool(call.getId()).name(name).content(reason).build());
         }
+    }
+
+    /**
+     * 模型声称发起了工具调用（结束原因为工具调用），却没有任何结构化调用。
+     *
+     * <p>典型情形：模型调用了本轮工具列表之外的工具，服务端没有把它解析成工具调用，而是写进了正文。</p>
+     *
+     * @param response 模型响应
+     * @return 结束原因为工具调用时为 {@code true}
+     */
+    private static boolean malformedCall(ChatCompletionResponse response) {
+        if (Collections.isEmpty(response.getChoices())) {
+            return false;
+        }
+
+        return FINISH_TOOL_CALLS.equalsIgnoreCase(response.getChoices().getFirst().getFinishReason());
+    }
+
+    /**
+     * 调用格式无效时的提醒：说明原因，并重申最近一次未成功调用的返回；不记停滞，由轮次上限兜底。
+     *
+     * @param history          对话历史
+     * @param lastUnsuccessful 最近一次未成功调用返回给模型的说明；可空
+     */
+    private static void malformedNudge(List<ChatMessage> history, @Nullable String lastUnsuccessful) {
+        Trace.at(TraceStage.REACT, "malformed_tool_call").info();
+        String hint = ModelHint.MALFORMED_CALL.text();
+        if (Strings.isNotBlank(lastUnsuccessful)) {
+            hint = hint + ModelHint.MALFORMED_CALL_LAST.text("message", lastUnsuccessful);
+        }
+
+        history.add(ChatMessages.user(hint));
     }
 
     /**

@@ -227,6 +227,7 @@ public final class GraphFrame {
     /**
      * @return 是否应停止调度
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean terminal() {
         return Objects.nonNull(halt);
     }

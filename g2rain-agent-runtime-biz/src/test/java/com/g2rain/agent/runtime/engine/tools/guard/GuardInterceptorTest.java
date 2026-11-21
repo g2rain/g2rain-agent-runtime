@@ -16,6 +16,8 @@ import com.g2rain.agent.runtime.spi.Call;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
 import com.g2rain.agent.runtime.spi.Fact;
+import com.g2rain.agent.runtime.spi.GuardVerdict;
+import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
@@ -32,7 +34,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -95,7 +96,7 @@ class GuardInterceptorTest {
     @Test
     void guardDenial_shouldReturnRejectedWithDenialText() {
         ToolGuard guard = mock(ToolGuard.class);
-        when(guard.check(any())).thenReturn(Optional.of(new Denial("SHAPE_FAIL", "前置不满足", "先补齐事实")));
+        when(guard.check(any())).thenReturn(GuardVerdict.deny(new Denial("SHAPE_FAIL", "前置不满足", "先补齐事实")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
@@ -107,10 +108,24 @@ class GuardInterceptorTest {
     }
 
     @Test
+    void allowWithNotices_shouldRecordNoticesOnRequest() {
+        ToolGuard first = mock(ToolGuard.class);
+        ToolGuard second = mock(ToolGuard.class);
+        Notice notice = new Notice("published-edit", "已发布内容的修改会直接影响线上");
+        when(first.check(any())).thenReturn(GuardVerdict.allow(List.of(notice)));
+        when(second.check(any())).thenReturn(GuardVerdict.allow());
+        GuardInterceptor interceptor = new GuardInterceptor(List.of(first, second), emptyEvidence());
+        ToolInvokeRequest request = businessRequest(readyContext());
+
+        assertTrue(interceptor.before(request).isEmpty());
+        verify(request).notices(List.of(notice));
+    }
+
+    @Test
     void firstDenial_shouldSkipLaterGuards() {
         ToolGuard first = mock(ToolGuard.class);
         ToolGuard second = mock(ToolGuard.class);
-        when(first.check(any())).thenReturn(Optional.of(new Denial("A", "第一拒绝", "停")));
+        when(first.check(any())).thenReturn(GuardVerdict.deny(new Denial("A", "第一拒绝", "停")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(first, second), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
@@ -122,8 +137,8 @@ class GuardInterceptorTest {
     void secondDenial_shouldReturnAfterFirstPass() {
         ToolGuard first = mock(ToolGuard.class);
         ToolGuard second = mock(ToolGuard.class);
-        when(first.check(any())).thenReturn(Optional.empty());
-        when(second.check(any())).thenReturn(Optional.of(new Denial("B", "第二拒绝", "改参数")));
+        when(first.check(any())).thenReturn(GuardVerdict.allow());
+        when(second.check(any())).thenReturn(GuardVerdict.deny(new Denial("B", "第二拒绝", "改参数")));
         GuardInterceptor interceptor = new GuardInterceptor(List.of(first, second), emptyEvidence());
 
         Observation observation = interceptor.before(businessRequest(readyContext())).orElseThrow();
@@ -145,7 +160,7 @@ class GuardInterceptorTest {
     @Test
     void callView_shouldExposeCopySourcesCallsAndPin() {
         ToolGuard guard = mock(ToolGuard.class);
-        when(guard.check(any())).thenReturn(Optional.empty());
+        when(guard.check(any())).thenReturn(GuardVerdict.allow());
 
         Call local = new Call("local_tool", JsonNodeFactory.instance.objectNode().put("q", 1), SideEffect.NONE,
             List.of(new Fact("localKey", JsonCodecFactory.instance().str2node("\"L\""))));

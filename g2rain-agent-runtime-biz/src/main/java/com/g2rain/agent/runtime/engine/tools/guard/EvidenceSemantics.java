@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 import com.g2rain.agent.runtime.domain.state.task.EntitySeed;
 import com.g2rain.agent.runtime.engine.state.EntitySeeds;
+import com.g2rain.agent.runtime.spec.EntitySpec;
 import com.g2rain.agent.runtime.spec.ExtractSpec;
 import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.spec.ToolSpec;
@@ -177,7 +178,13 @@ public final class EvidenceSemantics {
             }
 
             if (at.isArray()) {
-                at.forEach(item -> addSeed(seeds, EntitySeeds.of(extract.getEntity(), base, item)));
+                EntitySpec entity = extract.getEntity();
+                if (Objects.isNull(entity) || Strings.isBlank(entity.getType())
+                    || Strings.isBlank(extract.getPath())) {
+                    continue;
+                }
+
+                at.forEach(item -> addSeed(seeds, EntitySeeds.of(entity, base, item)));
             } else {
                 addSeed(seeds, EntitySeeds.of(extract.getEntity(), base, at));
             }

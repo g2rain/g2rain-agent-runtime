@@ -16,6 +16,11 @@ public enum StepStatus {
     DONE,
 
     /**
+     * 已完成，但附带须让用户知道的警告。
+     */
+    WARN,
+
+    /**
      * 失败。
      */
     FAILED

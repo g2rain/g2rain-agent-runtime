@@ -6,6 +6,8 @@ import com.g2rain.common.json.JsonCodecFactory;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
+
 /**
  * 待确认的工具动作快照。
  * <p>
@@ -18,24 +20,29 @@ import tools.jackson.databind.JsonNode;
  * @param toolName 待执行的工具名
  * @param args     工具参数 JSON 对象
  * @param argsHash 业务入参摘要；确认执行时须与现参一致
+ * @param notices  附加检查给出的警告说明，随确认内容展示给用户；没有为空列表
  * @author alpha
  * @since 2026/9/9
  */
-public record PendingAction(String toolName, JsonNode args, @Nullable String argsHash) {
+public record PendingAction(String toolName, JsonNode args, @Nullable String argsHash, List<String> notices) {
 
     /**
      * JSON 编解码。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
+    public PendingAction {
+        notices = List.copyOf(notices);
+    }
+
     /**
-     * 创建尚未计算参数摘要的待确认动作。
+     * 创建尚未计算参数摘要、没有警告的待确认动作。
      *
      * @param toolName 工具名
      * @param args     工具参数 JSON 对象
      */
     public PendingAction(String toolName, JsonNode args) {
-        this(toolName, args, null);
+        this(toolName, args, null, List.of());
     }
 
     /**

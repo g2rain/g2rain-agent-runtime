@@ -13,6 +13,8 @@ import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.spi.Call;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
+import com.g2rain.agent.runtime.spi.GuardVerdict;
+import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -26,6 +28,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +39,8 @@ import java.util.Optional;
  * 附加检查门：依次调用全部 {@link ToolGuard}，首个拒绝即短路。
  *
  * <p>排在参数契约之后、重复调用熔断之前。没有任何实现、内置工具、无技能、
- * 或用户确认后执行的写调用时跳过。拦下发生在调用前，不登记证据、不触发审批。</p>
+ * 或用户确认后执行的写调用时跳过。拦下发生在调用前，不登记证据、不触发审批；
+ * 全部放行时收集各实现给出的警告，记到本次请求上。</p>
  *
  * @author alpha
  * @since 2026/11/17
@@ -76,15 +80,18 @@ public class GuardInterceptor implements ToolInterceptor {
         }
 
         CallView call = callViewOf(request, skillKey);
+        List<Notice> notices = new ArrayList<>();
         for (ToolGuard guard : guards) {
             try {
-                Optional<Denial> denial = guard.check(call);
-                if (denial.isPresent()) {
-                    Denial denied = denial.get();
+                GuardVerdict verdict = guard.check(call);
+                Denial denied = verdict.denial();
+                if (Objects.nonNull(denied)) {
                     traceDenied(skillKey, request.toolName(), call.pin(), denied.code());
                     return Optional.of(Observation.rejected(
                         RuntimeErrorCode.GUARD_DENIED, denied.message(), denied.nextStep(), denied.code()));
                 }
+
+                notices.addAll(verdict.notices());
             } catch (RuntimeException ex) {
                 log.error("[GuardInterceptor] tool guard unavailable skillKey={} tool={}",
                     skillKey, request.toolName(), ex);
@@ -97,6 +104,8 @@ public class GuardInterceptor implements ToolInterceptor {
             }
         }
 
+        // 全部放行：警告交给写闸门（存入待确认动作）或调用后的过程与观测
+        request.notices(notices);
         return Optional.empty();
     }
 

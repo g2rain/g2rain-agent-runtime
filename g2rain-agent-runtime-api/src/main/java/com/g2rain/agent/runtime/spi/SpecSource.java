@@ -1,14 +1,12 @@
 package com.g2rain.agent.runtime.spi;
 
-import tools.jackson.databind.JsonNode;
-
 /**
- * 动作语义来源：按契约根属性 {@code source} 提供各工具的 {@code tools} 定义。
+ * 动作语义来源：按契约根属性 {@code source} 的类型提供各工具的 {@code tools} 定义。
  *
- * <p>Runtime 不解释 {@code source} 内容；由实现方决定能否提供、提供哪一版。</p>
+ * <p>{@code source.type} 必填，取值见 {@link SpecSourceType}：{@link SpecSourceType#CONTRACT} 由 Runtime 处理；
+ * 其余类型由声明该类型的实现提供。没有实现时只支持 {@link SpecSourceType#CONTRACT}。</p>
  *
- * <p>多个实现时按实现类上的 {@code @Order}（或实现 {@code Ordered}）决定先后，
- * Runtime 按此顺序取第一个 {@link #supports} 为真的实现；未标注的排在最后。注入方不做额外排序。</p>
+ * <p>每个类型只能有一个实现，重复注册时 Runtime 启动失败。</p>
  *
  * @author alpha
  * @since 2026/11/17
@@ -16,12 +14,11 @@ import tools.jackson.databind.JsonNode;
 public interface SpecSource {
 
     /**
-     * 能否为这份来源声明提供动作语义。
+     * 本实现负责的来源类型，与契约 {@code source.type} 对应。
      *
-     * @param source 契约根属性 {@code source} 的原文；Runtime 不解释
-     * @return 能提供时为 {@code true}
+     * @return 来源类型，不能是 {@link SpecSourceType#CONTRACT}
      */
-    boolean supports(JsonNode source);
+    SpecSourceType type();
 
     /**
      * 提供该技能各工具的动作语义。

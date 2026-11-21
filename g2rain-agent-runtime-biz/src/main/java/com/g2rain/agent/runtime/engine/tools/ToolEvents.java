@@ -10,6 +10,7 @@ import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
+import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.mcp.McpToolCallback;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -50,6 +52,11 @@ public class ToolEvents {
      * 委派工具入参中的技能键字段。
      */
     private static final String DELEGATE_SKILL_ARG = "skillKey";
+
+    /**
+     * 警告状态步骤说明中多条警告的分隔符。
+     */
+    private static final String NOTICE_DELIMITER = "；";
 
     /**
      * 执行步骤的记录与推送。
@@ -103,7 +110,15 @@ public class ToolEvents {
             return;
         }
         if (observation.outcome() == Outcome.SUCCESS) {
-            stepEvents.done(stepId, RuntimeMessage.STEP_TOOL_OK.text(), extra);
+            List<Notice> notices = request.notices();
+            if (notices.isEmpty()) {
+                stepEvents.done(stepId, RuntimeMessage.STEP_TOOL_OK.text(), extra);
+                return;
+            }
+
+            // 放行但有警告：标为警告状态，说明逐条列出
+            extra.put("notices", notices);
+            stepEvents.warn(stepId, String.join(NOTICE_DELIMITER, notices.stream().map(Notice::message).toList()), extra);
             return;
         }
 

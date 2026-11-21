@@ -46,6 +46,7 @@ public enum RuntimeMessage {
     NODE_HANDED_OVER("node.handed_over", "已完成「{step}」，「{owner}」由后续步骤执行。"),
     VERIFY_ASK("verify.ask", "上次的写操作结果不确定，请确认是否已经完成。"),
     APPROVAL_ACTION("approval.action", "即将执行：{tool}"),
+    APPROVAL_NOTICE("approval.notice", "⚠ 注意：{message}"),
     STATUS_WORKING("status.working", "正在处理"),
     STEP_TITLE_DEFAULT("step.title.default", "处理您的请求"),
     STEP_TITLE_PREPARE("step.title.prepare", "准备{name}"),

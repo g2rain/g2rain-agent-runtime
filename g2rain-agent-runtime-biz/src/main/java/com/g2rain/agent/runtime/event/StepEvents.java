@@ -89,6 +89,17 @@ public class StepEvents {
     }
 
     /**
+     * 步骤完成，但附带警告。
+     *
+     * @param stepId 步骤标识；为空时跳过
+     * @param detail 警告说明；可空
+     * @param extra  排查信息；可空
+     */
+    public void warn(@Nullable String stepId, @Nullable String detail, @Nullable Map<String, Object> extra) {
+        finish(stepId, StepStatus.WARN, detail, null, extra);
+    }
+
+    /**
      * 步骤失败。
      *
      * @param stepId    步骤标识；为空时跳过

@@ -133,7 +133,7 @@ public class DefaultEffectHandler implements EffectHandler {
     }
 
     /**
-     * 审批问题：首行由系统给出工具展示名，模型摘要只作补充，末行是参数明细。
+     * 审批问题：首行由系统给出工具展示名，模型摘要只作补充，其后是参数明细，最后是附加检查给出的警告。
      *
      * <p>操作名取自契约而非模型摘要，摘要与实际调用不一致时用户也能看出要执行的是什么。</p>
      *
@@ -155,6 +155,11 @@ public class DefaultEffectHandler implements EffectHandler {
         String detail = approvalDetail(frame, spec, pending);
         if (Strings.isNotBlank(detail)) {
             lines.add(detail);
+        }
+
+        // 警告单独成行，让用户在确认前看到
+        for (String notice : pending.notices()) {
+            lines.add(RuntimeMessage.APPROVAL_NOTICE.text("message", notice));
         }
 
         return String.join("\n", lines);

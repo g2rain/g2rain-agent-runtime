@@ -9,12 +9,12 @@ import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.spi.SpecQuery;
 import com.g2rain.agent.runtime.spi.SpecSet;
 import com.g2rain.agent.runtime.spi.SpecSource;
+import com.g2rain.agent.runtime.spi.SpecSourceType;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.JsonNode;
 
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +24,7 @@ import java.util.Objects;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -55,12 +56,13 @@ class DefaultBundleLoaderTest {
         agentProfiles = mock(AgentProfiles.class);
         ContractValidator validator = new ContractValidator(new PlatformCatalog(new RuntimeProperties()));
         specSource = mock(SpecSource.class);
-        loader = new DefaultBundleLoader(agentProfiles, validator, List.of(specSource));
+        when(specSource.type()).thenReturn(SpecSourceType.ONTOLOGY);
+        loader = new DefaultBundleLoader(agentProfiles, validator, new SpecSources(List.of(specSource)));
     }
 
     @Test
-    void load_withoutSource_shouldKeepContractToolsAndNullPin() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithoutSource()));
+    void load_contractSource_shouldKeepContractToolsAndNullPin() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractOwnSource()));
 
         List<Skill> skills = loader.load(AGENT_ID, Map.of());
 
@@ -76,7 +78,6 @@ class DefaultBundleLoaderTest {
     @Test
     void load_withSourceAndImpl_shouldReplaceToolsAndSetPin() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
-        when(specSource.supports(any(JsonNode.class))).thenReturn(true);
         when(specSource.load(any(SpecQuery.class))).thenReturn(new SpecSet(Map.of(TOOL_NAME, replacementTool()), "pin-1"));
 
         List<Skill> skills = loader.load(AGENT_ID, Map.of());
@@ -92,26 +93,43 @@ class DefaultBundleLoaderTest {
     }
 
     @Test
-    void load_withSourceButNoImpl_shouldDropSkill() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
-        when(specSource.supports(any(JsonNode.class))).thenReturn(false);
+    void load_withUnknownSourceType_shouldDropSkill() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+            {"source":{"type":"OTHER"},"tools":{}}
+            """));
 
         assertNull(loader.load(AGENT_ID, Map.of()));
+    }
+
+    @Test
+    void load_withoutSourceType_shouldDropSkill() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+            {"tools":{"%s":{}}}
+            """.formatted(TOOL_NAME)));
+
+        assertNull(loader.load(AGENT_ID, Map.of()));
+    }
+
+    @Test
+    void contractType_shouldFailRegistry() {
+        SpecSource contract = mock(SpecSource.class);
+        when(contract.type()).thenReturn(SpecSourceType.CONTRACT);
+
+        assertThrows(IllegalStateException.class, () -> new SpecSources(List.of(contract)));
+    }
+
+    @Test
+    void duplicateType_shouldFailRegistry() {
+        SpecSource other = mock(SpecSource.class);
+        when(other.type()).thenReturn(SpecSourceType.ONTOLOGY);
+
+        assertThrows(IllegalStateException.class, () -> new SpecSources(List.of(specSource, other)));
     }
 
     @Test
     void load_whenSourceThrows_shouldDropSkillWithoutFallback() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
-        when(specSource.supports(any(JsonNode.class))).thenReturn(true);
         when(specSource.load(any(SpecQuery.class))).thenThrow(new IllegalStateException("boom"));
-
-        assertNull(loader.load(AGENT_ID, Map.of()));
-    }
-
-    @Test
-    void load_whenSupportsThrows_shouldDropSkillAsSourceFailed() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
-        when(specSource.supports(any(JsonNode.class))).thenThrow(new IllegalStateException("boom"));
 
         assertNull(loader.load(AGENT_ID, Map.of()));
     }
@@ -119,7 +137,6 @@ class DefaultBundleLoaderTest {
     @Test
     void load_shouldPassPinnedVersionIntoQuery() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
-        when(specSource.supports(any(JsonNode.class))).thenReturn(true);
         when(specSource.load(any(SpecQuery.class))).thenReturn(new SpecSet(Map.of(TOOL_NAME, new ToolSpec()), "pin-1"));
 
         loader.load(AGENT_ID, Map.of(SKILL_KEY, "locked-pin"));
@@ -144,15 +161,15 @@ class DefaultBundleLoaderTest {
         return bundle;
     }
 
-    private static String contractWithoutSource() {
+    private static String contractOwnSource() {
         return """
-            {"tools":{"%s":{"args":{"title":{"from":"inputs.title"}}}}}
+            {"source":{"type":"CONTRACT"},"tools":{"%s":{"args":{"title":{"from":"inputs.title"}}}}}
             """.formatted(TOOL_NAME);
     }
 
     private static String contractWithSource() {
         return """
-            {"source":{"ontology":"cms"},"tools":{"old_tool":{}}}
+            {"source":{"type":"ONTOLOGY","ontology":"cms"},"tools":{"old_tool":{}}}
             """;
     }
 

@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.spec.SideEffect;
+import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
@@ -26,6 +27,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -109,7 +111,7 @@ public class WriteGateInterceptor implements ToolInterceptor {
 
                 // 记下被拦下的调用：审批只认这一次，待批参数取已过绑定与契约校验的值
                 request.context().scope().note(NodeNoteKey.GATED_WRITE,
-                    new PendingAction(request.toolName(), args, RuntimeUtils.argsHash(args)));
+                    new PendingAction(request.toolName(), args, RuntimeUtils.argsHash(args), noticeTexts(request)));
                 // 写调用本身正当，须先由模型申请确认：推迟，并在提示里给出下一步与工具名
                 return Optional.of(Observation.deferred(
                     RuntimeErrorCode.APPROVAL_REQUIRED,
@@ -120,6 +122,16 @@ public class WriteGateInterceptor implements ToolInterceptor {
         }
 
         return observe(request, stateFacade.prewrite(request.context().scope(), call));
+    }
+
+    /**
+     * 附加检查给出的警告说明，随确认内容展示给用户。
+     *
+     * @param request 本次请求
+     * @return 警告说明；没有为空列表
+     */
+    private static List<String> noticeTexts(ToolInvokeRequest request) {
+        return request.notices().stream().map(Notice::message).toList();
     }
 
     /**

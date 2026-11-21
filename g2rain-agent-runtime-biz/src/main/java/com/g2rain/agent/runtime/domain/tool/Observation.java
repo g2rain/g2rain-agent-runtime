@@ -6,6 +6,8 @@ import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
+
 import java.util.Objects;
 
 /**
@@ -33,6 +35,11 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      * 原因与下一步之间的连接语。
      */
     private static final String NEXT = "。下一步：";
+
+    /**
+     * 追加警告时的换行。
+     */
+    private static final String LINE = "\n";
 
     /**
      * 原因末尾需去掉的标点。
@@ -132,6 +139,21 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
      */
     public Observation withNext(String next) {
         return new Observation(outcome, text, next, data, errorCode, reasonCode);
+    }
+
+    /**
+     * 在说明后追加警告，每条一行；用于附加检查放行但给出警告的调用。
+     *
+     * @param notices 警告文案
+     * @return 新观测；没有警告时为本身
+     */
+    public Observation withNotices(List<String> notices) {
+        if (notices.isEmpty()) {
+            return this;
+        }
+
+        String appended = Strings.defaultIfBlank(text, "") + LINE + String.join(LINE, notices);
+        return new Observation(outcome, appended, next, data, errorCode, reasonCode);
     }
 
     /**

@@ -8,6 +8,8 @@ import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.spi.SpecQuery;
 import com.g2rain.agent.runtime.spi.SpecSet;
 import com.g2rain.agent.runtime.spi.SpecSource;
+import com.g2rain.agent.runtime.spi.SpecSourceField;
+import com.g2rain.agent.runtime.spi.SpecSourceType;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -29,7 +31,8 @@ import java.util.stream.Stream;
  * DefaultBundleLoader：经 {@link AgentProfiles} 拉 Bundle，转成 {@link Skill} 列表。
  * <p>
  * 技能无有效 skillKey 或契约不可用则丢弃；契约按 {@link SkillContract} 解析，失败即 fail-closed。
- * 声明 {@code source} 时由 {@link SpecSource} 整体替换 {@code tools}。
+ * 契约须声明 {@code source.type}：{@link SpecSourceType#CONTRACT} 用契约自身的 {@code tools}，
+ * 其余类型由对应的 {@link SpecSource} 整体替换 {@code tools}。
  * </p>
  *
  * @author alpha
@@ -56,9 +59,9 @@ public class DefaultBundleLoader implements BundleLoader {
     private final ContractValidator contractValidator;
 
     /**
-     * 动作语义来源；没有实现时为空列表。
+     * 动作语义来源表：按 {@code source.type} 找实现。
      */
-    private final List<SpecSource> specSources;
+    private final SpecSources specSources;
 
     /**
      * 加载 Agent 技能列表；无 Bundle 或无可用技能时为 {@code null}。
@@ -168,10 +171,23 @@ public class DefaultBundleLoader implements BundleLoader {
                 return null;
             }
 
-            String resolvedPin = null;
             JsonNode source = parsed.getSource();
-            if (Objects.nonNull(source) && !source.isNull() && !source.isMissingNode()) {
-                SpecSet set = loadSpecSet(skillKey, source, toolNames, pin);
+            String typeName = typeOf(source);
+            if (Strings.isBlank(typeName)) {
+                log.error("[BundleLoader] skill unavailable skillKey={} reason=source_type_missing", skillKey);
+                return null;
+            }
+
+            SpecSourceType type = SpecSourceType.of(typeName);
+            if (Objects.isNull(type)) {
+                log.error("[BundleLoader] skill unavailable skillKey={} reason=source_type_invalid type={}",
+                    skillKey, typeName);
+                return null;
+            }
+
+            String resolvedPin = null;
+            if (type != SpecSourceType.CONTRACT) {
+                SpecSet set = loadSpecSet(skillKey, type, Objects.requireNonNull(source), toolNames, pin);
                 if (Objects.isNull(set)) {
                     return null;
                 }
@@ -189,27 +205,37 @@ public class DefaultBundleLoader implements BundleLoader {
     }
 
     /**
-     * 选择 {@link SpecSource} 并加载动作语义；失败时打日志并返回 {@code null}。
+     * 契约 {@code source.type}。
+     *
+     * @param source 来源声明；可空
+     * @return 来源类型；未声明或不是对象时为 {@code null}
+     */
+    private static @Nullable String typeOf(@Nullable JsonNode source) {
+        if (Objects.isNull(source) || !source.isObject()) {
+            return null;
+        }
+
+        JsonNode type = source.get(SpecSourceField.TYPE.key());
+        return Objects.nonNull(type) && type.isString() ? Strings.blankToNull(type.asString().trim()) : null;
+    }
+
+    /**
+     * 按来源类型选择 {@link SpecSource} 并加载动作语义；失败时打日志并返回 {@code null}。
      *
      * @param skillKey  技能键
+     * @param type      来源类型（非 {@link SpecSourceType#CONTRACT}）
      * @param source    来源声明原文
      * @param toolNames 业务工具名
      * @param pin       已锁定版本；可空
      * @return 语义集合；不可用时为 {@code null}
      */
-    private @Nullable SpecSet loadSpecSet(String skillKey, JsonNode source, List<String> toolNames, @Nullable String pin) {
+    private @Nullable SpecSet loadSpecSet(String skillKey, SpecSourceType type, JsonNode source, List<String> toolNames,
+                                          @Nullable String pin) {
         try {
-            SpecSource matched = null;
-            for (SpecSource candidate : specSources) {
-                // supports 抛异常与 load 失败同口径，避免落到外层 contract_parse_failed
-                if (candidate.supports(source)) {
-                    matched = candidate;
-                    break;
-                }
-            }
-
+            SpecSource matched = specSources.of(type);
             if (Objects.isNull(matched)) {
-                log.error("[BundleLoader] skill unavailable skillKey={} reason=spec_source_missing", skillKey);
+                log.error("[BundleLoader] skill unavailable skillKey={} reason=spec_source_missing type={}",
+                    skillKey, type);
                 return null;
             }
 
@@ -224,7 +250,7 @@ public class DefaultBundleLoader implements BundleLoader {
      * 解析结果：契约与可选版本标记。
      *
      * @param contract 技能契约
-     * @param pin      版本标记；无 source 时为 {@code null}
+     * @param pin      版本标记；来源为 {@link SpecSourceType#CONTRACT} 时为 {@code null}
      */
     private record ParsedContract(SkillContract contract, @Nullable String pin) {
 
