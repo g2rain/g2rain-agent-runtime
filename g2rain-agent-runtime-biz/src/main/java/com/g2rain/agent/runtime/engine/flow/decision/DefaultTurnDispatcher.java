@@ -324,10 +324,11 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
 
         TaskCheckpoint checkpoint = turn.checkpoint().orElse(null);
         String type = Objects.nonNull(checkpoint) ? checkpoint.getType().name() : null;
+        String haltReason = Objects.nonNull(checkpoint) ? checkpoint.getHaltReason().name() : null;
         List<String> expected = Objects.nonNull(checkpoint) && Collections.isNotEmpty(checkpoint.getExpectedFields())
             ? checkpoint.getExpectedFields() : List.of();
         String goal = turn.task().map(TaskMetadata::getGoalSummary).orElse(null);
-        return new IntentRequest.ActiveTask(goal, type, expected, writePending);
+        return new IntentRequest.ActiveTask(goal, type, haltReason, expected, writePending);
     }
 
     /**

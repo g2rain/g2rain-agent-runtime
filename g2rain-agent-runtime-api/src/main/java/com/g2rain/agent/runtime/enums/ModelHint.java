@@ -38,6 +38,7 @@ public enum ModelHint {
     WRITE_NEED_APPROVAL("model.write.need_approval", "该写操作须经用户确认"),
     WRITE_GATED_PENDING("model.write.gated_pending", "已有待确认的写操作 [{tool}]，一次只能申请确认一个写操作"),
     WRITE_REUSED("model.write.reused", "已复用历史写证据"),
+    WRITE_DECISION_PENDING("model.write.decision_pending", "[{tool}] 已被拦下，正在等用户决定如何处理，不能先执行其他写操作"),
     WRITE_OUT_OF_SCOPE("model.write.out_of_scope", "[{tool}] 是步骤「{node}」的完成目标，由该步骤执行"),
 
     FINGERPRINT_TRIP("model.fingerprint.trip", "已连续用相同参数调用 [{tool}]，本节点已终止"),
@@ -88,6 +89,8 @@ public enum ModelHint {
     NEXT_CALL_WRITE("model.next.call_write", "先直接调用写工具，被拦下要求确认后再调用 builtin_node_approval"),
     NEXT_APPROVAL_TOOL("model.next.approval_tool", "toolName 改填 {tool} 后重新申请"),
     NEXT_FINISH("model.next.finish", "调用 builtin_node_finish 结束本节点"),
+    NEXT_DECISION("model.next.decision", "不要执行其他写操作，也不要直接失败；调用 builtin_node_follow_up 向用户说明被拦下的全部原因，由用户决定如何处理"),
+    NEXT_LOOKUP("model.next.lookup", "先按 [{tool}] 被拦下时的提示完成查询，再重新调用 [{tool}]"),
     NEXT_SKIP("model.next.skip", "先查询确认该写操作是否需要执行；需要执行就调用写工具"),
 
     FINISH_REJECTED("model.finish.rejected", "FINISH 被拒绝"),

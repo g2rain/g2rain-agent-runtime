@@ -202,7 +202,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 | sources 中的值 | 匹配条件 |
 |---|---|
-| `USER` | 当前追问断点的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2）；值首尾为英文字母或数字时，命中处前后不能紧挨英文字母或数字（「2012」中不认「12」），原文空白处视为边界 |
+| `USER` | 当前缺参追问断点（`MISSING_INPUT`）的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2）；值首尾为英文字母或数字时，命中处前后不能紧挨英文字母或数字（「2012」中不认「12」），原文空白处视为边界 |
 | `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等；参数配置了 `entity` 时，改为值等于这些证据中该类型实体的标识 |
 | `NODE_OUTPUT` / `SHARED` / `SESSION` | 以参数路径为键，在对应数据中查到相同的值 |
 | `PRIOR_TASK` | 值等于任务前情中某个实体的 id（实体来自查询或保存结果中配置了 `entity` 的抽取项）；参数配置了 `entity` 时还要求类型一致；配置了 `from: prior.*` 时按该路径比对 |
@@ -477,10 +477,10 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 | 工具 | 参数 | 作用 |
 |---|---|---|
-| `builtin_node_follow_up` | `question`、`expectedFields?`、`suggestions?` | 向用户追问，节点挂起（`FOLLOW_UP`）。`expectedFields` 中的参数在用户回答后视为来源 `USER`；回答进入历史时带上问题与对应参数；本轮刚回答的问题原样再问时拒绝（`FOLLOW_UP_ANSWERED`）。追问须有依据，否则拒绝（`FOLLOW_UP_UNGROUNDED`）：带 `expectedFields` 时，每个字段须是本技能工具中允许来自 `USER` 的参数，或须来自 `EVIDENCE` 且本节点已有非空的成功查询（让用户选）；不带时，本节点最近一次业务调用须结果为空或业务失败（澄清） |
+| `builtin_node_follow_up` | `question`、`expectedFields?`、`suggestions?` | 向用户追问，节点挂起（`FOLLOW_UP`），停顿原因由 Runtime 判定。有补查待完成时拒绝（`LOOKUP_PENDING`）。有拒绝待用户决定时为 `DENIED`，不校验也不保存 `expectedFields`，挂起后清除拒绝便签。否则追问须有依据（`FOLLOW_UP_UNGROUNDED`）：带 `expectedFields` 时，每个字段须是本技能工具中允许来自 `USER` 的参数，或须来自 `EVIDENCE` 且本节点已有非空的成功查询，最近一次业务调用返回多条候选时为 `AMBIGUOUS`，否则为 `MISSING_INPUT`；不带时，最近一次业务调用返回多条候选为 `AMBIGUOUS`，结果为空或业务失败为 `UNRESOLVED`。只有 `MISSING_INPUT` 的 `expectedFields` 在用户回答后视为来源 `USER`；回答进入历史时带上问题与对应参数；本轮刚回答的问题原样再问时拒绝（`FOLLOW_UP_ANSWERED`） |
 | `builtin_node_approval` | `summary`、`toolName` | 请求用户确认被写入闸门拦下的那次写调用，节点挂起（`APPROVAL`）。未先调用写工具时拒绝（`APPROVAL_NOT_GATED`），工具名与被拦下的不一致时拒绝并给出实际工具名（`APPROVAL_TOOL_MISMATCH`）。只在本节点有被写闸门拦下待确认的写调用时提供给模型 |
-| `builtin_node_finish` | `output` | 声明完成；通过完成判定（10.2）后节点 `DONE`，写入共享值和实体 |
-| `builtin_node_fail` | `reason` | 声明失败，节点 `FAILED` |
+| `builtin_node_finish` | `output` | 声明完成；有补查待完成时拒绝（`LOOKUP_PENDING`）；通过完成判定（10.2）后节点 `DONE`，写入共享值和实体 |
+| `builtin_node_fail` | `reason` | 声明失败，节点 `FAILED`；有补查待完成（`LOOKUP_PENDING`）或有拒绝待用户决定（`DECISION_PENDING`，须追问用户）时拒绝 |
 | `builtin_node_delegate` | `skillKey`、`objective?` | 委派一个只读技能作为前置节点（见第 15 节）。没有可委派技能或已到委派层级上限时不提供 |
 | `builtin_output_set` | `key`、`value`、`sourceType`、`sourceRef`、`sourcePath?` | 写一条产出。`sourceType` 不能是 `MODEL`；来源为 `EVIDENCE` 时 `sourceRef` 填 evidenceId、`sourcePath` 填报文路径，值必须与报文中的值相等。产出无人使用（无节点依赖本节点，且契约产出均非必填、不共享、不沉淀实体）时不提供 |
 | `builtin_state_set` | `key`、`value` | 写节点私有便签；不能写保留键 |
@@ -670,6 +670,8 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.42239` | `DELEGATE_REPEATED` | 重复委派 |
 | `agent_runtime.42212` | `PROVIDER_UNAVAILABLE` | `inputs.provider` 不可用（规划失败） |
 | `agent_runtime.42252` | `GUARD_DENIED` | 调用被前置条件拦下 |
+| `agent_runtime.42254` | `DECISION_PENDING` | 有拒绝待用户决定：不能失败，也不能执行其他写操作 |
+| `agent_runtime.42255` | `LOOKUP_PENDING` | 有补查待完成：不能追问、失败或完成 |
 | `agent_runtime.50012` | `GUARD_UNAVAILABLE` | 调用前检查不可用 |
 
 ---

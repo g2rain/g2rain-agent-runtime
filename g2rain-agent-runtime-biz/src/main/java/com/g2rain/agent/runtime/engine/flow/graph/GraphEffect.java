@@ -2,7 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.graph;
 
 
 import com.g2rain.agent.runtime.domain.execute.ExecutorResult;
-import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
@@ -12,7 +12,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * GraphEffect（图副作用）：本拍归约后、待应用到帧/图上的动作。
@@ -29,14 +28,14 @@ public sealed interface GraphEffect {
      * 保存任务级挂起检查点（追问/审批等）。
      *
      * @param nodeId         焦点节点 ID
-     * @param checkpointType 检查点类型；可空则按追问
+     * @param haltReason     停下等用户的原因；决定检查点类型
      * @param question       面向用户的追问/说明；可空
      * @param allowedActions 允许的恢复动作
      * @param pendingAction  待批动作；可空
      * @param expectedFields 仍缺的参数路径；可空
      * @param suggestions    ASK 快捷气泡；可空
      */
-    record SaveSuspend(String nodeId, @Nullable CheckpointType checkpointType, @Nullable String question,
+    record SaveSuspend(String nodeId, HaltReason haltReason, @Nullable String question,
                        List<ResumeAction> allowedActions, @Nullable PendingAction pendingAction,
                        @Nullable List<String> expectedFields,
                        @Nullable List<String> suggestions) implements GraphEffect {
@@ -45,18 +44,18 @@ public sealed interface GraphEffect {
          * 便捷构造：allowedActions 由检查点类型默认动作填充。
          *
          * @param nodeId         焦点节点 ID
-         * @param checkpointType 检查点类型；可空则按追问
+         * @param haltReason     停下等用户的原因
          * @param question       面向用户的说明；可空
          * @param pendingAction  待批动作；可空
          * @param expectedFields 仍缺的参数路径；可空
          * @param suggestions    ASK 快捷气泡；可空
          */
-        public SaveSuspend(String nodeId, @Nullable CheckpointType checkpointType, @Nullable String question,
+        public SaveSuspend(String nodeId, HaltReason haltReason, @Nullable String question,
                            @Nullable PendingAction pendingAction,
                            @Nullable List<String> expectedFields,
                            @Nullable List<String> suggestions) {
-            CheckpointType type = Objects.requireNonNullElse(checkpointType, CheckpointType.FOLLOW_UP);
-            this(nodeId, type, question, type.defaultActions(), pendingAction, expectedFields, suggestions);
+            this(nodeId, haltReason, question, haltReason.checkpointType().defaultActions(), pendingAction,
+                expectedFields, suggestions);
         }
 
         /**
@@ -65,11 +64,11 @@ public sealed interface GraphEffect {
          * @return 检查点
          */
         public TaskCheckpoint toCheckpoint() {
-            CheckpointType type = Objects.requireNonNullElse(checkpointType, CheckpointType.FOLLOW_UP);
             TaskCheckpoint checkpoint = new TaskCheckpoint();
             checkpoint.setCheckpointId(RuntimeUtils.uuid());
             checkpoint.setNodeId(nodeId);
-            checkpoint.setType(type);
+            checkpoint.setType(haltReason.checkpointType());
+            checkpoint.setHaltReason(haltReason);
             checkpoint.setQuestion(question);
             checkpoint.setAllowedActions(new ArrayList<>(allowedActions));
             checkpoint.setPendingAction(pendingAction);

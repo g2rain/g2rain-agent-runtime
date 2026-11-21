@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.engine.tools.guard;
 
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
+import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -18,9 +19,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 写范围门：计划分给其他节点的写操作，本节点不得抢先执行。
+ * 写范围门：计划分给其他节点的写操作，本节点不得抢先执行；调用被前置条件拒绝、待用户决定期间，不得执行其他写操作。
  *
- * <p>写工具是本节点的目标时放行；是图中另一个未结束节点的目标时拒绝；其余写调用放行，照常认领、确认与查重。
+ * <p>有拒绝待用户决定时，除被拒的那个工具外一律拒绝（{@code DECISION_PENDING}），免得模型自行改数据去满足条件。
+ * 写工具是本节点的目标时放行；是图中另一个未结束节点的目标时拒绝；其余写调用放行，照常认领、确认与查重。
  * 排在参数绑定与确认闸之前，被拒的调用不做绑定、不申请确认。
  * 例：查询文章的节点调用 {@code post_tag_save}，而它是「创建标签」节点的目标，返回 {@code WRITE_OUT_OF_SCOPE}。</p>
  *
@@ -50,6 +52,15 @@ public class WriteScopeInterceptor implements ToolInterceptor {
 
         ToolExecutionContext context = request.context();
         String toolName = request.toolName();
+        Object denied = context.scope().note(NodeNoteKey.GUARD_DENIAL);
+        if (Objects.nonNull(denied) && !toolName.equals(denied)) {
+            return Optional.of(Observation.rejected(
+                RuntimeErrorCode.DECISION_PENDING,
+                ModelHint.WRITE_DECISION_PENDING.text("tool", denied.toString()),
+                ModelHint.NEXT_DECISION.text()
+            ));
+        }
+
         // 本节点的目标照常执行；多个节点同以该工具为目标时，各写各的
         if (toolName.equals(context.getTarget())) {
             return Optional.empty();

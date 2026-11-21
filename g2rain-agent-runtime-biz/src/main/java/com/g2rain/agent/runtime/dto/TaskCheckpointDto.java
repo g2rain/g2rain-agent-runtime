@@ -64,6 +64,14 @@ public class TaskCheckpointDto extends BaseDto {
     private String type;
 
     /**
+     * 停顿原因[MISSING_INPUT, AMBIGUOUS, UNRESOLVED, DENIED, APPROVAL, VERIFY]
+     */
+    @NotBlank(groups = CreateGroup.class)
+    @Size(max = 32)
+    @Schema(description = "停顿原因[MISSING_INPUT, AMBIGUOUS, UNRESOLVED, DENIED, APPROVAL, VERIFY]（新增必填）", maxLength = 32)
+    private String haltReason;
+
+    /**
      * 追问/确认文案
      */
     @Size(max = 2000)

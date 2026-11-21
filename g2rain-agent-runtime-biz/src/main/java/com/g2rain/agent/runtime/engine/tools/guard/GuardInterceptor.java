@@ -2,6 +2,8 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
+import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
+import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.Source;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -41,6 +43,9 @@ import java.util.Optional;
  * <p>排在参数契约之后、重复调用熔断之前。没有任何实现、内置工具、无技能、
  * 或用户确认后执行的写调用时跳过。拦下发生在调用前，不登记证据、不触发审批；
  * 全部放行时收集各实现给出的警告，记到本次请求上。</p>
+ *
+ * <p>同时维护节点便签：拒绝记 {@link NodeNoteKey#GUARD_DENIAL}（并清补查），补查记 {@link NodeNoteKey#GUARD_LOOKUP}；
+ * 被拦下的工具之后放行时清除对应便签。</p>
  *
  * @author alpha
  * @since 2026/11/17
@@ -87,6 +92,7 @@ public class GuardInterceptor implements ToolInterceptor {
                 Denial denied = verdict.denial();
                 if (Objects.nonNull(denied)) {
                     traceDenied(skillKey, request.toolName(), call.pin(), denied.code());
+                    noteDenial(context.scope(), request.toolName(), denied.lookup());
                     RuntimeErrorCode errorCode = denied.lookup()
                         ? RuntimeErrorCode.GUARD_LOOKUP
                         : RuntimeErrorCode.GUARD_DENIED;
@@ -108,8 +114,42 @@ public class GuardInterceptor implements ToolInterceptor {
         }
 
         // 全部放行：警告交给写闸门（存入待确认动作）或调用后的过程与观测
+        release(context.scope(), request.toolName());
         request.notices(notices);
         return Optional.empty();
+    }
+
+    /**
+     * 记下拦截便签：补查只记补查；拒绝记拒绝并清补查，由用户决定如何处理。
+     *
+     * @param scope    节点作用域
+     * @param toolName 被拦下的工具名
+     * @param lookup   是否为补查
+     */
+    private static void noteDenial(NodeScope scope, String toolName, boolean lookup) {
+        if (lookup) {
+            scope.note(NodeNoteKey.GUARD_LOOKUP, toolName);
+            return;
+        }
+
+        scope.note(NodeNoteKey.GUARD_DENIAL, toolName);
+        scope.note(NodeNoteKey.GUARD_LOOKUP, null);
+    }
+
+    /**
+     * 被拦下的工具放行后清除对应便签；其他工具的便签不动。
+     *
+     * @param scope    节点作用域
+     * @param toolName 放行的工具名
+     */
+    private static void release(NodeScope scope, String toolName) {
+        if (toolName.equals(scope.note(NodeNoteKey.GUARD_DENIAL))) {
+            scope.note(NodeNoteKey.GUARD_DENIAL, null);
+        }
+
+        if (toolName.equals(scope.note(NodeNoteKey.GUARD_LOOKUP))) {
+            scope.note(NodeNoteKey.GUARD_LOOKUP, null);
+        }
     }
 
     /**

@@ -5,7 +5,6 @@ import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.hydrate.OutputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -153,7 +152,6 @@ public class DefaultToolInvoker implements ToolInvoker {
             Optional<Observation> blocked = interceptor.before(request);
             if (blocked.isPresent()) {
                 Observation obs = blocked.get();
-                noteGuardDenial(request, obs.errorCode());
                 recordBlock(request, obs, interceptor);
                 trace(request, obs, interceptor, start);
                 showRejected(request, obs);
@@ -161,7 +159,6 @@ public class DefaultToolInvoker implements ToolInvoker {
             }
         }
 
-        noteGuardDenial(request, null);
         String stepId = toolEvents.started(request);
         // 实际回调只发生在全部 before 通过之后；异常在 doInvoke 内收成 Observation
         long callStart = System.nanoTime();
@@ -195,21 +192,6 @@ public class DefaultToolInvoker implements ToolInvoker {
 
         String stepId = toolEvents.started(request);
         toolEvents.finished(stepId, request, obs, argsBrief(request));
-    }
-
-    /**
-     * 维护「最近一次业务调用被前置条件拦下」便签：以 {@code GUARD_DENIED} 拦下时记工具名，放行或其他原因拦下时清除；内置工具不影响。
-     *
-     * @param request   工具调用请求
-     * @param errorCode 拦下的错误码；放行时为 {@code null}
-     */
-    private static void noteGuardDenial(ToolInvokeRequest request, @Nullable RuntimeErrorCode errorCode) {
-        if (ToolCallbacks.isBuiltin(request.toolCallback())) {
-            return;
-        }
-
-        String denied = errorCode == RuntimeErrorCode.GUARD_DENIED ? request.toolName() : null;
-        request.context().scope().note(NodeNoteKey.GUARD_DENIAL, denied);
     }
 
     /**

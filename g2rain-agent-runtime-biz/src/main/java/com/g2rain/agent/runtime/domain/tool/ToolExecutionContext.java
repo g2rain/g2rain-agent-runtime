@@ -9,7 +9,7 @@ import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
-import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -24,7 +24,7 @@ import java.util.Objects;
 /**
  * ToolExecutionContext（工具执行上下文）：单节点工具调用期间的可变运行时状态。
  * <p>
- * 持有图帧、节点、技能列表与当前技能，并记录节点状态、产出、追问、检查点类型与
+ * 持有图帧、节点、技能列表与当前技能，并记录节点状态、产出、追问、停顿原因与
  * 指纹去重等。内置工具与拦截器通过本对象读契约、写挂起/完成/失败结局。
  *
  * @author alpha
@@ -84,9 +84,9 @@ public final class ToolExecutionContext {
     private List<String> suggestions = List.of();
 
     /**
-     * 挂起检查点类型（追问 / 审批）；非挂起时为 {@code null}。
+     * 挂起时停下等用户的原因；非挂起时为 {@code null}。
      */
-    private @Nullable CheckpointType checkpointType;
+    private @Nullable HaltReason haltReason;
 
     /**
      * 节点失败原因；节点进入失败状态时写入。
@@ -253,13 +253,15 @@ public final class ToolExecutionContext {
     }
 
     /**
-     * 自动认领的目标能否被换掉：规划指定的不换；本节点有该工具成功或仍占用幂等槽的调用、或有待确认的写调用时不换。
+     * 自动认领的目标能否被换掉：规划指定的不换；本节点有该工具成功或仍占用幂等槽的调用、有待确认的写调用、
+     * 或有被前置条件拒绝待用户决定的调用时不换。
      *
      * @param target 当前目标工具名
      * @return 可以换成新的写调用时为 {@code true}
      */
     private boolean claimedTargetReplaceable(String target) {
-        if (!node.isTargetClaimed() || Objects.nonNull(scope.note(NodeNoteKey.GATED_WRITE))) {
+        if (!node.isTargetClaimed() || Objects.nonNull(scope.note(NodeNoteKey.GATED_WRITE))
+            || Objects.nonNull(scope.note(NodeNoteKey.GUARD_DENIAL))) {
             return false;
         }
 
@@ -302,15 +304,17 @@ public final class ToolExecutionContext {
     }
 
     /**
-     * 转为追问挂起：写 SUSPENDED + FOLLOW_UP，并记录问题、缺参与快捷建议。
+     * 转为追问挂起：写 SUSPENDED 与停顿原因，并记录问题、缺参与快捷建议。
      *
      * @param question          追问文案
+     * @param haltReason        停顿原因（追问类）
      * @param missingParameters 缺失参数路径
      * @param suggestions       快捷气泡文案；可空
      */
-    public void applyFollowUp(String question, List<String> missingParameters, @Nullable List<String> suggestions) {
+    public void applyFollowUp(String question, HaltReason haltReason, List<String> missingParameters,
+                              @Nullable List<String> suggestions) {
         this.nodeStatus = NodeStatus.SUSPENDED;
-        this.checkpointType = CheckpointType.FOLLOW_UP;
+        this.haltReason = haltReason;
         this.question = question;
         this.missingParameters = List.copyOf(missingParameters);
         this.suggestions = Objects.isNull(suggestions) ? List.of() : List.copyOf(suggestions);
@@ -324,7 +328,7 @@ public final class ToolExecutionContext {
      */
     public void applyApproval(String summary, PendingAction pendingAction) {
         this.nodeStatus = NodeStatus.SUSPENDED;
-        this.checkpointType = CheckpointType.APPROVAL;
+        this.haltReason = HaltReason.APPROVAL;
         this.question = summary;
         this.pendingAction = pendingAction;
     }
@@ -337,7 +341,7 @@ public final class ToolExecutionContext {
     public void applyFinish(Object output) {
         this.nodeStatus = NodeStatus.DONE;
         this.output = output;
-        this.checkpointType = null;
+        this.haltReason = null;
         this.finishRejectedReason = null;
     }
 
@@ -349,7 +353,7 @@ public final class ToolExecutionContext {
     public void applySkip(String reason) {
         this.nodeStatus = NodeStatus.SKIPPED;
         this.output = reason;
-        this.checkpointType = null;
+        this.haltReason = null;
         this.finishRejectedReason = null;
     }
 
@@ -363,22 +367,22 @@ public final class ToolExecutionContext {
     }
 
     /**
-     * 标记节点失败：写 FAILED 与原因，并清挂起类型。
+     * 标记节点失败：写 FAILED 与原因，并清停顿原因。
      *
      * @param reason 失败原因
      */
     public void applyFail(String reason) {
         this.nodeStatus = NodeStatus.FAILED;
         this.failReason = reason;
-        this.checkpointType = null;
+        this.haltReason = null;
     }
 
     /**
-     * 标记节点等待委派子技能：写 WAITING_DELEGATE，并清挂起类型。
+     * 标记节点等待委派子技能：写 WAITING_DELEGATE，并清停顿原因。
      */
     public void applyWaitingDelegate() {
         this.nodeStatus = NodeStatus.WAITING_DELEGATE;
-        this.checkpointType = null;
+        this.haltReason = null;
     }
 
     /**

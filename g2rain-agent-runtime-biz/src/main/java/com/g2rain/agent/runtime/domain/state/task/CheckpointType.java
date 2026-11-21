@@ -8,9 +8,8 @@ import java.util.List;
 /**
  * 任务等待用户或外部结果时使用的检查点类型。
  * <p>
- * 类型只描述用户需要完成的动作类别；可选动作和待处理内容分别由
- * {@link TaskCheckpoint#getAllowedActions()} 与 {@link TaskCheckpoint#getPendingAction()}
- * 保存，因此不需要再为每种等待原因建立独立枚举。
+ * 类型只描述用户需要完成的动作类别（恢复协议）；为什么停下由 {@link HaltReason} 说明，
+ * 可选动作和待处理内容分别由 {@link TaskCheckpoint#getAllowedActions()} 与 {@link TaskCheckpoint#getPendingAction()} 保存。
  * </p>
  *
  * @author alpha

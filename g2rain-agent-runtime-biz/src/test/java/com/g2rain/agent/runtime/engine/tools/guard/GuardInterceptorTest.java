@@ -2,6 +2,8 @@ package com.g2rain.agent.runtime.engine.tools.guard;
 
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
+import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
+import com.g2rain.agent.runtime.domain.state.NodeScope;
 import com.g2rain.agent.runtime.domain.state.Source;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
@@ -31,21 +33,27 @@ import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link GuardInterceptor} 放行、拒绝与顺序验收。
+ * {@link GuardInterceptor} 放行、拒绝、拦截便签与顺序验收。
  *
  * @author alpha
  * @since 2026/11/17
@@ -201,6 +209,54 @@ class GuardInterceptorTest {
     }
 
     @Test
+    void refuse_shouldNoteDenialAndClearLookup() {
+        ToolGuard guard = mock(ToolGuard.class);
+        when(guard.check(any())).thenReturn(GuardVerdict.deny(Denial.refuse("ENABLED", "启用中不能删除", "说明原因")));
+        Map<String, Object> notes = new HashMap<>(Map.of(NodeNoteKey.GUARD_LOOKUP.wire(), "save"));
+        GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
+
+        interceptor.before(businessRequest(readyContext(notes)));
+
+        assertEquals(Map.of(NodeNoteKey.GUARD_DENIAL.wire(), "save"), notes);
+    }
+
+    @Test
+    void lookup_shouldNoteLookup() {
+        ToolGuard guard = mock(ToolGuard.class);
+        when(guard.check(any())).thenReturn(GuardVerdict.deny(Denial.lookup("FACT_MISSING", "缺少事实", "先查询")));
+        Map<String, Object> notes = new HashMap<>();
+        GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
+
+        Observation observation = interceptor.before(businessRequest(readyContext(notes))).orElseThrow();
+
+        assertEquals(RuntimeErrorCode.GUARD_LOOKUP, observation.errorCode());
+        assertEquals(Map.of(NodeNoteKey.GUARD_LOOKUP.wire(), "save"), notes);
+    }
+
+    @Test
+    void blockedToolPasses_shouldReleaseItsNotes() {
+        ToolGuard guard = mock(ToolGuard.class);
+        when(guard.check(any())).thenReturn(GuardVerdict.allow());
+        Map<String, Object> notes = new HashMap<>(Map.of(
+            NodeNoteKey.GUARD_DENIAL.wire(), "save", NodeNoteKey.GUARD_LOOKUP.wire(), "save"));
+        GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
+
+        assertTrue(interceptor.before(businessRequest(readyContext(notes))).isEmpty());
+        assertTrue(notes.isEmpty());
+    }
+
+    @Test
+    void otherToolPasses_shouldKeepNotes() {
+        ToolGuard guard = mock(ToolGuard.class);
+        when(guard.check(any())).thenReturn(GuardVerdict.allow());
+        Map<String, Object> notes = new HashMap<>(Map.of(NodeNoteKey.GUARD_DENIAL.wire(), "delete"));
+        GuardInterceptor interceptor = new GuardInterceptor(List.of(guard), emptyEvidence());
+
+        assertTrue(interceptor.before(businessRequest(readyContext(notes))).isEmpty());
+        assertEquals(Map.of(NodeNoteKey.GUARD_DENIAL.wire(), "delete"), notes);
+    }
+
+    @Test
     void interceptorOrder_shouldMatchContractChain() {
         RuntimeProperties properties = mock(RuntimeProperties.class);
         RuntimeStateFacade stateFacade = mock(RuntimeStateFacade.class);
@@ -250,7 +306,25 @@ class GuardInterceptorTest {
     }
 
     private static ToolExecutionContext readyContext() {
+        return readyContext(new HashMap<>());
+    }
+
+    private static ToolExecutionContext readyContext(Map<String, Object> notes) {
+        NodeScope scope = mock(NodeScope.class, CALLS_REAL_METHODS);
+        doReturn(notes).when(scope).state();
+        doAnswer(invocation -> {
+            String key = invocation.getArgument(0);
+            Object value = invocation.getArgument(1);
+            if (Objects.isNull(value)) {
+                notes.remove(key);
+            } else {
+                notes.put(key, value);
+            }
+            return null;
+        }).when(scope).note(anyString(), any());
+
         ToolExecutionContext context = mock(ToolExecutionContext.class);
+        when(context.scope()).thenReturn(scope);
         when(context.getSkillKey()).thenReturn("cms.article");
         when(context.approvedWrite()).thenReturn(false);
         when(context.getSkill()).thenReturn(new Skill("cms.article"));

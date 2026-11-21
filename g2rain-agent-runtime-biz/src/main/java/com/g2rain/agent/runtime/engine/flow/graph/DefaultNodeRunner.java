@@ -16,6 +16,7 @@ import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
@@ -280,8 +281,10 @@ public class DefaultNodeRunner implements NodeRunner {
             case LOOP_DONE, LOOP_SKIPPED -> effects;
             case LOOP_SUSPENDED -> {
                 String message = Strings.defaultIfBlank(result.message(), RuntimeMessage.STEP_WAITING.text());
-                effects.add(new GraphEffect.SaveSuspend(nodeId, result.checkpointType(), message, result.pendingAction(), result.missingParameters(), result.suggestions()));
-                effects.add(new GraphEffect.Halt(new ExecutorResult(TaskStatus.SUSPENDED, nodeId, message, result.checkpointType())));
+                // 挂起只来自追问或审批，二者都已写停顿原因
+                HaltReason reason = Objects.requireNonNull(result.haltReason());
+                effects.add(new GraphEffect.SaveSuspend(nodeId, reason, message, result.pendingAction(), result.missingParameters(), result.suggestions()));
+                effects.add(new GraphEffect.Halt(new ExecutorResult(TaskStatus.SUSPENDED, nodeId, message, reason.checkpointType())));
                 yield effects;
             }
             case LOOP_CANCELLED -> {

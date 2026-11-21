@@ -551,12 +551,12 @@ public class DefaultReActLoop implements ReActLoop {
         };
         Trace.at(TraceStage.REACT, "exited")
             .kv("status", status)
-            .kv("checkpointType", ctx.getCheckpointType())
+            .kv("haltReason", ctx.getHaltReason())
             .kv("missing", ctx.getMissingParameters())
             .info();
 
         return new ReActLoopResult(
-            status, message, ctx.getCheckpointType(), ctx.getPendingAction(),
+            status, message, ctx.getHaltReason(), ctx.getPendingAction(),
             status == NodeStatus.SUSPENDED ? ctx.getMissingParameters() : null,
             status == NodeStatus.SUSPENDED ? ctx.getSuggestions() : null
         );

@@ -6,7 +6,7 @@ import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueRole;
-import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -148,15 +148,15 @@ public class SourceVerifier {
     }
 
     /**
-     * 本轮已回答的 FOLLOW_UP 检查点的 expectedFields 是否已直接认定该参数路径。
+     * 本轮已回答的缺参追问（{@link HaltReason#MISSING_INPUT}）的 expectedFields 是否已直接认定该参数路径。
      *
      * @param ctx       当前工具执行上下文
      * @param paramPath 参数路径
-     * @return 本轮回答的检查点为追问且字段列表含该路径或叶子键
+     * @return 本轮回答的检查点为缺参追问且字段列表含该路径或叶子键
      */
     public boolean followUpAccepted(ToolExecutionContext ctx, String paramPath) {
         Optional<TaskCheckpoint> checkpoint = ctx.getFrame().turn().resumed();
-        if (checkpoint.isEmpty() || checkpoint.get().getType() != CheckpointType.FOLLOW_UP) {
+        if (checkpoint.isEmpty() || checkpoint.get().getHaltReason() != HaltReason.MISSING_INPUT) {
             return false;
         }
 

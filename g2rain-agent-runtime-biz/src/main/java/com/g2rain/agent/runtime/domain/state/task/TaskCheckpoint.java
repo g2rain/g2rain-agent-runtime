@@ -23,9 +23,14 @@ import java.util.List;
 public class TaskCheckpoint {
 
     /**
-     * 挂起原因，例如等待补参、审批或结果核实。
+     * 检查点类型（恢复协议）：追问、审批或结果核实。
      */
     private CheckpointType type;
+
+    /**
+     * 停下等用户的原因；类型由它决定。
+     */
+    private HaltReason haltReason;
 
     /**
      * 检查点业务 id；事件与卡片用，缺省挂起时生成。
@@ -60,7 +65,7 @@ public class TaskCheckpoint {
     /**
      * FOLLOW_UP 场景待用户确认的参数路径（如 {@code title} / {@code status}）。
      *
-     * <p>恢复 REPLY 时据此写入 USER 溯源，避免 {@code forbidSynthetic} 死循环。</p>
+     * <p>只在 {@link HaltReason#MISSING_INPUT} 时据此把用户回复认定为 USER 来源，避免 {@code forbidSynthetic} 死循环。</p>
      */
     private List<String> expectedFields = new ArrayList<>();
 }

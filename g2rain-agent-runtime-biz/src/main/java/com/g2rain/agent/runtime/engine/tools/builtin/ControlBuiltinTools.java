@@ -10,10 +10,8 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
-import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
-import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
-import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -39,7 +37,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -73,7 +70,8 @@ public class ControlBuiltinTools implements BuiltinTools {
     /**
      * 向用户追问（含补参）。
      *
-     * <p>当前节点改为挂起（SUSPENDED）并记下追问检查点（FOLLOW_UP）：问题、待补参数与快捷建议。
+     * <p>停顿原因由 {@link HaltResolver} 判定，没有依据时拒绝；有补查待完成时拒绝。当前节点改为挂起（SUSPENDED）
+     * 并记下追问检查点（FOLLOW_UP）：问题、停顿原因、待补参数与快捷建议；请用户决定如何处理时不带待补参数。
      * 人回复后运行时再续跑本节点循环。{@code expectedFields} 未传或 null 视为空列表。
      * 例：{@code followUp("请补充收货地址", List.of("address"), List.of("家里"), toolContext)}</p>
      *
@@ -89,6 +87,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             向用户追问 (含补参), 节点挂起, 等人回复后续跑
             """
     )
+    @SuppressWarnings("UnusedReturnValue")
     @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.ASK)
     public NodeActionResult followUp(@ToolParam(description = "追问文案") String question,
                                      @ToolParam(required = false, description = "待补参数名") @Nullable List<String> expectedFields,
@@ -97,10 +96,15 @@ public class ControlBuiltinTools implements BuiltinTools {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         // 模型偶尔把换行多转义一次，面向用户的文案先还原
         question = RuntimeUtils.unescapeLiteral(question);
-        expectedFields = Objects.requireNonNullElse(expectedFields, List.of());
-        rejectAnswered(ctx, question, expectedFields);
-        requireGrounded(ctx, expectedFields);
-        ctx.applyFollowUp(question, expectedFields, suggestions);
+        HaltResolver.requireNoLookup(ctx);
+        List<String> asked = Objects.requireNonNullElse(expectedFields, List.of());
+        HaltReason reason = HaltResolver.followUp(ctx, asked);
+        // 请用户决定如何处理时没有参数可补：不带待补参数，回复也不按用户来源认定任何参数
+        List<String> fields = reason == HaltReason.DENIED ? List.of() : asked;
+        rejectAnswered(ctx, question, fields);
+        // 用户的回复即决定，挂起后不再限制失败与其他写操作
+        ctx.scope().note(NodeNoteKey.GUARD_DENIAL, null);
+        ctx.applyFollowUp(question, reason, fields, suggestions);
         return new NodeActionResult(ctx.getNodeStatus().name(), question);
     }
 
@@ -166,7 +170,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     /**
      * 本节点完成：结束本节点循环。
      *
-     * <p>先过 finish 门槛（必填产出、节点完成目标等）。通过则节点标 DONE、落下 output，并沉淀实体候选。
+     * <p>有补查待完成时拒绝。先过 finish 门槛（必填产出、节点完成目标等）。通过则节点标 DONE、落下 output，并沉淀实体候选。
      * 未达标只记下拒绝原因，节点状态不变，循环可继续。{@code output} 须是给用户看的结论。
      * 例：{@code finish("已查到 2 条待发货订单", toolContext)}</p>
      *
@@ -183,6 +187,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FINISH)
     public NodeActionResult finish(@ToolParam(description = "节点正式产出") String output, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
+        HaltResolver.requireNoLookup(ctx);
         nodeFinisher.finish(ctx, RuntimeUtils.unescapeLiteral(output));
         return new NodeActionResult(ctx.getNodeStatus().name(), ctx.getFinishRejectedReason());
     }
@@ -217,7 +222,8 @@ public class ControlBuiltinTools implements BuiltinTools {
     /**
      * 本节点失败：结束本节点循环并标记 FAILED。
      *
-     * <p>写入失败原因并清挂起类型。后续调度按失败节点处理，不再续跑本循环。
+     * <p>有补查待完成、或有前置条件拒绝待用户决定时拒绝（后者须追问用户）。写入失败原因并清停顿原因。
+     * 后续调度按失败节点处理，不再续跑本循环。
      * 例：{@code fail("下游接口超时", toolContext)}</p>
      *
      * @param reason      失败原因
@@ -234,6 +240,8 @@ public class ControlBuiltinTools implements BuiltinTools {
     public NodeActionResult fail(@ToolParam(description = "失败原因") String reason, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         reason = RuntimeUtils.unescapeLiteral(reason);
+        HaltResolver.requireNoLookup(ctx);
+        HaltResolver.requireNoDecision(ctx);
         ctx.applyFail(reason);
         return new NodeActionResult(ctx.getNodeStatus().name(), reason);
     }
@@ -318,79 +326,6 @@ public class ControlBuiltinTools implements BuiltinTools {
     }
 
     /**
-     * 追问须有依据，否则拒绝：
-     * <ol>
-     *   <li>决定：本节点最近一次业务调用被前置条件拦下，由用户决定如何处理，不校验待补参数；</li>
-     *   <li>缺参：待补参数都是本技能工具中允许来自用户的参数，或须来自查询结果且本节点已查到候选（让用户选）；</li>
-     *   <li>澄清：不带待补参数，但本节点最近一次业务调用结果为空、业务失败，或返回多条候选需要用户选择。</li>
-     * </ol>
-     * 没有契约的技能不做判定。
-     *
-     * @param ctx            节点执行现场
-     * @param expectedFields 待补参数名
-     */
-    private static void requireGrounded(ToolExecutionContext ctx, List<String> expectedFields) {
-        SkillContract contract = ctx.contract();
-        if (Objects.isNull(contract)) {
-            return;
-        }
-
-        if (lastCallDenied(ctx)) {
-            return;
-        }
-
-        if (expectedFields.isEmpty()) {
-            if (!lastCallUnresolved(ctx) && !lastCallAmbiguous(ctx)) {
-                throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
-                    ModelHint.FOLLOW_UP_NO_BASIS.text());
-            }
-            return;
-        }
-
-        boolean hasCandidates = ctx.scope().evidence().stream().anyMatch(head -> head.done() && !Boolean.TRUE.equals(head.empty()));
-        List<String> invalid = expectedFields.stream().filter(field -> !askable(contract, field, hasCandidates)).toList();
-        if (!invalid.isEmpty()) {
-            throw new ToolRejectedException(RuntimeErrorCode.FOLLOW_UP_UNGROUNDED, ModelHint.NEXT_FOLLOW_UP.text(),
-                ModelHint.FOLLOW_UP_FIELDS_INVALID.text("fields", String.join(", ", invalid)));
-        }
-    }
-
-    /**
-     * 参数能否向用户追问（按完整路径或叶子名匹配本技能工具参数）：允许来自用户，或须来自查询结果且已有候选可选。
-     *
-     * @param contract      技能契约
-     * @param field         待补参数名
-     * @param hasCandidates 本节点已有非空的成功查询
-     * @return 可以追问
-     */
-    private static boolean askable(SkillContract contract, String field, boolean hasCandidates) {
-        String leaf = RuntimeUtils.leafKey(field);
-        return contract.getTools().values().stream()
-            .flatMap(tool -> tool.getArgs().entrySet().stream())
-            .filter(arg -> arg.getKey().equals(field) || RuntimeUtils.leafKey(arg.getKey()).equals(leaf))
-            .map(Map.Entry::getValue)
-            .anyMatch(arg -> arg.allows(SourceType.USER) || (hasCandidates && arg.allows(SourceType.EVIDENCE)));
-    }
-
-    /**
-     * 本节点最近一次业务调用结果为空或业务失败（待确认、进行中的不算）。
-     *
-     * @param ctx 节点执行现场
-     * @return 需要向用户澄清
-     */
-    private static boolean lastCallUnresolved(ToolExecutionContext ctx) {
-        List<EvidenceHead> evidence = ctx.scope().evidence();
-        if (evidence.isEmpty()) {
-            return false;
-        }
-
-        EvidenceHead last = evidence.getLast();
-        boolean failed = last.status() == EvidenceStatus.FAILED || last.status() == EvidenceStatus.TIMEOUT
-            || Boolean.FALSE.equals(last.businessOk());
-        return failed || (last.done() && Boolean.TRUE.equals(last.empty()));
-    }
-
-    /**
      * 跳过须有依据，否则拒绝：节点有完成目标、目标尚未写成功、本节点或上游节点有成功且非空的查询。
      *
      * @param ctx 节点执行现场
@@ -414,33 +349,6 @@ public class ControlBuiltinTools implements BuiltinTools {
             throw new ToolRejectedException(RuntimeErrorCode.SKIP_UNGROUNDED, ModelHint.NEXT_SKIP.text(),
                 ModelHint.SKIP_NO_BASIS.text());
         }
-    }
-
-    /**
-     * 本节点最近一次业务调用被前置条件拦下（{@code GUARD_DENIED}），需要用户决定如何处理。
-     *
-     * @param ctx 节点执行现场
-     * @return 最近一次业务调用被拦下
-     */
-    private static boolean lastCallDenied(ToolExecutionContext ctx) {
-        return Objects.nonNull(ctx.scope().note(NodeNoteKey.GUARD_DENIAL));
-    }
-
-    /**
-     * 本节点最近一次业务调用成功且有抽取项返回多条，需要用户从候选中选择。
-     *
-     * @param ctx 节点执行现场
-     * @return 有多条候选
-     */
-    private static boolean lastCallAmbiguous(ToolExecutionContext ctx) {
-        List<EvidenceHead> evidence = ctx.scope().evidence();
-        if (evidence.isEmpty()) {
-            return false;
-        }
-
-        EvidenceHead last = evidence.getLast();
-        return last.done() && Objects.nonNull(last.extractCounts())
-            && last.extractCounts().values().stream().anyMatch(count -> count > 1);
     }
 
     /**

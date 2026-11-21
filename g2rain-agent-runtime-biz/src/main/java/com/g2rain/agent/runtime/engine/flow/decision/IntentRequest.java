@@ -143,12 +143,13 @@ public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @J
      *
      * @param goalSummary    任务目标摘要；可空
      * @param checkpointType 断点类型名；无断点可空
+     * @param haltReason     断点停顿原因名（补参、选择、澄清、待用户决定等）；无断点可空
      * @param expectedFields 断点仍缺的字段路径
      * @param writePending   是否存在待审批或待执行写工具
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ActiveTask(@Nullable String goalSummary, @Nullable String checkpointType,
-                             List<String> expectedFields, boolean writePending) {
+                             @Nullable String haltReason, List<String> expectedFields, boolean writePending) {
 
         public ActiveTask {
             expectedFields = List.copyOf(expectedFields);

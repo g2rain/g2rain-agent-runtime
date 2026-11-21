@@ -266,6 +266,10 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     GUARD_LOOKUP("agent_runtime.42253", "调用前需先补查数据：{0:code}"),
 
+    DECISION_PENDING("agent_runtime.42254", "调用被拦下，须先由用户决定如何处理 [{0:toolName}]"),
+
+    LOOKUP_PENDING("agent_runtime.42255", "须先补查数据并重新调用 [{0:toolName}]"),
+
     GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 
     /**

@@ -4,6 +4,7 @@ import com.g2rain.agent.runtime.converter.TaskCheckpointConverter;
 import com.g2rain.agent.runtime.converter.TaskInstanceConverter;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
@@ -132,6 +133,7 @@ public class TaskRepository {
             checkpoint.setCheckpointId(vo.getCheckpointId());
             checkpoint.setNodeId(vo.getNodeId());
             checkpoint.setType(CheckpointType.valueOf(vo.getType()));
+            checkpoint.setHaltReason(HaltReason.valueOf(vo.getHaltReason()));
             checkpoint.setQuestion(vo.getQuestion());
             checkpoint.setExpectedFields(parseStringList(vo.getExpectedFields()));
             checkpoint.setAllowedActions(parseResumeActions(vo.getAllowedActions()));
@@ -274,6 +276,7 @@ public class TaskRepository {
             dto.setTaskId(taskId);
             dto.setNodeId(checkpoint.getNodeId());
             dto.setType(checkpoint.getType().name());
+            dto.setHaltReason(checkpoint.getHaltReason().name());
             dto.setQuestion(checkpoint.getQuestion());
             dto.setExpectedFields(RepoSupport.toJson(checkpoint.getExpectedFields()));
             dto.setAllowedActions(RepoSupport.JSON.obj2str(actionNames(checkpoint.getAllowedActions())));

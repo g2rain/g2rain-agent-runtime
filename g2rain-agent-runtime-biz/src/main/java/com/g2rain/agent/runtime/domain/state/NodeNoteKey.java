@@ -37,11 +37,18 @@ public enum NodeNoteKey {
     GATED_WRITE("gatedWrite"),
 
     /**
-     * 前置条件拦截。
-     * <p>值为工具名：本节点最近一次业务调用被前置条件以 {@code GUARD_DENIED} 拦下时写入；
-     * 之后任一业务调用放行或因其他原因被拦下时清除。作为澄清追问的依据。</p>
+     * 前置条件拒绝。
+     * <p>值为工具名：业务调用被前置条件以 {@code GUARD_DENIED} 拦下时写入；该工具之后放行或节点追问挂起时清除。
+     * 存在期间由用户决定如何处理：不能失败，也不能执行其他写操作。</p>
      */
-    GUARD_DENIAL("guardDenial");
+    GUARD_DENIAL("guardDenial"),
+
+    /**
+     * 前置条件补查。
+     * <p>值为工具名：业务调用被前置条件以 {@code GUARD_LOOKUP} 拦下时写入；该工具之后放行或被拒绝时清除。
+     * 存在期间须先补查并重新调用，不能追问、失败或完成。</p>
+     */
+    GUARD_LOOKUP("guardLookup");
 
     /**
      * Redis / Hash 字段名。

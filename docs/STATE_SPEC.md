@@ -345,18 +345,28 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `checkpointId` | String | 断点 ID |
-| `type` | CheckpointType | 断点类型 |
+| `type` | CheckpointType | 断点类型，由 `haltReason` 决定 |
+| `haltReason` | HaltReason | 停下等用户的原因，由 Runtime 判定 |
 | `question` | String? | 展示给用户的问题。审批时由 Runtime 拼上待执行参数 |
 | `allowedActions` | List<ResumeAction> | 允许的恢复动作，默认取类型的默认动作 |
 | `suggestions` | List<String> | 候选答案 |
 | `pendingAction` | PendingAction? | 审批通过后要执行的写操作 |
-| `expectedFields` | List<String> | 追问时要补的参数路径 |
+| `expectedFields` | List<String> | 追问时要补的参数路径；`DENIED`、`UNRESOLVED` 时为空 |
 
 | CheckpointType | 场景 | 默认动作 | 不带动作时的默认恢复 |
 |---|---|---|---|
 | `FOLLOW_UP` | 追问补充信息 | `REPLY`、`CANCEL` | `REPLY` |
 | `APPROVAL` | 写操作前请用户确认 | `CONFIRM`、`REJECT`、`CANCEL` | 无（必须明确动作） |
 | `VERIFY` | 写操作结果不确定，请用户核实是否已生效 | `CONFIRM`、`REJECT` | 无（必须明确动作） |
+
+| HaltReason | CheckpointType | 场景 | 用户回复 |
+|---|---|---|---|
+| `MISSING_INPUT` | `FOLLOW_UP` | 缺少只能由用户提供的参数 | `expectedFields` 中的参数视为来源 `USER` |
+| `AMBIGUOUS` | `FOLLOW_UP` | 查询返回多条候选，请用户选择 | 选中的值仍按查询结果核对来源 |
+| `UNRESOLVED` | `FOLLOW_UP` | 查询为空或业务失败，需要用户澄清 | 作为澄清文字交给模型 |
+| `DENIED` | `FOLLOW_UP` | 调用被前置条件拒绝，由用户决定如何处理 | 先做意图分类：继续、取消或换任务 |
+| `APPROVAL` | `APPROVAL` | 写操作须经用户确认 | 确认、拒绝或取消 |
+| `VERIFY` | `VERIFY` | 写操作结果不确定 | 已生效或未生效 |
 
 | ResumeAction | 含义 |
 |---|---|
@@ -408,6 +418,9 @@
 | `awaiting` | 发起节点正在等待的前置节点 ID |
 | `delegateResult` | 前置节点未成功时回给发起节点的结果，投影给模型一次后清除 |
 | `entityOutputs` | 节点完成时产出中的实体候选 |
+| `gatedWrite` | 被写入闸门拦下、等待申请确认的写调用 |
+| `guardDenial` | 被前置条件拒绝、待用户决定的工具名；该工具放行或节点追问挂起时清除。存在期间不能失败，也不能执行其他写操作（`DECISION_PENDING`） |
+| `guardLookup` | 须先补查的工具名；该工具放行或被拒绝时清除。存在期间不能追问、失败或完成（`LOOKUP_PENDING`） |
 
 #### EvidenceHead（证据头）
 

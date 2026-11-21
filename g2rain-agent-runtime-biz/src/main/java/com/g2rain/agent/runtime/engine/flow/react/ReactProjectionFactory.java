@@ -420,6 +420,7 @@ public class ReactProjectionFactory {
         String pendingTool = Objects.isNull(pending) ? null : Strings.blankToNull(pending.toolName());
         return new ReactProjection.CheckpointView(
             checkpoint.getType(),
+            checkpoint.getHaltReason(),
             Strings.blankToNull(checkpoint.getQuestion()),
             emptyToNull(checkpoint.getAllowedActions()),
             emptyToNull(checkpoint.getExpectedFields()),

@@ -52,6 +52,12 @@ public class TaskCheckpointSelectDto extends BaseSelectListDto {
     private String type;
 
     /**
+     * 停顿原因[MISSING_INPUT, AMBIGUOUS, UNRESOLVED, DENIED, APPROVAL, VERIFY]
+     */
+    @Schema(description = "停顿原因[MISSING_INPUT, AMBIGUOUS, UNRESOLVED, DENIED, APPROVAL, VERIFY]")
+    private String haltReason;
+
+    /**
      * 追问/确认文案
      */
     @Schema(description = "追问/确认文案")

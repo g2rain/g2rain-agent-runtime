@@ -11,6 +11,7 @@ import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
+import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.domain.tool.Observation;
@@ -88,7 +89,7 @@ public class WriteVerifier {
             String ask = RuntimeMessage.VERIFY_ASK.text();
             node.setStatus(NodeStatus.SUSPENDED);
             frame.turn().mark(node.getNodeId(), NodeStatus.SUSPENDED, null, null);
-            effects.add(new GraphEffect.SaveSuspend(node.getNodeId(), CheckpointType.VERIFY, ask, null, List.of(),
+            effects.add(new GraphEffect.SaveSuspend(node.getNodeId(), HaltReason.VERIFY, ask, null, List.of(),
                 List.of()));
             effects.add(new GraphEffect.Halt(new ExecutorResult(TaskStatus.SUSPENDED, node.getNodeId(), ask,
                 CheckpointType.VERIFY)));
