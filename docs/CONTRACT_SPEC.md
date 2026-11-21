@@ -524,9 +524,9 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 | 字段 | 含义 |
 |---|---|
-| `skillKey` / `toolName` / `arguments` / `sources` / `facts` / `pin` | 既有字段，见插件扩展约定 |
+| `skillKey` / `toolName` / `arguments` / `sources` / `pin` | 既有字段，见插件扩展约定 |
 | `callId` | 本次调用标识；与证据、拦截记录同源 |
-| `lookups` | 本节点与上游已成功的读工具调用（`Lookup`：工具名与入参）；结果为空也计入；失败、业务失败、写调用不计 |
+| `calls` | 本节点与上游已成功的工具调用，读写都计入，结果为空也计入；失败、业务失败不计。本节点在前，上游由近到远，同一节点内新的在前。每项 `Call`：工具名、入参（证据头脱敏摘要）、副作用、`facts`（该调用结果按抽取项取出的原文：抽取键与值） |
 | `operator` | 当前请求用户标识；访客为空 |
 
 ---

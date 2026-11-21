@@ -10,10 +10,9 @@ import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spec.SourceType;
+import com.g2rain.agent.runtime.spi.Call;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
-import com.g2rain.agent.runtime.spi.Fact;
-import com.g2rain.agent.runtime.spi.Lookup;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -54,7 +53,7 @@ public class GuardInterceptor implements ToolInterceptor {
     private final List<ToolGuard> guards;
 
     /**
-     * 证据抽取：为本节点与上游构造成功事实。
+     * 证据读取：取本节点与上游已成功的调用。
      */
     private final EvidenceReader evidenceReader;
 
@@ -102,7 +101,7 @@ public class GuardInterceptor implements ToolInterceptor {
     }
 
     /**
-     * 组装只读调用视图：参数与来源为副本，facts 含本节点与上游抽取。
+     * 组装只读调用视图：参数与来源为副本，calls 含本节点与上游已成功的调用及其抽取。
      *
      * @param request  本次请求
      * @param skillKey 当前技能键（已非空白）
@@ -116,16 +115,12 @@ public class GuardInterceptor implements ToolInterceptor {
             sources.put(entry.getKey(), entry.getValue().type());
         }
 
-        List<Fact> facts = evidenceReader.nodeExtracts(context).stream()
-            .map(extract -> new Fact(extract.tool(), extract.key(), extract.value()))
-            .toList();
-        List<Lookup> lookups = evidenceReader.nodeLookups(context);
+        List<Call> calls = evidenceReader.nodeCalls(context);
         Skill skill = context.getSkill();
         String pin = Objects.isNull(skill) ? null : skill.pin();
         Long userId = PrincipalContextHolder.getUserId();
         String operator = Objects.isNull(userId) ? null : Long.toString(userId);
-        return new CallView(skillKey, request.toolName(), arguments, sources, facts, pin,
-            request.callId(), lookups, operator);
+        return new CallView(skillKey, request.toolName(), arguments, sources, pin, request.callId(), calls, operator);
     }
 
     /**

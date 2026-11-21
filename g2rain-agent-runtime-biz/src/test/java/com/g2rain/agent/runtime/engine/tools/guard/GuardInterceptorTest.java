@@ -10,11 +10,12 @@ import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.spec.SourceType;
+import com.g2rain.agent.runtime.spi.Call;
 import com.g2rain.agent.runtime.spi.CallView;
 import com.g2rain.agent.runtime.spi.Denial;
 import com.g2rain.agent.runtime.spi.Fact;
-import com.g2rain.agent.runtime.spi.Lookup;
 import com.g2rain.agent.runtime.spi.ToolGuard;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
@@ -57,7 +58,7 @@ class GuardInterceptorTest {
         ToolInvokeRequest request = mock(ToolInvokeRequest.class);
 
         assertTrue(interceptor.before(request).isEmpty());
-        verify(evidenceReader, never()).nodeExtracts(any());
+        verify(evidenceReader, never()).nodeCalls(any());
     }
 
     @Test
@@ -73,7 +74,7 @@ class GuardInterceptorTest {
 
         assertTrue(interceptor.before(request).isEmpty());
         verify(guard, never()).check(any());
-        verify(evidenceReader, never()).nodeExtracts(any());
+        verify(evidenceReader, never()).nodeCalls(any());
     }
 
     @Test
@@ -142,21 +143,16 @@ class GuardInterceptorTest {
     }
 
     @Test
-    void callView_shouldExposeCopySourcesFactsAndPin() {
+    void callView_shouldExposeCopySourcesCallsAndPin() {
         ToolGuard guard = mock(ToolGuard.class);
         when(guard.check(any())).thenReturn(Optional.empty());
 
-        EvidenceReader.EvidenceExtract local = new EvidenceReader.EvidenceExtract(
-            "n1", "e1", "local_tool", "localKey", "$.id",
-            JsonCodecFactory.instance().str2node("\"L\""));
-        EvidenceReader.EvidenceExtract upstream = new EvidenceReader.EvidenceExtract(
-            "n0", "e0", "up_tool", "upKey", "$.name",
-            JsonCodecFactory.instance().str2node("\"U\""));
+        Call local = new Call("local_tool", JsonNodeFactory.instance.objectNode().put("q", 1), SideEffect.NONE,
+            List.of(new Fact("localKey", JsonCodecFactory.instance().str2node("\"L\""))));
+        Call upstream = new Call("up_tool", JsonNodeFactory.instance.objectNode(), SideEffect.WRITE,
+            List.of(new Fact("upKey", JsonCodecFactory.instance().str2node("\"U\""))));
         EvidenceReader evidenceReader = mock(EvidenceReader.class);
-        when(evidenceReader.nodeExtracts(any())).thenReturn(List.of(local, upstream));
-        when(evidenceReader.nodeLookups(any())).thenReturn(List.of(
-            new Lookup("local_tool", JsonNodeFactory.instance.objectNode().put("q", 1))
-        ));
+        when(evidenceReader.nodeCalls(any())).thenReturn(List.of(local, upstream));
 
         ToolExecutionContext context = readyContext();
         when(context.getSkill()).thenReturn(new Skill("cms.article", null, List.of("save"), null, null, null, "pin-9"));
@@ -181,13 +177,8 @@ class GuardInterceptorTest {
         assertEquals("save", view.toolName());
         assertEquals("pin-9", view.pin());
         assertEquals("call-1", view.callId());
-        assertEquals(1, view.lookups().size());
-        assertEquals("local_tool", view.lookups().getFirst().toolName());
         assertEquals(SourceType.EVIDENCE, view.sources().get("id"));
-        assertEquals(List.of(
-            new Fact("local_tool", "localKey", JsonCodecFactory.instance().str2node("\"L\"")),
-            new Fact("up_tool", "upKey", JsonCodecFactory.instance().str2node("\"U\""))
-        ), view.facts());
+        assertEquals(List.of(local, upstream), view.calls());
 
         assertInstanceOf(ObjectNode.class, view.arguments());
         ((ObjectNode) view.arguments()).put("id", 99);
@@ -239,8 +230,7 @@ class GuardInterceptorTest {
 
     private static EvidenceReader emptyEvidence() {
         EvidenceReader evidenceReader = mock(EvidenceReader.class);
-        when(evidenceReader.nodeExtracts(any())).thenReturn(List.of());
-        when(evidenceReader.nodeLookups(any())).thenReturn(List.of());
+        when(evidenceReader.nodeCalls(any())).thenReturn(List.of());
         return evidenceReader;
     }
 

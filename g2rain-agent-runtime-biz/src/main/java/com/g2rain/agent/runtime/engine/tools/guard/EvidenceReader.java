@@ -5,7 +5,6 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.spec.ExtractSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
-import com.g2rain.agent.runtime.spec.SideEffect;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.domain.state.Source;
@@ -15,7 +14,8 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
-import com.g2rain.agent.runtime.spi.Lookup;
+import com.g2rain.agent.runtime.spi.Call;
+import com.g2rain.agent.runtime.spi.Fact;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -317,58 +317,26 @@ public class EvidenceReader {
     }
 
     /**
-     * 本节点及上游成功证据按抽取项取出的原文。
+     * 本节点及上游已成功的工具调用，含读与写。
      *
-     * <p>本节点在前，上游按距离由近到远；只取配置了 extracts 的工具，每个抽取项一条。</p>
-     *
-     * @param ctx 当前工具执行上下文
-     * @return 本节点与上游抽取原文；没有为空列表
-     */
-    public List<EvidenceExtract> nodeExtracts(ToolExecutionContext ctx) {
-        List<EvidenceExtract> extracts = new ArrayList<>();
-        appendExtracts(extracts, ctx, ctx.getNodeId(), ctx.scope().evidence());
-        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
-            appendExtracts(extracts, ctx, owner, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
-        }
-
-        return extracts;
-    }
-
-    /**
-     * 本节点及上游已成功的读工具调用。
-     *
-     * <p>遍历范围与顺序与 {@link #nodeExtracts} 一致；
-     * 条件为 {@code sideEffect == NONE}、{@code status == SUCCESS}、{@code businessOk} 不为 {@code false}，
-     * 不论结果是否为空。入参取证据头 {@code argsBrief} 解析为 JSON；不是合法 JSON 对象时为空对象。</p>
+     * <p>本节点在前，上游按距离由近到远；同一节点内新的在前。条件为 {@code status == SUCCESS}、
+     * {@code businessOk} 不为 {@code false}，不论结果是否为空。入参取证据头 {@code argsBrief} 解析为 JSON，
+     * 不是合法 JSON 对象时为空对象；事实为该调用按所属技能契约的抽取项取出的原文。</p>
      *
      * @param ctx 当前工具执行上下文
-     * @return 已成功读调用；没有为空列表
+     * @return 已成功调用；没有为空列表
      */
-    public List<Lookup> nodeLookups(ToolExecutionContext ctx) {
-        List<Lookup> lookups = new ArrayList<>();
-        appendLookups(lookups, ctx.scope().evidence());
-        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
-            appendLookups(lookups, stateFacade.evidenceOf(ctx.getFrame().turn(), owner));
+    public List<Call> nodeCalls(ToolExecutionContext ctx) {
+        List<Call> calls = new ArrayList<>();
+        for (OwnedEvidence owned : successfulEvidenceNewestFirst(ctx)) {
+            EvidenceHead head = owned.head();
+            List<Fact> facts = extractsOf(ctx, owned).stream()
+                .map(extract -> new Fact(extract.key(), extract.value()))
+                .toList();
+            calls.add(new Call(head.toolName(), argsOf(head.argsBrief()), head.sideEffect(), facts));
         }
 
-        return lookups;
-    }
-
-    /**
-     * 把某节点成功读调用追加到列表（新的在前）。
-     *
-     * @param lookups  输出列表
-     * @param evidence 该节点全部证据（按发生顺序）
-     */
-    private static void appendLookups(List<Lookup> lookups, List<EvidenceHead> evidence) {
-        for (int i = evidence.size() - 1; i >= 0; i--) {
-            EvidenceHead head = evidence.get(i);
-            if (head.sideEffect() != SideEffect.NONE || !isToolCallSuccess(head)) {
-                continue;
-            }
-
-            lookups.add(new Lookup(head.toolName(), argsOf(head.argsBrief())));
-        }
+        return calls;
     }
 
     /**
@@ -423,24 +391,38 @@ public class EvidenceReader {
         List<OwnedEvidence> heads = new ArrayList<>();
         addNewestFirst(heads, owner, evidence);
         for (OwnedEvidence owned : heads) {
-            ToolSpec tool = toolOf(ctx, owner, owned.head().toolName());
-            if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
+            extracts.addAll(extractsOf(ctx, owned));
+        }
+    }
+
+    /**
+     * 一条成功证据按所属技能契约的抽取项取出的原文。
+     *
+     * @param ctx   执行上下文
+     * @param owned 带所属节点的证据
+     * @return 抽取原文；工具无抽取项或路径无值时为空列表
+     */
+    private List<EvidenceExtract> extractsOf(ToolExecutionContext ctx, OwnedEvidence owned) {
+        ToolSpec tool = toolOf(ctx, owned.ownerNodeId(), owned.head().toolName());
+        if (Objects.isNull(tool) || Collections.isEmpty(tool.getExtracts())) {
+            return List.of();
+        }
+
+        List<EvidenceExtract> extracts = new ArrayList<>();
+        JsonNode payload = stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), owned.head().evidenceId());
+        for (ExtractSpec extract : tool.getExtracts()) {
+            if (Strings.isBlank(extract.getPath())) {
                 continue;
             }
 
-            JsonNode payload = stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), owned.head().evidenceId());
-            for (ExtractSpec extract : tool.getExtracts()) {
-                if (Strings.isBlank(extract.getPath())) {
-                    continue;
-                }
-
-                JsonNode value = JSON.lookupNode(payload, extract.getPath().trim());
-                if (JSON.hasValue(value)) {
-                    extracts.add(new EvidenceExtract(owner, owned.head().evidenceId(), owned.head().toolName(),
-                        extract.getKey(), extract.getPath().trim(), value));
-                }
+            JsonNode value = JSON.lookupNode(payload, extract.getPath().trim());
+            if (JSON.hasValue(value)) {
+                extracts.add(new EvidenceExtract(owned.ownerNodeId(), owned.head().evidenceId(),
+                    owned.head().toolName(), extract.getKey(), extract.getPath().trim(), value));
             }
         }
+
+        return extracts;
     }
 
     /**
