@@ -108,7 +108,9 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             // 断点有安全默认动作（FOLLOW_UP → REPLY）时直接续跑，用户输入即回复内容
             ResumeAction implied = resolveAction(null, checkpoint);
             if (Objects.nonNull(implied)) {
-                return EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, implied);
+                return answersFollowUp(implied, checkpoint, request.getUserInput())
+                    ? EntryResult.accept(agentId)
+                    : EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, implied);
             }
 
             // 审批与回查没有安全默认动作：有文字交给意图判断，无文字要求显式选择
@@ -129,7 +131,26 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             return EntryResult.reject(new RejectedReply(conversationId, taskId, actionError));
         }
 
+        if (answersFollowUp(action, checkpoint, request.getUserInput())) {
+            return EntryResult.accept(agentId);
+        }
+
         return EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, action);
+    }
+
+    /**
+     * 是否为带文字的追问回复。
+     *
+     * <p>这类回复不强制续跑，交给意图分类：可能是回答追问（续跑），也可能是放弃（取消任务）或改办别的事。</p>
+     *
+     * @param action     本次恢复动作
+     * @param checkpoint 当前断点
+     * @param userInput  用户输入；可空
+     * @return 回复追问且有文字时为 {@code true}
+     */
+    private static boolean answersFollowUp(ResumeAction action, TaskCheckpoint checkpoint, @Nullable String userInput) {
+        return action == ResumeAction.REPLY && checkpoint.getType() == CheckpointType.FOLLOW_UP
+            && Strings.isNotBlank(userInput);
     }
 
     /**

@@ -6,7 +6,6 @@ import com.g2rain.agent.runtime.domain.entry.EntryResult;
 import com.g2rain.agent.runtime.domain.state.ConversationFence;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
-import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
@@ -32,11 +31,12 @@ class DefaultTurnEntryGuardTest {
         new DefaultTurnEntryGuard(mock(AgentProfiles.class), mock(RuntimeProperties.class));
 
     @Test
-    void followUpReplyContinuesWithoutClassification() {
+    void followUpReplyGoesToClassification() {
+        // 回复可能是回答，也可能是放弃或改办别的事，交给意图分类
         EntryResult result = guard.guard(context(CheckpointType.FOLLOW_UP, "上海"));
 
-        assertThat(result.forceContinue()).isTrue();
-        assertThat(result.effectiveAction()).isEqualTo(ResumeAction.REPLY);
+        assertThat(result.forceContinue()).isFalse();
+        assertThat(result.failedReply()).isNull();
     }
 
     @Test
