@@ -54,15 +54,12 @@ g2rain:
         max-no-progress-rounds: 3
         workspace-slice-max-chars: 8000
         value-summary-max-chars: 256
-        repair-max-rounds: 8
         observation-error-max-chars: 2048
         observation-max-chars: 8000
         brief-max-chars: 200
         fingerprint-trip-limit: 3
       goal-gate:
         enabled: true
-        llm-enabled: true
-        min-deterministic-chars: 24
         prompt-max-chars: 500
         node-summaries-max: 12
         dialogue-tail: 6

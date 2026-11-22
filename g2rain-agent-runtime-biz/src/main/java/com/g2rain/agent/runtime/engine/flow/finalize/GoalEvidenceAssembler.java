@@ -6,7 +6,6 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
-import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.common.utils.Strings;
@@ -69,7 +68,7 @@ public final class GoalEvidenceAssembler {
      */
     private static List<GoalNodeSummary.Call> calls(List<EvidenceHead> heads, int max) {
         List<GoalNodeSummary.Call> calls = heads.stream()
-            .filter(head -> head.status() == EvidenceStatus.SUCCESS && Strings.isNotBlank(head.resultBrief()))
+            .filter(head -> head.done() && Strings.isNotBlank(head.resultBrief()))
             .map(head -> new GoalNodeSummary.Call(head.toolName(), Objects.requireNonNull(head.resultBrief())))
             .toList();
         int from = Math.max(0, calls.size() - Math.max(0, max));

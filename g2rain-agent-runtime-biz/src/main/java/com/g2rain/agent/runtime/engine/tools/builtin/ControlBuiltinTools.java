@@ -213,6 +213,7 @@ public class ControlBuiltinTools implements BuiltinTools {
     public NodeActionResult skip(@ToolParam(description = "不需要执行的原因") String reason, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         reason = RuntimeUtils.unescapeLiteral(reason);
+        HaltResolver.requireNoLookup(ctx);
         requireSkippable(ctx);
         ctx.scope().note(NodeNoteKey.GATED_WRITE, null);
         ctx.applySkip(reason);

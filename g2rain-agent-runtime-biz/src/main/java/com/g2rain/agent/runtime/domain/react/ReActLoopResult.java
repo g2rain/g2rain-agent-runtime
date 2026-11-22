@@ -20,15 +20,16 @@ import java.util.List;
  * @param pendingAction     审批类挂起时待用户确认的动作；可空
  * @param missingParameters 仍缺失的参数路径列表；可空
  * @param suggestions       ASK 快捷气泡文案；可空
+ * @param errorCode         节点失败时的稳定错误码；非失败为 {@code null}
  * @author alpha
  * @since 2026/8/21
  */
 public record ReActLoopResult(NodeStatus nodeStatus, @Nullable String message, @Nullable HaltReason haltReason,
                               @Nullable PendingAction pendingAction, @Nullable List<String> missingParameters,
-                              @Nullable List<String> suggestions) {
+                              @Nullable List<String> suggestions, @Nullable String errorCode) {
 
     /**
-     * 带消息、停顿原因与待确认动作、不带缺参/建议的结果。
+     * 带消息、停顿原因与待确认动作、不带缺参/建议/错误码的结果。
      *
      * @param nodeStatus    节点状态
      * @param message       说明文案；可空
@@ -37,6 +38,20 @@ public record ReActLoopResult(NodeStatus nodeStatus, @Nullable String message, @
      */
     public ReActLoopResult(NodeStatus nodeStatus, @Nullable String message, @Nullable HaltReason haltReason,
                            @Nullable PendingAction pendingAction) {
-        this(nodeStatus, message, haltReason, pendingAction, null, null);
+        this(nodeStatus, message, haltReason, pendingAction, null, null, null);
+    }
+
+    /**
+     * 带消息、停顿原因、待确认动作与错误码的结果。
+     *
+     * @param nodeStatus    节点状态
+     * @param message       说明文案；可空
+     * @param haltReason    停顿原因；可空
+     * @param pendingAction 待确认动作；可空
+     * @param errorCode     失败错误码；可空
+     */
+    public ReActLoopResult(NodeStatus nodeStatus, @Nullable String message, @Nullable HaltReason haltReason,
+                           @Nullable PendingAction pendingAction, @Nullable String errorCode) {
+        this(nodeStatus, message, haltReason, pendingAction, null, null, errorCode);
     }
 }

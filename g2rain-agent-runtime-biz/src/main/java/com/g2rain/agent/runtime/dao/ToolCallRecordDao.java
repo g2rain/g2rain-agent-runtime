@@ -5,7 +5,9 @@ import com.g2rain.agent.runtime.dto.ToolCallRecordSelectDto;
 import com.g2rain.data.isolation.annotations.DataIsolation;
 import com.g2rain.data.isolation.annotations.IgnoreIsolation;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -109,4 +111,14 @@ public interface ToolCallRecordDao {
      */
     @IgnoreIsolation
     List<ToolCallRecordPo> selectListWithoutIsolation(ToolCallRecordSelectDto selectDto);
+
+    /**
+     * 按任务与调用 id 批量取完整入参（只查 call_id、request）。
+     *
+     * @param taskId  任务 id
+     * @param callIds 调用 / 证据 id；调用方保证非空
+     * @return 仅填充 callId、request 的行
+     */
+    List<ToolCallRecordPo> selectRequests(@Param("taskId") String taskId,
+                                         @Param("callIds") Collection<String> callIds);
 }

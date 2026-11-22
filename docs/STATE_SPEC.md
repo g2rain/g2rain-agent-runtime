@@ -34,7 +34,7 @@
 | 存储 | 角色 | 说明 |
 |---|---|---|
 | **Redis** | 热态，读写以它为准 | 每轮开始从 Redis 读状态；轮中通过 `flush.lua` 原子写入 |
-| **MySQL** | 冷存储与兜底 | 轮末 `persist` 统一写入；Redis 中的 key 缺失或过期时从 MySQL 回灌 |
+| **MySQL** | 冷存储与兜底 | 轮末 `persist` 统一写入；任务组按「哨兵 + 完整性校验」整组回灌；会话级 key 缺失时仍从 MySQL 回灌 |
 
 两个原则：
 
@@ -46,7 +46,7 @@
 | 写入点 | 时机 | 写什么 |
 |---|---|---|
 | **S1** | 本轮用户消息进入时 | 用户消息：先 Redis，再同步写 MySQL `chat_message` |
-| **S2** | 写工具调用前（预登记） | 一条 `STARTED` 证据：先 Redis，再同步写 MySQL `tool_call_record` |
+| **S2** | 写工具调用前（预登记） | 一条 `STARTED` 证据：先 Redis，再同步写 MySQL（先补写任务壳，再插入 `tool_call_record`） |
 | **S3** | 工具返回后（结算） | 证据终态、原始报文：先 Redis，再写 MySQL |
 | **flush** | 轮中多次、轮末一次 | 本轮全部内存状态原子写入 Redis |
 | **persist** | 轮末一次 | 本轮全部状态写入 MySQL（单事务） |
@@ -86,18 +86,27 @@
 |---|---|---|
 | `g2rain:rt:{c}:task:<tid>:metadata` | Hash | 任务元数据（`status`、`currentNodeId`、`agentId`、`goalSummary`、`request`、`finalMessage`、`suspendedAt`）。同时作为任务组的"哨兵" |
 | `g2rain:rt:{c}:task:<tid>:graph` | Hash | 任务图：field 为 nodeId，value 为 `TaskNode` JSON；另有 field `_edges` 保存全部边 |
-| `g2rain:rt:{c}:task:<tid>:checkpoint` | String | 当前断点 `TaskCheckpoint` JSON；没有断点时删除 |
-| `g2rain:rt:{c}:task:<tid>:shared` | Hash | 任务级共享值：键名 → `Sourced` JSON |
-| `g2rain:rt:{c}:task:<tid>:prior` | String | 前情 `Prior` JSON |
-| `g2rain:rt:{c}:task:<tid>:writes` | Hash | 写证据索引：field 为 `toolName\|idempotencyKey`，value 为 `{evidenceId, status, businessOk}` |
+| `g2rain:rt:{c}:task:<tid>:checkpoint` | String | 当前断点 `TaskCheckpoint` JSON；没有断点时值为空串 `""` |
+| `g2rain:rt:{c}:task:<tid>:shared` | Hash | 任务级共享值：键名 → `Sourced` JSON；带占位字段 `""`（`HashCodec.MARK`） |
+| `g2rain:rt:{c}:task:<tid>:prior` | String | 前情 `Prior` JSON；没有前情时值为空串 `""` |
+| `g2rain:rt:{c}:task:<tid>:writes` | Hash | 写证据索引：field 为 `toolName\|idempotencyKey`，value 为 `{evidenceId, status, businessOk}`；带占位字段 `""` |
 
 **节点层**
 
 | Key | 类型 | 内容 |
 |---|---|---|
-| `g2rain:rt:{c}:task:<tid>:node:<nid>:space` | Hash | 节点空间：`inputs`、`outputs`、`state`、`rounds`、`tokens`、`actions`。单个字段过大时换成溢出占位（见 5.10） |
-| `g2rain:rt:{c}:task:<tid>:node:<nid>:evidence` | Hash | 证据头：field 为 evidenceId，value 为 `EvidenceHead` JSON |
+| `g2rain:rt:{c}:task:<tid>:node:<nid>:space` | Hash | 节点空间：`inputs`、`outputs`、`state`、`rounds`、`tokens`、`actions`；带占位字段 `""`。单个字段过大时换成溢出占位（见 5.10） |
+| `g2rain:rt:{c}:task:<tid>:node:<nid>:evidence` | Hash | 证据头：field 为 evidenceId，value 为 `EvidenceHead` JSON；带占位字段 `""` |
 | `g2rain:rt:{c}:task:<tid>:payload:<eid>` | String | 工具原始报文 JSON |
+
+**任务组完整性**
+
+任务组包括：元数据（哨兵）、图、断点、任务共享、前情、写索引，以及图中每个节点的空间和证据（不含报文）。
+
+- 组内每个 key 只要按组定义应该存在，就一定存在；空值也写入占位（String 为 `""`，Hash 带 `MARK` 字段）。
+- 哨兵在、图在，且 `countExisting(组内全部 key) == 组内 key 数` → **热组**，只读 Redis。
+- 否则 → **冷组**：以 MySQL 为准，删除 Redis 残留后整组回灌，并立即打开图中全部节点。
+- 加载时已校验的节点在轮中发现 key 缺失 → 本轮 `STATE_UNAVAILABLE`；本轮新建的节点在首次 flush 前没有 key，打开时为空节点。
 
 **任务组 TTL**
 
@@ -105,8 +114,10 @@
 |---|---|
 | 任务进行中 | `state.task-ttl-running`（默认 24 小时） |
 | 任务挂起（SUSPENDED） | `state.task-ttl-suspended`（默认 2 小时） |
-| `metadata`（哨兵）在续期时 | 任务 TTL 减去 `state.sentinel-gap`（默认 10 分钟） |
+| `metadata`（哨兵） | 任务 TTL 减去 `state.sentinel-gap`（默认 10 分钟）；下限 1ms |
 | 节点 DONE 后的 `payload` | `state.payload-done-ttl`（默认 1 小时；配置为 0 表示立即删除）。仍有下游节点未结束的上游节点报文除外（下游会直接读上游证据） |
+
+renew 与每次 flush 都对整组统一设置 TTL：元数据为 `TTL − sentinel-gap`，其余组内 key 为任务 TTL。
 
 **其他 key**
 
@@ -158,7 +169,6 @@
 | `SET` | 写 String；带 `ttl` 时使用 `PX` |
 | `DEL` | 删除 key |
 | `LPUSH_TRIM` | 头部插入，再裁剪到 `ttl` 条（此处 `ttl` 表示保留条数） |
-| `LREM` | 从 List 删除指定值 |
 | `EXPIRE` | 续期（毫秒） |
 
 返回 0 时 Runtime 抛出 `STATE_FENCED`，本轮放弃写入。
@@ -169,9 +179,9 @@
 
 | 表 | 用途 | 写入 | 读回 |
 |---|---|---|---|
-| `chat_conversation` | 会话：`conversation_id`、`user_id`、`title`、`active_task_id`、`session_shared`、`state_version`、`last_message_time` | 首轮建行；轮末按 `state_version` CAS 更新 | Redis `state` 缺失时回灌栅栏、活动任务和会话共享 |
+| `chat_conversation` | 会话：`conversation_id`、`user_id`、`title`、`active_task_id`、`session_shared`、`state_version`、`last_message_time` | 首轮建行；轮末按 `state_version` CAS 更新；写消息时只刷新 `last_message_time`；写调用前只修正 `active_task_id` | Redis `state` 缺失时回灌栅栏、活动任务和会话共享 |
 | `chat_message` | 对话消息：`message_id`、`role`、`message_type`、`content`、`task_id`、`node_id`、`round`、`trace_id`、`created_at_ms` | 用户消息在 S1 写；其他消息在轮末写 | Redis `dialogue` 为空时回灌；历史消息接口读取 |
-| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`request`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`（任务开启时刻）、`suspended_time`、`finished_time`、`trace_id`（开启任务那一轮）、`source_message_id`（触发开启的用户消息，入库后回填该消息的 `task_id`） | 轮末写；已存在时按 `state_version` CAS 更新 | 任务组 key 缺失时回灌；`record` 用于回灌 records |
+| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`request`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`（任务开启时刻）、`suspended_time`、`finished_time`、`trace_id`（开启任务那一轮）、`source_message_id`（触发开启的用户消息，入库后回填该消息的 `task_id`） | 轮末写；已存在时按 `state_version` CAS 更新（同步 `skill_versions`）；写调用前补写任务壳（`state_version = 0`） | 任务组 key 缺失时回灌；`record` 用于回灌 records |
 | `task_graph_node` | 节点：`node_id`、`title`、`objective`、`skill_key`、`target`（完成目标）、`target_claimed`、`delegate_depth`、`status`、`result`（节点结论）、`state`（完整节点空间 JSON，含输入与产出）、`error_code`、`error_message`、`started_time`（首次运行）、`finished_time`（进入终态） | 轮末写 | 任务图、节点空间回灌 |
 | `task_graph_edge` | 边：`from_node_id`、`to_node_id`、`edge_type` | 轮末追加新边 | 任务图回灌 |
 | `task_checkpoint` | 断点：`checkpoint_id`、`node_id`、`type`、`question`、`expected_fields`、`allowed_actions`、`suggestions`、`pending_action` | 轮末写；断点被消费时逻辑删除（`delete_flag=1`） | 断点回灌 |
@@ -379,7 +389,6 @@
 |---|---|
 | `toolName` | 待执行的写工具 |
 | `args` | 参数 JSON |
-| `argsHash` | 参数摘要，执行前校验参数未被改动 |
 
 #### Prior（前情）
 
@@ -388,7 +397,6 @@
 | `tasks` | List<TaskRecord> | 最近 `state.prior-tasks-max` 条已结束任务 |
 | `entities` | Map<String, EntityEntry> | 最多 `state.prior-entities-max` 个实体 |
 | `artifacts` | List | 产物引用（当前为空） |
-| `reason` | String | 生成原因 |
 
 ### 3.3 节点层
 
@@ -400,10 +408,10 @@
 | `outputs` | Map | 节点正式产出，通过 `builtin_output_set` 写入 |
 | `state` | Map | 节点便签，包含系统保留键（见下）和 `builtin_state_set` 写入的私有键 |
 | `rounds` | int | 已执行的 ReAct 轮数 |
-| `tokens` | long | token 累计（当前未统计，为 0） |
-| `actions` | List<NodeAction> | 没有业务证据的动作：模型调用内置工具、调用执行前被拒或推迟、用户确认或拒绝挂起。保留最近 `state.node-actions-max` 条，说明按 `state.node-action-max-chars` 截断 |
+| `tokens` | long | 本节点模型调用累计 token |
+| `actions` | List<NodeAction> | 没有业务证据的动作：模型调用内置工具、调用执行前被拒或推迟、用户确认或拒绝挂起。保留最近 `state.node-actions-max` 条；`arguments` 为按契约脱敏的完整入参（不截短），说明按 `state.node-action-max-chars` 截断 |
 
-**节点历史的跨轮重建**（`RuntimeStateFacade.history`）：按轮次合并三类来源，每轮依次为"用户的话与用户动作 → 模型的文字与工具调用 → 调用返回"。
+**节点历史的跨轮重建**（`RuntimeStateFacade.history`）：按轮次合并三类来源，每轮依次为"用户的话与用户动作 → 模型的文字与工具调用 → 调用返回"。跨轮历史中的调用参数为脱敏后的完整入参：有证据的取 `tool_call_record.request`，没有证据的取动作上保存的参数。
 
 | 来源 | 内容 |
 |---|---|
@@ -502,9 +510,9 @@
 | 2.2 | 会话用户与当前用户不一致 → `CONVERSATION_FORBIDDEN` | — |
 | 2.3 | MySQL 中没有该会话 → 新建会话行 | MySQL `chat_conversation` |
 | 2.4 | 读会话层：对话、记录、会话共享（Redis 优先，缺失回灌 MySQL）；实体（只读 Redis） | Redis、MySQL |
-| 2.5 | 有活动任务时，逐个读任务组：元数据、图、断点、任务共享、前情（Redis 优先，缺失回灌 MySQL） | Redis、MySQL |
+| 2.5 | 有活动任务时，按哨兵 + 完整性校验装载任务组：热组只读 Redis；冷组整组以 MySQL 为准并打开全部节点（见 2.1）。装载到的任务已是终态 → 清空 `activeTaskId`，按无活动任务处理 | Redis、MySQL |
 | 2.6 | 执行 `renew.lua`：推进栅栏、续期、取回旧的 `lastTraceId` | Redis |
-| 2.7 | 旧 `lastTraceId` 非空且任务在 `RUNNING` → 中断规整（见 5.2） | Redis |
+| 2.7 | 旧 `lastTraceId` 非空，或本轮为冷组 → 中断规整（见 5.2） | Redis |
 | 2.8 | flush 一次，让规整结果落到 Redis | Redis |
 | 2.9 | **S1**：用户输入非空时，追加用户消息（存在追问断点时，消息带上断点节点 ID 和轮次），flush，再同步写 `chat_message` | Redis、MySQL |
 
@@ -543,11 +551,11 @@ begin 完成后发送第一条过程提示（`PROGRESS`），客户端从这一�
 
 ### ⑤ flush
 
-把本轮内存状态整体写入 Redis，包括：会话栅栏、新增消息、实体、会话共享、任务组全部字段、本轮打开过的节点的空间与证据、写证据索引、新增报文。
+只写与本轮已确认内容不同的字段；对话、记录、报文只写新增部分；EXPIRE 每次照发。涉及的结构仍包括：会话栅栏、实体、会话共享、任务组字段、本轮打开过的节点空间与证据、写证据索引。
 
 | 情况 | 结果 |
 |---|---|
-| 改动超过 `state.flush-max-bytes` | `STATE_WRITE_FAILED` |
+| 状态改动（不含报文）超过 `state.flush-max-bytes` | `STATE_WRITE_FAILED` |
 | Redis 异常 | `STATE_UNAVAILABLE` |
 | 栅栏不一致 | `STATE_FENCED` |
 
@@ -560,12 +568,9 @@ begin 完成后发送第一条过程提示（`PROGRESS`），客户端从这一�
 3. 写当前任务：`task_instance`（CAS）、节点、边、证据状态；断点被消费时写恢复记录并逻辑删除断点；仍有断点时写断点。
 4. 写本轮新增的非用户消息。
 
-persist 成功后：
+persist 成功后：已结束的任务追加 `TaskRecord`（与写入 MySQL 的是同一条）、删除整个任务组、清空 `activeTaskId` 与 `lastTraceId`，与本轮其余改动在**一次** flush 中提交。
 
-- 已结束的任务：在 Redis 中追加一条 `TaskRecord`，删除整个任务组，清空 `activeTaskId`。
-- 再 flush 一次，清空 `lastTraceId`，标志本轮正常收尾。
-
-persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` 保留，下一轮按中断处理。
+实体合并在 persist 首次尝试前执行一次，重试不重复合并。persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` 保留，下一轮按中断处理。
 
 ### ⑦ 结果帧
 
@@ -591,10 +596,11 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 ### 5.2 中断判定与规整
 
 - 每轮开始时，`renew.lua` 返回上一轮写入的 `lastTraceId`；正常收尾会把它清空。
-- 返回值非空，说明上一轮没有正常收尾（进程退出、落库失败等）。
-- 此时若任务处于 `RUNNING`，执行中断规整：
-  - `RUNNING` 的节点退回 `READY`，可以重新执行；
-  - `STARTED` 的证据改为 `UNKNOWN`，后续按"写结果不确定"处理（见 5.5）。
+- 触发条件：旧 `lastTraceId` 非空（上一轮未正常收尾），**或本轮为冷组**。
+- 规整动作：
+  - 任务状态为 `RUNNING` 时：`RUNNING` 的节点退回 `READY`，可以重新执行；
+  - **不论任务状态**：遍历图中全部节点，把 `STARTED` 的证据改为 `UNKNOWN`，后续按"写结果不确定"处理（见 5.5）。
+- 规整结果由 begin 中的 flush 写入 Redis，persist 时再写入 MySQL。
 
 ### 5.3 断点
 
@@ -622,7 +628,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | VERIFY | REJECT | 不确定的证据改为 `FAILED`，模型可以重新发起 |
 | 任意 | CANCEL | 节点 `CANCELLED`，任务 `CANCELED` |
 
-**消费**：节点被唤醒（或用户拒绝、取消而关闭挂起）时，断点即被消费：`turn.checkpoint()` 置空、任务回到 `RUNNING`，同时记下恢复动作。消费后的断点经 `turn.resumed()` 读取，确认续跑据此派发待批写操作，核实续跑据此改证据状态，追问回答据此认定参数。续跑中给模型的投影不再展示该断点。节点续跑后再次挂起时，新断点照常写入。persist 时先写一条 `task_resume_record` 并把旧 `task_checkpoint` 逻辑删除，再写入新断点（如有），避免 Redis 失效后被重新读回，也保证每次恢复都有记录。
+**消费**：节点被唤醒（或用户拒绝、取消而关闭挂起）时，断点即被消费：`turn.checkpoint()` 置空、任务回到 `RUNNING`，同时记下恢复动作（含被恢复任务的 id）。消费后的断点经 `turn.resumed()` 读取，确认续跑据此派发待批写操作，核实续跑据此改证据状态，追问回答据此认定参数。续跑中给模型的投影不再展示该断点。节点续跑后再次挂起时，新断点照常写入。persist 时按**被恢复的任务**写一条 `task_resume_record` 并把该任务的旧 `task_checkpoint` 逻辑删除，再写入当前任务的新断点（如有）；换任务（`REPLACE_TASK` / `SWITCH_AGENT`）时也会按旧任务写入恢复记录，避免 Redis 失效后被重新读回，也保证每次恢复都有记录。
 
 ### 5.4 证据与写操作去重
 
@@ -641,14 +647,14 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 |---|---|---|
 | `SUCCESS` 且业务成功 | `Reused` | 不再调用工具，直接返回上次的结果 |
 | `STARTED` / `UNKNOWN` / `UNKNOWN_PRE_CALL` | `Blocked` | 拒绝调用，提示"进行中"或"待确认" |
-| 没有，或上次失败 / 业务失败 | `Proceed` | 登记 `STARTED` 证据 → flush → 插入 `tool_call_record` → 调用工具 |
+| 没有，或上次失败 / 业务失败 | `Proceed` | 登记 `STARTED` 证据 → flush → 补写任务壳 → 插入 `tool_call_record` → 调用工具 |
 
 预登记写 MySQL 时：
 
 - 暂时性异常 → 证据改为 `UNKNOWN_PRE_CALL`，本次不调用；
 - 其他数据库异常 → 证据改为 `CANCELLED`，抛出 `STATE_WRITE_FAILED`。
 
-**S3 结算**（`EvidenceFlow.settle`）：按工具结果更新证据状态、业务结果、空结果、抽取计数、实体；报文写入 Redis，超过 `state.payload-inline-max-bytes` 时另存 `task_node_payload`。
+**S3 结算**（`EvidenceFlow.settle`）：按工具结果更新证据状态、业务结果、空结果、抽取计数、实体；报文不超过 `state.payload-inline-max-bytes` 时写入 Redis 与 `tool_call_record.response`；超过时不进 Redis，只存 `task_node_payload`（`ARTIFACT`），证据头与 `tool_call_record.payload_id` 记录 `payloadId`。
 
 **调用异常到证据状态的映射**
 
@@ -683,7 +689,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 恢复 | 前置节点到达任意终态后，发起节点回到 `READY` |
 | 回填 | 发起节点再次打开时：前置节点 `DONE` → 正常继续；前置节点失败或取消 → 写入 `delegateResult`，投影给模型一次 |
 | 失败隔离 | 前置节点失败不会让任务失败，由发起节点决定后续处理 |
-| 数据传递 | 发起节点可以通过 `evidence.*` 读取前置节点的证据，节点完成目标（target）也认可前置节点的成功证据 |
+| 数据传递 | 发起节点可以通过 `evidence.*` 读取前置节点的证据，节点完成目标（target）也认可前置节点的成功证据。`builtin_evidence_get` 只能读本节点和上游节点的证据 |
 
 ### 5.7 参数被拒后的处理
 
@@ -697,11 +703,13 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 环节 | 行为 |
 |---|---|
 | 关闭 | 任务到终态时只修改内存中的状态；`activeTaskId` 在 persist 成功后才清空 |
-| 记录 | persist 成功后生成 `TaskRecord`，写入 `task_instance.task_record`，并追加到 Redis `records` |
+| 记录 | persist 时生成一次 `TaskRecord`，写入 `task_instance.task_record`，收尾 flush 用同一条追加到 Redis `records` |
 | 实体 | persist 时从本轮成功证据的 `entities` 和已完成节点的 `entityOutputs` 合并实体索引；超过 `state.entities-max` 时淘汰最久未提及的（按 `seenAt`），并从 Redis 删除 |
 | 换任务 | 开新任务时，旧任务打包为 `ClosedTask`，随本轮 persist 一起落库，再删除旧任务组 |
 
 ### 5.9 前情
+
+前情在每次开新任务时生成并装入节点；规划层只在 `START_WITH_CONTEXT` 时带入最近任务。
 
 | 项 | 规则 |
 |---|---|
@@ -728,7 +736,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 
 | 对象 | 阈值 | 处理 |
 |---|---|---|
-| 工具报文 | `state.payload-inline-max-bytes` | Redis 保存完整报文；MySQL 另存 `task_node_payload`（`ARTIFACT`），证据头记录 `payloadId` |
+| 工具报文 | `state.payload-inline-max-bytes` | 不超过：Redis 存完整报文，`tool_call_record.response` 内联；超过：不进 Redis，只存 `task_node_payload`（`ARTIFACT`），证据头与 `tool_call_record.payload_id` 记录 `payloadId` |
 | 节点空间单个字段 | `state.space-field-max-bytes` | MySQL 另存 `task_node_payload`（`OUTPUT`），Redis 中存放溢出占位 `{kind: "SPACE_SPILL", payloadId}` |
 | 用户消息 | `state.user-input-max-chars` | 超出时拒绝本轮请求（`PARAM_EXCEEDS_SIZE`），不截断 |
 
@@ -752,12 +760,23 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | 上游满足依赖 | `PENDING` → `READY` |
 | 用户回应断点 | `SUSPENDED` → `READY` |
 | 前置节点到达终态 | `WAITING_DELEGATE` → `READY` |
+| 委派链损坏（前置节点缺失） | `WAITING_DELEGATE` → `FAILED`（经 `turn.mark`，错误码 `DELEGATE_BROKEN`） |
 | 中断规整 | `RUNNING` → `READY` |
 | provider 补入的节点，所需共享值已存在 | → `SKIPPED` |
 | 检测到不确定写操作且需用户核实 | → `SUSPENDED` |
 | 本轮异常 | 当前节点和运行中的节点 → `FAILED` |
 
 调度规则：每次只执行一个可调度节点；本轮焦点节点（被唤醒的节点）可调度且依赖满足时优先执行，其余按列表顺序（见 [节点写操作范围约束](design/node-write-scope.md) 第 10 节）。
+
+失败 / 取消时的 `errorCode`：
+
+| 场景 | `errorCode` |
+|---|---|
+| 轮次用尽 | `agent_runtime.42256`（`NODE_ROUNDS_EXHAUSTED`） |
+| 连续无进展 | `agent_runtime.42257`（`NODE_STALLED`） |
+| 模型调用 `builtin_node_fail` | `agent_runtime.42258`（`NODE_DECLARED_FAILED`） |
+| 委派链损坏（前置节点缺失） | `agent_runtime.42238`（`DELEGATE_BROKEN`） |
+| 节点取消 | 为空 |
 
 ---
 
@@ -773,7 +792,7 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | `state.task-ttl-running` | 24h | 任务进行中的任务组 TTL |
 | `state.task-ttl-suspended` | 2h | 任务挂起时的任务组 TTL |
 | `state.sentinel-gap` | 10m | 续期时哨兵比同组 key 短的时长 |
-| `state.payload-inline-max-bytes` | 524288 | 报文超过即另存 MySQL |
+| `state.payload-inline-max-bytes` | 524288 | 报文超过即只存 MySQL，不进 Redis |
 | `state.payload-done-ttl` | 1h | 节点完成后报文的 TTL；0 表示立即删除 |
 | `state.state-size-log-enabled` | true | 是否记录状态大小日志 |
 | `state.space-field-max-bytes` | 65536 | 节点空间字段溢出阈值 |
@@ -783,7 +802,9 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | `state.entities-max` | 200 | 实体索引上限 |
 | `state.prior-tasks-max` | 5 | 前情任务条数 |
 | `state.prior-entities-max` | 10 | 前情实体个数 |
-| `state.flush-max-bytes` | 1048576 | 单次 flush 改动上限 |
+| `state.flush-max-bytes` | 1048576 | 单次 flush 状态改动上限（不含报文） |
+| `state.node-actions-max` | 50 | 每个节点保留的无证据动作条数 |
+| `state.node-action-max-chars` | 2048 | 无证据动作说明的字符上限 |
 | `state.reconfirm-after` | 24h | 审批断点过期时长 |
 | `state.delegate-max-depth` | 2 | 委派最大深度 |
 | `state.write-confirm-bypass-tools` | 空 | 免审批的写工具名单 |
@@ -825,10 +846,9 @@ persist 失败时重试一次；仍失败则记录错误日志，`lastTraceId` �
 | # | 约束 |
 |---|---|
 | 1 | `entities` 没有 MySQL 回灌 |
-| 2 | 任务组回灌按 key 逐个进行：Redis 中缺哪个 key 就从 MySQL 读哪个，不做整组替换 |
-| 3 | 每次 flush 都整体重写本轮涉及的状态，而不是只写变化的字段 |
-| 4 | MySQL 各表没有业务唯一索引，写入采用"先查后写" |
-| 5 | 任务图每次只调度一个节点 |
-| 6 | 节点空间的 `tokens` 当前不统计 |
-| 7 | `TaskRecord.artifacts`、`Prior.artifacts` 当前为空 |
-| 8 | persist 两次失败后不抛出异常，客户端仍会收到结果帧；状态在下一轮按中断规整 |
+| 2 | 只有 `state` 丢失而任务组完好时，识别不出中断（`lastTraceId` 跟着丢失，热组不规整） |
+| 3 | MySQL 各表没有业务唯一索引，写入采用"先查后写" |
+| 4 | 任务图每次只调度一个节点 |
+| 5 | `TaskRecord.artifacts`、`Prior.artifacts` 当前为空 |
+| 6 | persist 两次失败后不抛出异常，客户端仍会收到结果帧；状态在下一轮按中断规整 |
+| 7 | 收尾 flush 失败时，该任务记录不会追加到 Redis `records`（MySQL 中完整） |

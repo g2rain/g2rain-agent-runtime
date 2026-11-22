@@ -47,6 +47,7 @@ public class NodeFinisher {
             return false;
         }
 
+        entityExtractor.requireShareable(ctx.contract());
         ctx.applyFinish(output);
         entityExtractor.captureOutputs(ctx.scope(), ctx.contract());
         // 技能有写工具、节点却无完成目标就结束：观察规划漏填 target 的频率

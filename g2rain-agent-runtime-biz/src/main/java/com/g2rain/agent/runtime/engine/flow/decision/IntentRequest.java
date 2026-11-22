@@ -25,7 +25,6 @@ import java.util.Objects;
  * continuation — 上一任务目标摘要、综述与实体键，判断本轮是否依赖上一任务。
  * agentCandidates — 可选 Agent 名单与人设；模型只能从这里选 agentId。
  * dialogue — 交互历史窗口：折叠文本 + 近期原文，看指代与追问。
- * recentEpisodes — 近期回合摘要，只补充语境。
  * skillCatalog — 候选 Agent 的技能短目录，供选人语义匹配。
  * activeTask — 活动任务与断点摘要，供续跑、换题、换人、取消判断。
  * </pre>
@@ -37,7 +36,6 @@ import java.util.Objects;
  * @param continuation      存活任务前情摘要；无则为 {@code null}
  * @param agentCandidates   可选 Agent 画像列表
  * @param dialogue          交互历史窗口；无可空
- * @param recentEpisodes    近期回合摘要摘抄；可空
  * @param skillCatalog      技能短目录
  * @param activeTask        活动任务与断点摘要；无活动任务为 {@code null}
  * @param model             本轮选用的模型名；不进入上下文 JSON，可空
@@ -48,7 +46,7 @@ import java.util.Objects;
 public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @JsonIgnore @Nullable String userInput,
                             @Nullable Long continuityAgentId, @Nullable ContinuitySnippet continuation,
                             List<AgentSelection> agentCandidates, @Nullable DialogueWindow dialogue,
-                            @Nullable String recentEpisodes, List<SkillCatalogItem> skillCatalog,
+                            List<SkillCatalogItem> skillCatalog,
                             @Nullable ActiveTask activeTask, @JsonIgnore @Nullable String model) {
 
     /**

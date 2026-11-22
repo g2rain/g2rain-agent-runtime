@@ -160,8 +160,8 @@ public class WriteVerifier {
         verify.getArgs().forEach((key, spec) -> {
             if (Objects.nonNull(spec.getConstant())) {
                 built.put(key, spec.getConstant());
-            } else if (Strings.isNotBlank(spec.getFrom()) && spec.getFrom().startsWith("call.")) {
-                JsonNode value = JSON.lookupNode(original, spec.getFrom().substring("call.".length()));
+            } else if (Strings.isNotBlank(spec.getFrom()) && spec.getFrom().startsWith(VerifySpec.CALL_PREFIX)) {
+                JsonNode value = JSON.lookupNode(original, spec.getFrom().substring(VerifySpec.CALL_PREFIX.length()));
                 if (Objects.nonNull(value)) {
                     built.put(key, value);
                 }

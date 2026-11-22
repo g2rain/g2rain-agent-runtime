@@ -177,13 +177,17 @@ public final class DefaultNodeScope implements NodeScope {
     /**
      * 新增或替换本节点的一条证据摘要。
      *
-     * <p>按 evidence id 去重：同一调用的结算结果会替换预写摘要，而不会在列表中产生两条
-     * 记录。</p>
+     * <p>按 evidence id 去重：已存在则原位替换，不存在才追加，列表保持创建顺序。</p>
      *
      * @param head 证据摘要
      */
     public void addEvidence(EvidenceHead head) {
-        evidence.removeIf(existing -> Objects.equals(existing.evidenceId(), head.evidenceId()));
+        for (int i = 0, n = evidence.size(); i < n; i++) {
+            if (Objects.equals(evidence.get(i).evidenceId(), head.evidenceId())) {
+                evidence.set(i, head);
+                return;
+            }
+        }
         evidence.add(head);
     }
 

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -73,6 +74,31 @@ public class CallRepository {
     public @Nullable String response(String callId) {
         ToolCallRecordVo row = find(callId);
         return Objects.isNull(row) || Strings.isBlank(row.getResponse()) ? null : row.getResponse();
+    }
+
+    /**
+     * 按调用 id 批量取完整入参（只查 call_id、request 两列）。
+     *
+     * @param taskId  任务 id
+     * @param callIds 调用 / 证据 id
+     * @return callId → request JSON 文本；没有的 id 不在结果中
+     */
+    public Map<String, String> requests(String taskId, Collection<String> callIds) {
+        if (Strings.isBlank(taskId) || Collections.isEmpty(callIds)) {
+            return Map.of();
+        }
+        try {
+            Map<String, String> result = new LinkedHashMap<>();
+            for (ToolCallRecordVo row : toolCallRecordService.selectRequests(taskId, callIds)) {
+                if (Strings.isNotBlank(row.getCallId()) && Strings.isNotBlank(row.getRequest())) {
+                    result.put(row.getCallId(), row.getRequest());
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[CallRepository] requests failed taskId={}", taskId, e);
+            throw RepoSupport.unavailable(e);
+        }
     }
 
     /**

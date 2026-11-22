@@ -49,8 +49,9 @@ public enum ModelHint {
     CATALOG_DENIED("model.catalog.denied", "工具 [{tool}] 不在本节点可用工具中"),
 
     BUSINESS_EMPTY_BODY("model.business.empty_body", "业务失败：响应体为空"),
-    BUSINESS_FAILED("model.business.failed", "业务失败：{message}"),
-    BUSINESS_FAILED_CODE("model.business.failed_code", "业务失败 [{code}]：{message}"),
+    BUSINESS_FAILED("model.business.failed", "业务失败，业务系统返回：{message}"),
+    BUSINESS_FAILED_CODE("model.business.failed_code", "业务失败 [{code}]，业务系统返回：{message}"),
+    MCP_TOOL_FAILED("model.mcp.failed", "工具执行出错，工具返回：{message}"),
 
     NEXT_FIX_ARGS("model.next.fix_args", "按工具参数说明修正入参后再调用"),
     MALFORMED_CALL("model.malformed_call", "上一轮没有形成有效的工具调用：工具调用被写进了正文，或调用了当前不可用的工具。只能调用本轮工具列表中的工具，并用原生工具调用发起，不要在正文中书写调用。"),

@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -104,5 +105,12 @@ public class ToolCallRecordServiceImpl implements ToolCallRecordService {
         ToolCallRecordPo existing = toolCallRecordDao.selectById(id);
         Asserts.isTrue(Objects.nonNull(existing), SystemErrorCode.DATA_NOT_EXISTS, id);
         return toolCallRecordDao.delete(id);
+    }
+
+    @Override
+    public List<ToolCallRecordVo> selectRequests(String taskId, Collection<String> callIds) {
+        return toolCallRecordDao.selectRequests(taskId, callIds).stream()
+            .map(ToolCallRecordConverter.INSTANCE::po2vo)
+            .toList();
     }
 }

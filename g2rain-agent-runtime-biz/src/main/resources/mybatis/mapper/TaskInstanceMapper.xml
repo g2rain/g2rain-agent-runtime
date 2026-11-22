@@ -622,6 +622,7 @@
             shared = #{shared, jdbcType=LONGVARCHAR},
             prior = #{prior, jdbcType=LONGVARCHAR},
             task_record = #{taskRecord, jdbcType=LONGVARCHAR},
+            skill_versions = #{skillVersions, jdbcType=LONGVARCHAR},
             update_time = CURRENT_TIMESTAMP,
             version = version + 1
         WHERE task_id = #{taskId, jdbcType=VARCHAR}

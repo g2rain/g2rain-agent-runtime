@@ -61,14 +61,15 @@ final class NodeHistory {
      * 业务工具的返回：未成功时取证据上的完整说明，成功时取完整报文，都取不到才退回结果摘要；
      * 内置工具、被拒或推迟的调用取动作上记录的说明。没有轮次的消息排在最前。</p>
      *
-     * @param current 当前节点
-     * @param tools   本节点可见工具，用于识别追问调用
+     * @param current  当前节点
+     * @param tools    本节点可见工具，用于识别追问调用
      * @param body     按 evidenceId 读证据报文；读不到返回 JSON null
      * @param maxChars 成功报文给模型的字符上限，超出时保结构裁剪
+     * @param callArgs 有证据调用的完整脱敏入参（evidenceId → JSON 文本）；缺省时退回 argsBrief
      * @return 含 USER / ASSISTANT / TOOL 的跨轮历史
      */
     static List<ChatTurn> build(DefaultNodeScope current, List<ToolCallback> tools, Function<String, JsonNode> body,
-                                int maxChars) {
+                                int maxChars, Map<String, String> callArgs) {
         String nodeId = current.nodeId();
         List<ChatTurn> leadingUser = new ArrayList<>();
         List<String> textsWithoutRound = new ArrayList<>();
@@ -108,12 +109,18 @@ final class NodeHistory {
                 action.message()
             ));
         });
-        current.evidence().forEach(head -> rounds.computeIfAbsent(head.round(), _ -> new RoundSlice()).calls.add(
-            new RecordedCall(
-                new ChatTurn.ToolCallPart(head.evidenceId(), head.toolName(), Strings.defaultIfBlank(head.argsBrief(), "{}")),
-                resultOf(head, body, maxChars)
-            )
-        ));
+        current.evidence().forEach(head -> {
+            String arguments = callArgs.get(head.evidenceId());
+            if (Strings.isBlank(arguments)) {
+                arguments = Strings.defaultIfBlank(head.argsBrief(), "{}");
+            }
+            rounds.computeIfAbsent(head.round(), _ -> new RoundSlice()).calls.add(
+                new RecordedCall(
+                    new ChatTurn.ToolCallPart(head.evidenceId(), head.toolName(), arguments),
+                    resultOf(head, body, maxChars)
+                )
+            );
+        });
 
         // 追问之后那一轮的用户回复，带上问题与待补参数，免得模型对不上
         ChatTurn.ToolCallPart ask = null;

@@ -8,7 +8,8 @@ import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.plan.LlmPlanNode;
 import com.g2rain.agent.runtime.domain.plan.PlanStep;
-import com.g2rain.agent.runtime.domain.state.task.Prior;
+import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
+import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
 import com.g2rain.agent.runtime.engine.model.ModelUse;
@@ -37,7 +38,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 模型出图：按目标、前情与候选技能手册生成计划步骤，并校验节点、依赖与完成目标。
+ * 模型出图：按目标、接续前情时的最近任务与候选技能手册生成计划步骤，并校验节点、依赖与完成目标。
  *
  * @author alpha
  * @since 2026/10/12
@@ -84,13 +85,12 @@ public class PlanDrafter {
                 return null;
             }
 
-            // 组装规划输入：用户原话、目标、前情摘要、Agent 与候选技能
-            PlanMemory memory = planMemoryOf(ctx);
+            // 组装规划输入：用户原话、目标、接续前情时的最近任务、Agent 与候选技能
             AgentItem agentItem = AgentItem.from(ctx.getAgentSelection());
             String userPrompt = JSON.obj2str(new PlanView(
                 ctx.getRequest().getUserInput(),
                 goal,
-                memory.continuitySummary(),
+                priorTasksOf(ctx),
                 agentItem,
                 planSkills
             ));
@@ -193,15 +193,29 @@ public class PlanDrafter {
     }
 
     /**
-     * 规划用前情：{@link Prior#reason()}。
+     * 接续前情时取出最近结束的任务（新的在前）；否则为 {@code null}。
      *
      * @param ctx 本轮上下文
-     * @return 任务前情切片；没有 Prior 时为空记忆
+     * @return 规划用任务前情；不接续或没有任务时为 {@code null}
      */
-    private PlanMemory planMemoryOf(TurnContext ctx) {
-        return ctx.getTurn().prior()
-            .map(prior -> new PlanMemory(Strings.isBlank(prior.reason()) ? null : prior.reason()))
-            .orElseGet(PlanMemory::empty);
+    private static @Nullable List<PriorTaskItem> priorTasksOf(TurnContext ctx) {
+        var decision = ctx.getDecision();
+        if (Objects.isNull(decision) || !decision.useContinuity()) {
+            return null;
+        }
+
+        var prior = ctx.getTurn().prior().orElse(null);
+        if (Objects.isNull(prior) || Collections.isEmpty(prior.tasks())) {
+            return null;
+        }
+
+        List<TaskRecord> tasks = prior.tasks();
+        List<PriorTaskItem> items = new ArrayList<>(tasks.size());
+        for (int i = tasks.size() - 1; i >= 0; i--) {
+            TaskRecord record = tasks.get(i);
+            items.add(new PriorTaskItem(record.goal(), record.status(), record.summary(), record.request()));
+        }
+        return items;
     }
 
     /**
@@ -211,17 +225,6 @@ public class PlanDrafter {
      */
     private record LlmPlanAnswer(@Nullable List<LlmPlanNode> nodes) {
 
-    }
-
-    /**
-     * Plan prompt 用的任务前情。
-     *
-     * @param continuitySummary 上一 Task 综述；可空
-     */
-    private record PlanMemory(@Nullable String continuitySummary) {
-        static PlanMemory empty() {
-            return new PlanMemory(null);
-        }
     }
 
     /**
@@ -246,25 +249,40 @@ public class PlanDrafter {
      * <pre>
      * input              — 用户原话
      * goal               — 要对准拆节点的目标
-     * continuitySummary  — 上一 Task 综述：让新计划接上已有结论，避免重做或打架
+     * priorTasks         — 接续前情时最近结束的任务（目标、状态、结论、用户原话），新的在前
      * agent.profileText  — 人设：只帮理解任务，不扩能力
      * skills             — skillKey+skillManual：节点只能从这里选技能；手册看边界
      * </pre>
      *
-     * @param input             用户原话；可空时按空串入模型
-     * @param goal              规划目标；可空时按空串入模型
-     * @param continuitySummary 任务前情综述；可空
-     * @param agent             人设摘抄
-     * @param skills            规划技能手册目录
+     * @param input      用户原话；可空时按空串入模型
+     * @param goal       规划目标；可空时按空串入模型
+     * @param priorTasks 接续前情时的最近任务；不接续为 {@code null}
+     * @param agent      人设摘抄
+     * @param skills     规划技能手册目录
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private record PlanView(@Nullable String input, @Nullable String goal, @Nullable String continuitySummary,
+    private record PlanView(@Nullable String input, @Nullable String goal, @Nullable List<PriorTaskItem> priorTasks,
                             AgentItem agent, List<PlanSkillItem> skills) {
         PlanView {
             input = Objects.toString(input, "");
             goal = Objects.toString(goal, "");
+            priorTasks = Objects.isNull(priorTasks) ? null : List.copyOf(priorTasks);
             skills = List.copyOf(skills);
         }
+    }
+
+    /**
+     * 规划用的一条前情任务。
+     *
+     * @param goal    目标简述；可空
+     * @param status  终态
+     * @param summary 结论摘要；可空
+     * @param request 开任务时的用户原话；可空
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record PriorTaskItem(@Nullable String goal, TaskStatus status, @Nullable String summary,
+                                 @Nullable String request) {
+
     }
 
     /**

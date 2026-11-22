@@ -23,7 +23,6 @@ import com.g2rain.agent.runtime.support.trace.TraceScope;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -41,7 +40,6 @@ import java.util.Optional;
  * @author alpha
  * @since 2026/8/21
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public final class DefaultTaskLifecycle implements TaskLifecycle {
@@ -175,6 +173,6 @@ public final class DefaultTaskLifecycle implements TaskLifecycle {
             .limit(maxEntities)
             .forEach(entry -> entities.put(entry.getKey(), entry.getValue()));
 
-        return new Prior(tasks, entities, List.of(), "start");
+        return new Prior(tasks, entities, List.of());
     }
 }

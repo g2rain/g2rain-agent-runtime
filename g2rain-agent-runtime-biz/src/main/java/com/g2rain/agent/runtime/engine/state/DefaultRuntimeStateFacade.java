@@ -22,7 +22,6 @@ import com.g2rain.agent.runtime.domain.state.task.FailureKind;
 import com.g2rain.agent.runtime.domain.state.task.NodeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
-import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.domain.tool.ToolCall;
 import com.g2rain.agent.runtime.domain.tool.ToolResult;
 import com.g2rain.agent.runtime.engine.TurnRequest;
@@ -32,6 +31,8 @@ import com.g2rain.agent.runtime.engine.state.repo.PayloadRepository;
 import com.g2rain.agent.runtime.engine.store.StateStore;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.spec.ToolSpec;
+import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -40,6 +41,7 @@ import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
+import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
 import java.util.Optional;
@@ -51,6 +53,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.NullNode;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,7 +146,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         turn.attachPlatform(platformCatalog.capture(PrincipalContextHolder.get()));
         turn.attachChannel(request.getChannel());
         // 中断规整的 STARTED→UNKNOWN 先落 Redis，避免本轮崩溃后仍显示进行中
-        flushPlan.apply(turn, false);
+        flushPlan.apply(turn);
         if (Strings.isBlank(request.getUserInput())) {
             // 纯确认/拒绝等无原文，不登记用户消息
             return turn;
@@ -168,7 +171,7 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
         });
         // 用户原文进交互历史后再刷热态，保证 Redis 与随后 MySQL 同源
         turn.append(user);
-        flushPlan.apply(turn, false);
+        flushPlan.apply(turn);
 
         try {
             // 热态已 flush；交互历史再落 MySQL，失败则整轮 begin 作废
@@ -363,6 +366,32 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     }
 
     /**
+     * 按证据 id 批量取工具调用的完整入参（{@code tool_call_record.request}）。
+     *
+     * @param turn        本轮视图
+     * @param evidenceIds 证据 id
+     * @return evidenceId → 入参 JSON；查不到的 id 不在结果中
+     */
+    @Override
+    public Map<String, JsonNode> argsOf(TurnScope turn, Collection<String> evidenceIds) {
+        if (Collections.isEmpty(evidenceIds)) {
+            return Map.of();
+        }
+        String taskId = asTurn(turn).task().map(TaskMetadata::getTaskId).orElse(null);
+        if (Strings.isBlank(taskId)) {
+            return Map.of();
+        }
+        Map<String, JsonNode> result = new LinkedHashMap<>();
+        calls.requests(taskId, evidenceIds).forEach((id, request) -> {
+            JsonNode node = JSON.str2node(request);
+            if (Objects.nonNull(node) && !node.isNull() && !node.isMissingNode()) {
+                result.put(id, node);
+            }
+        });
+        return result;
+    }
+
+    /**
      * 打开指定节点空间并返回其证据摘要列表。
      *
      * @param turn   本轮视图
@@ -400,17 +429,32 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
     /**
      * 按轮次合并本节点的对话消息、业务证据与无证据动作，重建为 ReAct {@link ChatTurn} 列表（见 {@link NodeHistory}）。
      *
-     * @param node  当前节点
-     * @param tools 本节点可见工具，用于识别追问调用
+     * <p>有证据的调用参数取完整入参后按契约打码；取不到时退回证据头上的摘要。</p>
+     *
+     * @param node     当前节点
+     * @param tools    本节点可见工具，用于识别追问调用
+     * @param contract 技能契约，用于打码；可空
      * @return 含 USER / ASSISTANT / TOOL 的跨轮历史
      */
     @Override
-    public List<ChatTurn> history(NodeScope node, List<ToolCallback> tools) {
+    public List<ChatTurn> history(NodeScope node, List<ToolCallback> tools, @Nullable SkillContract contract) {
         DefaultNodeScope current = asNode(node);
         String taskId = current.turn().task().map(TaskMetadata::getTaskId).orElse(null);
+        List<EvidenceHead> evidence = current.evidence();
+        List<String> ids = evidence.stream().map(EvidenceHead::evidenceId).filter(Strings::isNotBlank).toList();
+        Map<String, JsonNode> rawArgs = argsOf(current.turn(), ids);
+        Map<String, String> callArgs = new LinkedHashMap<>();
+        for (EvidenceHead head : evidence) {
+            JsonNode args = rawArgs.get(head.evidenceId());
+            if (Objects.isNull(args)) {
+                continue;
+            }
+            ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(head.toolName());
+            callArgs.put(head.evidenceId(), JSON.obj2str(ArgsBrief.masked(args, spec)));
+        }
         return NodeHistory.build(current, tools, evidenceId -> Strings.isBlank(taskId)
             ? NullNode.getInstance()
-            : payload(current.turn(), taskId, evidenceId), properties.getReact().getObservationMaxChars());
+            : payload(current.turn(), taskId, evidenceId), properties.getReact().getObservationMaxChars(), callArgs);
     }
 
     /**
@@ -436,24 +480,27 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
      */
     @Override
     public void flush(TurnScope turn) {
-        flushPlan.apply(asTurn(turn), false);
+        flushPlan.apply(asTurn(turn));
     }
 
     /**
-     * 先写库表，再把已关闭任务从热态摘掉，最后带 expire 刷 Redis。
+     * 先写库表，再一次 flush 收尾：关闭已结束任务组、清空活动任务与 lastTraceId。
      *
-     * <p>库表写入失败会立即重试一次；两次都失败则中止，避免热态已摘任务而库表未落地。</p>
+     * <p>库表写入失败会立即重试一次；两次都失败则中止，不调用 {@link TurnFlushPlan#finish}。</p>
      *
      * @param turn 本轮视图
      */
     @Override
     public void persist(TurnScope turn) {
         DefaultTurnScope scope = asTurn(turn);
+        // 实体合并只做一次，避免 persist 重试时 mentions 累加
+        scope.task().ifPresent(_ -> entityExtractor.collect(scope));
+        Map<String, TaskRecord> records;
         try {
-            persistOnce(scope);
+            records = persistOnce(scope);
         } catch (RuntimeException first) {
             try {
-                persistOnce(scope);
+                records = persistOnce(scope);
             } catch (RuntimeException second) {
                 log.error("[DefaultRuntimeStateFacade] persist failed conversationId={}",
                     scope.conversation().conversationId(), second);
@@ -461,31 +508,21 @@ public class DefaultRuntimeStateFacade implements RuntimeStateFacade {
                 return;
             }
         }
-        // 库表已成功：才从热态摘已关闭任务，避免 Redis 先丢权威记录
-        scope.closedTasks().forEach(closed -> {
-            TaskMetadata task = closed.metadata();
-            TaskRecord record = TaskRecords.of(task, scope);
-            flushPlan.dropClosedTask(scope, task, closed.graph(), closed.payloadIds(), record);
-        });
-        scope.task().filter(task -> TaskStatus.isTerminal(task.getStatus())).ifPresent(task -> {
-            TaskRecord record = TaskRecords.of(task, scope);
-            flushPlan.dropClosedTask(scope, record);
-            scope.clearActiveTask();
-        });
-        flushPlan.apply(scope, true);
+        flushPlan.finish(scope, records);
     }
 
     /**
-     * 抽取实体并写入本轮关系数据，成功后标记交互历史已落库。
+     * 写入本轮关系数据，成功后标记交互历史已落库。
      *
      * @param scope 本轮视图
+     * @return persist 写入的任务记录
      */
-    private void persistOnce(DefaultTurnScope scope) {
-        scope.task().ifPresent(_ -> entityExtractor.collect(scope));
-        persistence.persistTurn(scope);
+    private Map<String, TaskRecord> persistOnce(DefaultTurnScope scope) {
+        Map<String, TaskRecord> records = persistence.persistTurn(scope);
         // 标记后 pending 交互历史与执行步骤不再二次落库
         scope.markDialoguePersisted();
         scope.progress().markPersisted();
+        return records;
     }
 
     /**

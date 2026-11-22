@@ -83,6 +83,14 @@ public interface StateStore {
     boolean exists(String key);
 
     /**
+     * 统计给定 key 中实际存在的个数（同一 hash tag 下一次往返）。
+     *
+     * @param keys 待检查的 Redis key
+     * @return 实际存在的个数
+     */
+    long countExisting(List<String> keys);
+
+    /**
      * 删除若干 key。
      *
      * @param keys 待删 Redis key

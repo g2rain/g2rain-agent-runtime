@@ -39,14 +39,15 @@ import java.util.Optional;
 /**
  * 写工具证据的预登记、结算与非写调用记录。
  *
- * <p>热态 Redis 先更新，再写 {@code tool_call_record}。调用方经 {@link RuntimeStateFacade}
- * 使用本类，不要直接绕过预写去调写工具。</p>
+ * <p>热态 Redis 先更新，再写 {@code tool_call_record}；登记 {@code STARTED} 之前会先补写任务壳。
+ * 报文不超过内联上限时进 Redis；超过时不进 Redis，只存 {@code task_node_payload}，证据头与调用行记录
+ * {@code payloadId}。调用方经 {@link RuntimeStateFacade} 使用本类，不要直接绕过预写去调写工具。</p>
  *
  * @author alpha
  * @since 2026/10/3
  */
-@Component
 @Slf4j
+@Component
 public class EvidenceFlow {
 
     /**
@@ -80,23 +81,31 @@ public class EvidenceFlow {
     private final StateStore store;
 
     /**
+     * 冷库落库（含写调用前任务壳）。
+     */
+    private final RuntimeStatePersistence persistence;
+
+    /**
      * @param calls       工具调用仓储
      * @param payloads    报文仓储
      * @param flushPlan   热态刷新
      * @param properties  摘要与报文上限
      * @param store       热态
+     * @param persistence 冷库落库
      */
     public EvidenceFlow(CallRepository calls, PayloadRepository payloads, TurnFlushPlan flushPlan,
-                        RuntimeProperties properties, StateStore store) {
+                        RuntimeProperties properties, StateStore store, RuntimeStatePersistence persistence) {
         this.calls = calls;
         this.payloads = payloads;
         this.flushPlan = flushPlan;
         this.properties = properties;
         this.store = store;
+        this.persistence = persistence;
     }
 
     /**
      * 为写工具登记 STARTED 证据；已有生效证据则复用或阻断。
+     * <p>登记 {@code STARTED} 之前会先补写任务壳（任务行、缺失节点与边、会话活动任务）。</p>
      *
      * @param node 当前节点
      * @param call 写工具调用
@@ -110,8 +119,9 @@ public class EvidenceFlow {
         EvidenceHead started = startedOf(node, call);
         node.addEvidence(started);
         // STARTED 必须先落热态再插库，真正回调发生在 Proceed 之后
-        flushPlan.apply(node.turn(), false);
+        flushPlan.apply(node.turn());
         try {
+            persistence.persistShell(node.turn());
             calls.insertStarted(startedDto(node, call, started));
             return new PrewriteResult.Proceed(started.evidenceId());
         } catch (TransientDataAccessException e) {
@@ -123,7 +133,7 @@ public class EvidenceFlow {
             // 库表永久失败：热态改 CANCELLED，允许换键或稍后重试，不把 STARTED 留成幽灵
             EvidenceHead cancelled = started.withStatus(EvidenceStatus.CANCELLED, FailureKind.UNKNOWN, null);
             node.addEvidence(cancelled);
-            flushPlan.apply(node.turn(), false);
+            flushPlan.apply(node.turn());
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         } catch (RuntimeException e) {
             log.error("failed to prewrite", e);
@@ -196,7 +206,7 @@ public class EvidenceFlow {
     private PrewriteResult unknownPreCall(DefaultNodeScope node, EvidenceHead started) {
         EvidenceHead unknown = started.withStatus(EvidenceStatus.UNKNOWN_PRE_CALL, FailureKind.UNKNOWN, null);
         node.addEvidence(unknown);
-        flushPlan.apply(node.turn(), false);
+        flushPlan.apply(node.turn());
         try {
             calls.update(unknown, null);
         } catch (RuntimeException e) {
@@ -233,7 +243,7 @@ public class EvidenceFlow {
     }
 
     /**
-     * 把写工具结果结算到已登记证据，并按大小分流报文。
+     * 把写工具结果结算到已登记证据，并按大小分流报文（超限只进 MySQL，不进 Redis）。
      *
      * @param node       当前节点
      * @param evidenceId 预写返回的证据 id
@@ -248,8 +258,9 @@ public class EvidenceFlow {
         String entities = Strings.isNotBlank(result.entities()) ? result.entities() : current.entities();
         EvidenceHead settled = current.withResult(result, clipBrief(result.resultBrief()), entities,
             detailOf(result));
-        persistPayload(node, settled, result);
-        persistCallBody(node, settled, result);
+        String body = json(result.payload());
+        EvidenceHead stored = persistPayload(node, settled, result, body);
+        persistCallBody(node, stored, result, body);
     }
 
     /**
@@ -263,21 +274,21 @@ public class EvidenceFlow {
     public String record(DefaultNodeScope node, ToolCall call, ToolResult result) {
         EvidenceHead head = startedOf(node, call)
             .withResult(result, clipBrief(result.resultBrief()), result.entities(), detailOf(result));
-        persistPayload(node, head, result);
+        String body = json(result.payload());
+        EvidenceHead stored = persistPayload(node, head, result, body);
         try {
-            String body = json(result.payload());
             boolean oversize = oversized(body);
-            ToolCallRecordDto dto = startedDto(node, call, head);
+            ToolCallRecordDto dto = startedDto(node, call, stored);
             dto.setCallStatus(result.status().name());
             dto.setResponse(oversize ? null : body);
-            dto.setResultSummary(head.resultBrief());
+            dto.setResultSummary(stored.resultBrief());
             dto.setErrorCode(result.errorCode());
             dto.setDurationMs(result.durationMs());
             calls.insertStarted(dto);
             if (oversize) {
                 String taskId = node.turn().task().map(TaskMetadata::getTaskId).orElse(null);
                 if (Strings.isNotBlank(taskId) && Strings.isNotBlank(body)) {
-                    payloads.saveArtifact(head.evidenceId(), taskId, node.nodeId(), head.toolName(),
+                    payloads.saveArtifact(stored.evidenceId(), taskId, node.nodeId(), stored.toolName(),
                         node.turn().traceId(), body);
                 }
             }
@@ -285,7 +296,7 @@ public class EvidenceFlow {
             log.error("failed to record", e);
             throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
         }
-        return head.evidenceId();
+        return stored.evidenceId();
     }
 
     /**
@@ -317,7 +328,7 @@ public class EvidenceFlow {
                              @Nullable Boolean businessOk, FailureKind kind) {
         EvidenceHead next = current.withOutcome(status, businessOk, kind);
         node.addEvidence(next);
-        flushPlan.apply(node.turn(), false);
+        flushPlan.apply(node.turn());
         ToolCallRecordVo row = calls.find(current.evidenceId());
         calls.update(next, Objects.isNull(row) ? null : row.getResponse());
     }
@@ -408,29 +419,36 @@ public class EvidenceFlow {
     }
 
     /**
-     * Redis 始终写完整报文；超限时 EvidenceHead.payloadId = evidenceId。
+     * 证据头写入热态；报文不超过内联上限时进 Redis，超过时只在证据头上记 payloadId（报文另存 MySQL）。
      *
      * @param node   当前节点
      * @param head   证据头
      * @param result 工具结果
+     * @param body   报文 JSON；可空
+     * @return 带 payloadId（超限时）的证据头，供随后落库使用
      */
-    private void persistPayload(DefaultNodeScope node, EvidenceHead head, ToolResult result) {
-        String body = json(result.payload());
-        EvidenceHead stored = oversized(body) ? head.withPayloadId(head.evidenceId()) : head;
+    private EvidenceHead persistPayload(DefaultNodeScope node, EvidenceHead head, ToolResult result,
+                                        @Nullable String body) {
+        boolean oversize = oversized(body);
+        EvidenceHead stored = oversize ? head.withPayloadId(head.evidenceId()) : head;
         node.addEvidence(stored);
-        node.turn().putPayload(stored.evidenceId(), result.payload());
-        flushPlan.apply(node.turn(), false);
+        if (!oversize) {
+            node.turn().putPayload(stored.evidenceId(), result.payload());
+        }
+        flushPlan.apply(node.turn());
+        return stored;
     }
 
     /**
      * 不超过上限进 {@code tool_call_record.response}；超过写 ARTIFACT，response 留空。
      *
      * @param node   当前节点
-     * @param head   证据头
+     * @param head   证据头（超限时已带 payloadId）
      * @param result 工具结果
+     * @param body   报文 JSON；可空
      */
-    private void persistCallBody(DefaultNodeScope node, EvidenceHead head, ToolResult result) {
-        String body = json(result.payload());
+    private void persistCallBody(DefaultNodeScope node, EvidenceHead head, ToolResult result,
+                                 @Nullable String body) {
         if (!oversized(body)) {
             calls.update(head, body, result.durationMs());
             return;
@@ -468,10 +486,7 @@ public class EvidenceFlow {
         if (Strings.isNotBlank(configured)) {
             return configured;
         }
-        String tool = Strings.defaultIfBlank(call.toolName(), "");
-        String hash = RuntimeUtils.argsHash(call.args());
-        String material = Strings.isBlank(tool) ? hash : tool + "|" + hash;
-        return RuntimeUtils.sha256Hex(material.getBytes(StandardCharsets.UTF_8));
+        return RuntimeUtils.callKey(call.toolName(), call.args());
     }
 
     /**

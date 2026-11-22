@@ -158,6 +158,32 @@ public class GraphRepository {
     }
 
     /**
+     * 插入库中尚不存在的节点与边；已有的节点行不动。
+     *
+     * @param taskId 任务 id
+     * @param graph  执行图
+     * @param spaces 本轮打开过的节点空间，新插入的节点有空间时一并写入 state
+     */
+    public void insertMissing(String taskId, TaskGraph graph, Map<String, NodeSpace> spaces) {
+        Set<String> existing = listNodes(taskId).stream()
+            .map(TaskGraphNodeVo::getNodeId)
+            .collect(Collectors.toSet());
+        for (TaskNode node : graph.getNodes()) {
+            if (existing.contains(node.getNodeId())) {
+                continue;
+            }
+            TaskGraphNodeDto dto = newNodeDto(taskId, node);
+            applyNodeTimes(dto, node);
+            NodeSpace space = spaces.get(node.getNodeId());
+            if (Objects.nonNull(space)) {
+                dto.setState(RepoSupport.toJson(space));
+            }
+            taskGraphNodeService.save(dto);
+        }
+        saveEdges(taskId, graph.getEdges());
+    }
+
+    /**
      * 按图节点 upsert {@code task_graph_node}；已有行与本轮内容一致时跳过，不再逐行重写。
      *
      * @param taskId 任务 id
@@ -187,19 +213,9 @@ public class GraphRepository {
                 dto.setErrorCode(node.getErrorCode());
                 dto.setErrorMessage(node.getErrorMessage());
             } else {
-                dto = TaskGraphNodeConverter.INSTANCE.node2dto(node);
-                dto.setTaskId(taskId);
-                dto.setTargetClaimed(node.isTargetClaimed());
-                dto.setProviderInserted(node.isProviderInserted());
-                dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
+                dto = newNodeDto(taskId, node);
             }
-            // 列为秒精度：先截到秒，读回的行才能与本轮内容逐字段比对
-            if (Objects.nonNull(node.getStartedAt())) {
-                dto.setStartedTime(RuntimeUtils.timeOf(node.getStartedAt()).truncatedTo(ChronoUnit.SECONDS));
-            }
-            if (Objects.nonNull(node.getFinishedAt())) {
-                dto.setFinishedTime(RuntimeUtils.timeOf(node.getFinishedAt()).truncatedTo(ChronoUnit.SECONDS));
-            }
+            applyNodeTimes(dto, node);
             // 本轮打开过的节点才同步节点空间（含输入、产出，冷恢复读此列）
             NodeSpace space = spaces.get(node.getNodeId());
             if (Objects.nonNull(space)) {
@@ -210,6 +226,37 @@ public class GraphRepository {
             }
 
             taskGraphNodeService.save(dto);
+        }
+    }
+
+    /**
+     * 新节点行 DTO：与 {@link #saveNodes} 插入分支字段一致。
+     *
+     * @param taskId 任务 id
+     * @param node   图节点
+     * @return 待插入 DTO
+     */
+    private static TaskGraphNodeDto newNodeDto(String taskId, TaskNode node) {
+        TaskGraphNodeDto dto = TaskGraphNodeConverter.INSTANCE.node2dto(node);
+        dto.setTaskId(taskId);
+        dto.setTargetClaimed(node.isTargetClaimed());
+        dto.setProviderInserted(node.isProviderInserted());
+        dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
+        return dto;
+    }
+
+    /**
+     * 节点起止时间写入 DTO（列精度到秒）。
+     *
+     * @param dto  节点 DTO
+     * @param node 图节点
+     */
+    private static void applyNodeTimes(TaskGraphNodeDto dto, TaskNode node) {
+        if (Objects.nonNull(node.getStartedAt())) {
+            dto.setStartedTime(RuntimeUtils.timeOf(node.getStartedAt()).truncatedTo(ChronoUnit.SECONDS));
+        }
+        if (Objects.nonNull(node.getFinishedAt())) {
+            dto.setFinishedTime(RuntimeUtils.timeOf(node.getFinishedAt()).truncatedTo(ChronoUnit.SECONDS));
         }
     }
 

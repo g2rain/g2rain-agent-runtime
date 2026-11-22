@@ -59,7 +59,8 @@ public final class IntentPrompt {
             - 不执行待确认的操作，也没有提出别的事项 → CANCEL_TASK
             - 不执行待确认的操作，改办别的事（包括提出新的问题或要求）→ REPLACE_TASK
             - 明确要求换一个数字员工 → SWITCH_AGENT（agentLocked=true 时不可用）
-            - 同意执行、回答确认问题，或要求修改待确认的操作 → CONTINUE_TASK
+            - 要求修改待确认操作的内容（如改参数、换内容）→ REPLY_ONLY
+            - 同意执行，或回答确认问题 → CONTINUE_TASK
             - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
 
             【选人规则】
@@ -71,6 +72,7 @@ public final class IntentPrompt {
 
             【userReply】
             - REPLY_ONLY：给用户的简短回复。
+            - WRITE_PENDING 下要求修改待确认的操作：说明待确认的操作不能直接修改；如需修改，请先拒绝（拒绝后当前事项结束），再重新描述需求。
             - 无法匹配数字员工：说明可以办理的事项。
             - 其它情况为 null。
 

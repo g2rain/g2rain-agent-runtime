@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.ToolCallback;
 import tools.jackson.databind.JsonNode;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -40,7 +41,7 @@ public interface RuntimeStateFacade {
     TurnScope begin(TurnRequest request);
 
     /**
-     * 打开节点：加载 NodeSpace 与本节点证据摘要；首次进入时绑定 inputs；处理 UNKNOWN 证据。
+     * 打开节点：加载 NodeSpace 与本节点证据摘要；首次进入时绑定 inputs；未收口的 {@code UNKNOWN_PRE_CALL} 证据改为 {@code CANCELLED}。
      *
      * @param turn     本轮视图
      * @param nodeId   节点 id
@@ -104,6 +105,15 @@ public interface RuntimeStateFacade {
     JsonNode payload(TurnScope turn, String taskId, String evidenceId);
 
     /**
+     * 按证据 id 批量取工具调用的完整入参（{@code tool_call_record.request}）。
+     *
+     * @param turn        本轮视图
+     * @param evidenceIds 证据 id
+     * @return evidenceId → 入参 JSON；查不到的 id 不在结果中
+     */
+    Map<String, JsonNode> argsOf(TurnScope turn, Collection<String> evidenceIds);
+
+    /**
      * 懒加载其他节点的证据摘要。
      *
      * @param turn   本轮视图
@@ -124,16 +134,21 @@ public interface RuntimeStateFacade {
     /**
      * 重建节点跨轮历史：按轮次合并本节点对话消息、业务证据与无证据动作。
      *
-     * @param node  当前节点
-     * @param tools 本节点可见工具，用于识别追问调用
+     * <p>跨轮历史中的调用参数为脱敏后的完整入参：有证据的取 {@code tool_call_record.request}，
+     * 没有证据的取动作上保存的参数。</p>
+     *
+     * @param node     当前节点
+     * @param tools    本节点可见工具，用于识别追问调用
+     * @param contract 技能契约，用于对完整入参打码；可空
      * @return 历史轮次
      */
-    List<ChatTurn> history(NodeScope node, List<ToolCallback> tools);
+    List<ChatTurn> history(NodeScope node, List<ToolCallback> tools, @Nullable SkillContract contract);
 
     /**
      * 记录节点内一次无业务证据的动作（内置工具调用、被拒或推迟的调用、用户确认或拒绝），供跨轮重建历史。
      *
-     * <p>说明按 {@code state.node-action-max-chars} 裁剪，本节点超过 {@code state.node-actions-max} 条时丢弃最早的。</p>
+     * <p>说明按 {@code state.node-action-max-chars} 裁剪；动作入参由调用方按契约脱敏后传入，本方法不截短参数。
+     * 本节点超过 {@code state.node-actions-max} 条时丢弃最早的。</p>
      *
      * @param node   当前节点
      * @param action 动作

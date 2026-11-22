@@ -17,6 +17,7 @@ import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
+import com.g2rain.agent.runtime.domain.state.task.ResumeMark;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
@@ -27,6 +28,8 @@ import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -81,9 +84,9 @@ public final class DefaultTurnScope implements TurnScope {
     private final Map<String, EntityEntry> entities;
 
     /**
-     * 本轮超出上限被淘汰的实体键，flush 时从 Redis 删除。
+     * 本轮已确认的 Redis Hash / String，供 flush 按变更对比。
      */
-    private final Set<String> evictedEntities = new LinkedHashSet<>();
+    private final FlushLedger ledger = new FlushLedger();
 
     /**
      * 活跃任务；无任务为空。
@@ -121,19 +124,9 @@ public final class DefaultTurnScope implements TurnScope {
     private final Map<String, Sourced<?>> sessionShared;
 
     /**
-     * 恢复动作审计（persist 时写入 resume 表）。
+     * 本轮恢复审计（persist 时按所属任务写入 resume 表）；换任务时不清除。
      */
-    private @Nullable ResumeAction lastResumeAction;
-
-    /**
-     * 触发恢复的消息的唯一标识。
-     */
-    private @Nullable String lastResumeMessageId;
-
-    /**
-     * 恢复动作发生时间（epoch ms）。
-     */
-    private long lastResumeAt;
+    private @Nullable ResumeMark resumeMark;
 
     /**
      * 被新任务顶替的旧终态，persist 时一并写入。
@@ -144,6 +137,11 @@ public final class DefaultTurnScope implements TurnScope {
      * 本轮打开过的节点。
      */
     private final Map<String, DefaultNodeScope> nodes = new LinkedHashMap<>();
+
+    /**
+     * 加载时已通过完整性校验的节点 id；其 Redis key 缺失即视为被淘汰。
+     */
+    private final Set<String> verified = new HashSet<>();
 
     /**
      * 本轮写入、尚未 flush 的证据报文。
@@ -355,20 +353,10 @@ public final class DefaultTurnScope implements TurnScope {
     }
 
     /**
-     * 淘汰一个实体：移出索引并记下键，flush 时发 HDEL。
-     *
-     * @param key 实体键 {@code type:id}
+     * @return 本轮 flush 对比账本
      */
-    void evictEntity(String key) {
-        entities.remove(key);
-        evictedEntities.add(key);
-    }
-
-    /**
-     * @return 本轮被淘汰的实体键
-     */
-    Set<String> evictedEntities() {
-        return Set.copyOf(evictedEntities);
+    FlushLedger ledger() {
+        return ledger;
     }
 
     /**
@@ -492,12 +480,14 @@ public final class DefaultTurnScope implements TurnScope {
      */
     @Override
     public TaskMetadata start(TaskMetadata metadata, Prior prior) {
-        if (Objects.nonNull(this.task)) {
+        TaskMetadata closing = this.task;
+        if (Objects.nonNull(closing)) {
             Map<String, NodeSpace> spaces = new LinkedHashMap<>();
             nodes.forEach((id, node) -> spaces.put(id, new NodeSpace(
                 node.inputs(), node.outputs(), node.state(), node.rounds(), node.tokens(), node.actions()
             )));
-            closedTasks.add(new ClosedTask(this.task, this.graph, Map.copyOf(this.shared), this.prior,
+            Map<String, Sourced<?>> sharedSnapshot = new LinkedHashMap<>(this.shared);
+            closedTasks.add(new ClosedTask(closing, this.graph, sharedSnapshot, this.prior,
                 List.copyOf(allPayloadIds()), spaces));
         }
         this.task = metadata;
@@ -588,9 +578,9 @@ public final class DefaultTurnScope implements TurnScope {
         if (Objects.nonNull(checkpoint)) {
             this.resumed = checkpoint;
             this.checkpoint = null;
-            this.lastResumeAction = action;
-            this.lastResumeMessageId = messageId;
-            this.lastResumeAt = System.currentTimeMillis();
+            if (Objects.nonNull(task) && Strings.isNotBlank(task.getTaskId())) {
+                this.resumeMark = new ResumeMark(task.getTaskId(), action, messageId, System.currentTimeMillis());
+            }
         }
         if (Objects.nonNull(task)) {
             task.setStatus(TaskStatus.RUNNING);
@@ -600,28 +590,10 @@ public final class DefaultTurnScope implements TurnScope {
     /**
      * persist 写恢复审计用。
      *
-     * @return 本轮 resume 动作；未恢复为空
+     * @return 本轮恢复标记；未恢复为空
      */
-    public Optional<ResumeAction> lastResumeAction() {
-        return Objects.isNull(lastResumeAction) ? Optional.empty() : Optional.of(lastResumeAction);
-    }
-
-    /**
-     * persist 写恢复审计用。
-     *
-     * @return 触发恢复的消息 id
-     */
-    public Optional<String> lastResumeMessageId() {
-        return Objects.isNull(lastResumeMessageId) ? Optional.empty() : Optional.of(lastResumeMessageId);
-    }
-
-    /**
-     * persist 写恢复审计用。
-     *
-     * @return 恢复动作发生时间（epoch ms）；未恢复为 0
-     */
-    public long lastResumeAt() {
-        return lastResumeAt;
+    public Optional<ResumeMark> resumeMark() {
+        return Objects.isNull(resumeMark) ? Optional.empty() : Optional.of(resumeMark);
     }
 
     /**
@@ -754,6 +726,25 @@ public final class DefaultTurnScope implements TurnScope {
      */
     public void attach(DefaultNodeScope node) {
         nodes.put(node.nodeId(), node);
+    }
+
+    /**
+     * 记下加载时已校验的节点。
+     *
+     * @param nodeIds 热组图中的节点 id
+     */
+    public void markVerified(Collection<String> nodeIds) {
+        verified.addAll(nodeIds);
+    }
+
+    /**
+     * 节点是否在加载时已校验。
+     *
+     * @param nodeId 节点 id
+     * @return 已校验为 {@code true}
+     */
+    public boolean verified(String nodeId) {
+        return verified.contains(nodeId);
     }
 
     /**

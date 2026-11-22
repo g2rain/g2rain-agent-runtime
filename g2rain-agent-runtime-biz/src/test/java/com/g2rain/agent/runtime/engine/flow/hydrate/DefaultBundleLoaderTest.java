@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.flow.hydrate;
 import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spec.ArgSpec;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spec.ValueRef;
@@ -10,8 +11,10 @@ import com.g2rain.agent.runtime.spi.SpecQuery;
 import com.g2rain.agent.runtime.spi.SpecSet;
 import com.g2rain.agent.runtime.spi.SpecSource;
 import com.g2rain.agent.runtime.spi.SpecSourceType;
+import com.g2rain.agent.runtime.spi.SpecUnavailableException;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
+import com.g2rain.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -134,6 +137,35 @@ class DefaultBundleLoaderTest {
         assertNull(loader.load(AGENT_ID, Map.of()));
     }
 
+    /** H9：某个技能的 SpecSource 抛 SpecUnavailableException → DEPENDENCY_UNAVAILABLE，其他技能也不返回。 */
+    @Test
+    void h9_load_specUnavailable_throwsDependencyUnavailable() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundleTwoSkills(
+            SKILL_KEY, contractWithSource(),
+            "cms.other", contractOwnSource()));
+        when(specSource.load(any(SpecQuery.class)))
+            .thenThrow(new SpecUnavailableException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "ONTOLOGY"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        assertEquals(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE.code(), ex.getErrorCode());
+        assertEquals(SpecSourceType.ONTOLOGY.name(), ex.getIndexArgs()[0]);
+    }
+
+    /** H10：某个技能的 SpecSource 抛普通 RuntimeException → 丢弃该技能，其余正常返回。 */
+    @Test
+    void h10_load_sourceRuntimeException_dropsSkillKeepsOthers() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundleTwoSkills(
+            SKILL_KEY, contractWithSource(),
+            "cms.other", contractOwnSource()));
+        when(specSource.load(any(SpecQuery.class))).thenThrow(new IllegalStateException("boom"));
+
+        List<Skill> skills = loader.load(AGENT_ID, Map.of());
+
+        assertNotNull(skills);
+        assertEquals(1, skills.size());
+        assertEquals("cms.other", skills.getFirst().skillKey());
+    }
+
     @Test
     void load_shouldPassPinnedVersionIntoQuery() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
@@ -149,16 +181,35 @@ class DefaultBundleLoaderTest {
     }
 
     private static AgentBundleVo bundle(String contractJson) {
+        return bundleTwoSkills(SKILL_KEY, contractJson);
+    }
+
+    private static AgentBundleVo bundleTwoSkills(String key1, String contract1) {
+        return bundleTwoSkills(key1, contract1, null, null);
+    }
+
+    private static AgentBundleVo bundleTwoSkills(String key1, String contract1,
+                                                String key2, String contract2) {
         AgentBundleVo.ToolBriefVo tool = new AgentBundleVo.ToolBriefVo();
         tool.setToolName(TOOL_NAME);
+        AgentBundleVo.SkillBriefVo first = skillBrief(key1, contract1, tool);
+        AgentBundleVo bundle = new AgentBundleVo();
+        if (Objects.isNull(key2)) {
+            bundle.setSkills(List.of(first));
+            return bundle;
+        }
+        bundle.setSkills(List.of(first, skillBrief(key2, contract2, tool)));
+        return bundle;
+    }
+
+    private static AgentBundleVo.SkillBriefVo skillBrief(String skillKey, String contractJson,
+                                                         AgentBundleVo.ToolBriefVo tool) {
         AgentBundleVo.SkillBriefVo skill = new AgentBundleVo.SkillBriefVo();
-        skill.setSkillKey(SKILL_KEY);
-        skill.setSkillName(SKILL_KEY);
+        skill.setSkillKey(skillKey);
+        skill.setSkillName(skillKey);
         skill.setSkillContract(contractJson);
         skill.setTools(List.of(tool));
-        AgentBundleVo bundle = new AgentBundleVo();
-        bundle.setSkills(List.of(skill));
-        return bundle;
+        return skill;
     }
 
     private static String contractOwnSource() {

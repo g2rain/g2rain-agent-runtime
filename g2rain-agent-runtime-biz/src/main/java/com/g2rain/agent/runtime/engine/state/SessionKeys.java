@@ -1,8 +1,13 @@
 package com.g2rain.agent.runtime.engine.state;
 
 
+import com.g2rain.agent.runtime.domain.graph.TaskGraph;
+import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.support.RedisKeys;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 会话范围的 Redis key 集合。
@@ -136,5 +141,29 @@ public record SessionKeys(String organId, String conversationId) {
      */
     public String payload(String taskId, String evidenceId) {
         return RedisKeys.PAYLOAD.format(organId, conversationId, taskId, evidenceId);
+    }
+
+    /**
+     * 任务组的全部 key：元数据、图、断点、任务共享、前情、写索引，以及图中每个节点的空间与证据（不含报文）。
+     *
+     * @param taskId 任务 id
+     * @param graph  任务图（决定节点空间与证据 key）
+     * @return 组内 key 列表
+     */
+    public List<String> group(String taskId, TaskGraph graph) {
+        List<String> keys = new ArrayList<>();
+        keys.add(metadata(taskId));
+        keys.add(graph(taskId));
+        keys.add(checkpoint(taskId));
+        keys.add(shared(taskId));
+        keys.add(prior(taskId));
+        keys.add(writes(taskId));
+        List<TaskNode> nodes = graph.getNodes();
+        for (TaskNode node : nodes) {
+            String nodeId = node.getNodeId();
+            keys.add(space(taskId, nodeId));
+            keys.add(evidence(taskId, nodeId));
+        }
+        return keys;
     }
 }

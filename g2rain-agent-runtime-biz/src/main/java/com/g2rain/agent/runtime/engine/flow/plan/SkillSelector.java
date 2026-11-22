@@ -1,7 +1,6 @@
 package com.g2rain.agent.runtime.engine.flow.plan;
 
 
-import lombok.extern.slf4j.Slf4j;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.model.ModelGateway;
@@ -13,12 +12,12 @@ import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
-import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.model.nexus.schema.ChatMessage;
 import com.g2rain.model.nexus.support.ChatCompletionRequests;
 import com.g2rain.model.nexus.support.OpenAiChatClientConverter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -66,7 +65,7 @@ public class SkillSelector {
      * @param ctx       本轮上下文
      * @param whitelist 技能白名单
      * @param goal      规划目标
-     * @return 筛后的候选；模型给出空名单时为空列表，调用异常时退回全量白名单
+     * @return 筛后的候选；模型明确给出空数组时为空列表；解析失败、缺字段或调用异常时退回全量白名单
      */
     List<SkillItem> select(TurnContext ctx, List<SkillItem> whitelist, String goal) {
         if (whitelist.size() == 1) {
@@ -91,8 +90,12 @@ public class SkillSelector {
             try {
                 String raw = RuntimeUtils.extractObject(assistant.getContent());
                 CandidateSkillsAnswer answer = JSON.str2obj(raw, CandidateSkillsAnswer.class);
-                if (Objects.isNull(answer) || Collections.isEmpty(answer.candidateSkillKeys())) {
-                    // 模型给出空名单：视为筛不出候选，交给上层失败，而不是退回全量
+                if (Objects.isNull(answer) || Objects.isNull(answer.candidateSkillKeys())) {
+                    // 解析失败或缺字段：退回全量，由后续规划再筛
+                    return whitelist;
+                }
+                if (answer.candidateSkillKeys().isEmpty()) {
+                    // 模型明确给出空数组：视为筛不出候选，交给上层失败
                     return List.of();
                 }
 

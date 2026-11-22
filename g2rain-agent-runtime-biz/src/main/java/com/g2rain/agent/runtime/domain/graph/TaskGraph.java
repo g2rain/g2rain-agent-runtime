@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  *   <li>按节点 dependsOn 自动补边</li>
  *   <li>按 ID 查找、找挂起节点、唤醒焦点</li>
  *   <li>{@link #nextWave(String)}：算出本波可跑节点，本轮焦点优先（当前实现单节点调度）</li>
- *   <li>{@link #resumeAwaiting()}：委派子节点终态后回醒父节点，不连锁失败</li>
+ *   <li>{@link #resumeAwaiting()}：委派子节点终态后回醒父节点；链损坏的父节点 id 交由图内核经 {@code turn.mark} 失败</li>
  * </ul>
  * 方法均同步或依赖可变列表，多线程场景需外部串行化访问。
  * </p>
@@ -248,8 +248,9 @@ public class TaskGraph {
     /**
      * 计算下一波可执行节点，并在必要时把 PENDING 升为 READY。
      * <p>
-     * 步骤：先 {@link #resumeAwaiting()}；再收集已 unlocksDownstream 的节点 ID；
-     * 焦点节点排在最前，其余按列表顺序遍历，跳过不可调度的，依赖未齐的也跳过；依赖齐的 PENDING 升 READY 后加入波。
+     * 步骤：收集已 unlocksDownstream 的节点 ID；焦点节点排在最前，其余按列表顺序遍历，
+     * 跳过不可调度的，依赖未齐的也跳过；依赖齐的 PENDING 升 READY 后加入波。
+     * 委派回醒由调用方先执行 {@link #resumeAwaiting()} 并处理损坏链。
      * 当前实现在加入第一个节点后 break（单节点调度）；要同级并行时去掉该 break。
      * 焦点优先保证本轮唤醒的节点（确认审批、回答追问）先执行，而不是被列表中靠前的其他节点抢先。
      * </p>
@@ -261,9 +262,6 @@ public class TaskGraph {
         if (Collections.isEmpty(this.nodes)) {
             return List.of();
         }
-
-        // 先让等委派的父节点有机会回醒
-        resumeAwaiting();
 
         // 已完成或跳过的节点，视为下游依赖已满足
         Set<String> completed = nodes.stream()
@@ -360,16 +358,20 @@ public class TaskGraph {
     }
 
     /**
-     * 扫描 WAITING_DELEGATE 发起节点：前置终态后回 READY；前置缺失 → FAILED（{@code DELEGATE_BROKEN}）。
+     * 扫描 WAITING_DELEGATE 发起节点：前置终态后回 READY；前置缺失则返回父节点 id，不改其状态。
      * <p>
      * 前置 FAILED / CANCELLED / SKIPPED 不连锁失败，仅回 READY（观察由 open 写 {@code delegateResult}）。
+     * 损坏链由调用方经 {@code turn.mark} 置 FAILED。
      * </p>
+     *
+     * @return 委派链损坏的父节点 id；没有为空列表
      */
-    public void resumeAwaiting() {
+    public List<String> resumeAwaiting() {
         if (Collections.isEmpty(nodes)) {
-            return;
+            return List.of();
         }
 
+        List<String> broken = new ArrayList<>();
         for (TaskNode parent : nodes) {
             // 只回醒等委派的发起节点
             if (parent.getStatus() != NodeStatus.WAITING_DELEGATE) {
@@ -381,11 +383,9 @@ public class TaskGraph {
                 .filter(edge -> parent.getNodeId().equals(edge.getTo()))
                 .map(TaskEdge::getFrom)
                 .toList();
-            // 委派边指向缺失节点：链已坏，父节点失败且不连锁子节点
+            // 委派边指向缺失节点：链已坏，交由图内核 mark，本方法不改状态
             if (Collections.isEmpty(childIds) || childIds.stream().anyMatch(id -> Objects.isNull(find(id)))) {
-                parent.setStatus(NodeStatus.FAILED);
-                parent.setErrorCode("DELEGATE_BROKEN");
-                parent.setErrorMessage("委派链损坏：前置节点缺失");
+                broken.add(parent.getNodeId());
                 continue;
             }
 
@@ -397,6 +397,7 @@ public class TaskGraph {
                 parent.setStatus(NodeStatus.READY);
             }
         }
+        return broken;
     }
 
     /**

@@ -63,6 +63,7 @@ public final class GoalGatePrompt {
               - writable：节点所用技能是否具备写操作能力。
               - delegated：为 true 表示是为其他节点准备数据的前置步骤。
               - result：节点完成时写给用户的结论（由执行时的模型撰写）。
+              - truncated：result 带 truncated 为 true 时，表示结论过长已被截短：答复只能使用给出的部分，不得补写被省略的内容，并说明内容较多、此处只列出部分。
               - evidence：节点最近几次成功调用的工具与结果摘要（摘要可能被截短），是核对 result 的依据。
             - dialogueTail：最近的对话，用于理解指代，不从中取新的事实。
 

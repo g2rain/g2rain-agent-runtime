@@ -16,6 +16,8 @@ import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.spi.Call;
 import com.g2rain.agent.runtime.spi.Fact;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -31,6 +33,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -275,7 +278,31 @@ public class EvidenceReader {
     }
 
     /**
+     * evidenceId 是否在本节点或任一上游节点的证据中（不论状态）。
+     *
+     * @param ctx        当前工具执行上下文
+     * @param evidenceId 证据标识
+     * @return 可达为 {@code true}
+     */
+    public boolean reachable(ToolExecutionContext ctx, String evidenceId) {
+        if (Strings.isBlank(evidenceId)) {
+            return false;
+        }
+        if (containsEvidence(ctx.scope().evidence(), evidenceId)) {
+            return true;
+        }
+        for (String owner : ctx.getGraph().upstream(ctx.getNodeId())) {
+            if (containsEvidence(stateFacade.evidenceOf(ctx.getFrame().turn(), owner), evidenceId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 按 evidenceId + path 取值并与期望值相等。
+     *
+     * <p>只认本节点与上游节点的成功证据；不在范围内不读报文。</p>
      *
      * @param ctx        当前工具执行上下文
      * @param evidenceId 证据标识
@@ -285,6 +312,11 @@ public class EvidenceReader {
      */
     public boolean matches(ToolExecutionContext ctx, String evidenceId, @Nullable String path, JsonNode expected) {
         if (Strings.isBlank(evidenceId) || !JSON.hasValue(expected)) {
+            return false;
+        }
+        boolean allowed = successfulEvidenceNewestFirst(ctx).stream()
+            .anyMatch(owned -> Objects.equals(owned.head().evidenceId(), evidenceId));
+        if (!allowed) {
             return false;
         }
 
@@ -320,45 +352,61 @@ public class EvidenceReader {
      * 本节点及上游已成功的工具调用，含读与写。
      *
      * <p>本节点在前，上游按距离由近到远；同一节点内新的在前。条件为 {@code status == SUCCESS}、
-     * {@code businessOk} 不为 {@code false}，不论结果是否为空。入参取证据头 {@code argsBrief} 解析为 JSON，
-     * 不是合法 JSON 对象时为空对象；事实为该调用按所属技能契约的抽取项取出的原文。</p>
+     * {@code businessOk} 不为 {@code false}，不论结果是否为空。入参取 {@code tool_call_record.request}
+     * 完整 JSON；查不到或不是对象时为空对象。事实为该调用按所属技能契约的抽取项取出的原文。</p>
      *
      * @param ctx 当前工具执行上下文
      * @return 已成功调用；没有为空列表
      */
     public List<Call> nodeCalls(ToolExecutionContext ctx) {
+        List<OwnedEvidence> ownedList = successfulEvidenceNewestFirst(ctx);
+        List<String> evidenceIds = new ArrayList<>();
+        for (OwnedEvidence owned : ownedList) {
+            evidenceIds.add(owned.head().evidenceId());
+        }
+        Map<String, JsonNode> argsById = stateFacade.argsOf(ctx.getFrame().turn(), evidenceIds);
         List<Call> calls = new ArrayList<>();
-        for (OwnedEvidence owned : successfulEvidenceNewestFirst(ctx)) {
+        for (OwnedEvidence owned : ownedList) {
             EvidenceHead head = owned.head();
             List<Fact> facts = extractsOf(ctx, owned).stream()
                 .map(extract -> new Fact(extract.key(), extract.value()))
                 .toList();
-            calls.add(new Call(head.toolName(), argsOf(head.argsBrief()), head.sideEffect(), facts));
+            calls.add(new Call(head.toolName(), callArgs(head.evidenceId(), argsById), head.sideEffect(), facts));
         }
 
         return calls;
     }
 
     /**
-     * 证据头参数摘要 → JSON 对象；空白或非法时为空对象。
+     * 取完整入参；缺失或非对象时记 Trace 并返回空对象。
      *
-     * @param argsBrief 参数摘要；可空
+     * @param evidenceId 证据 id
+     * @param argsById   批量查回的入参
      * @return JSON 对象
      */
-    private static ObjectNode argsOf(@Nullable String argsBrief) {
-        if (Strings.isBlank(argsBrief)) {
-            return JsonNodeFactory.instance.objectNode();
+    private static ObjectNode callArgs(String evidenceId, Map<String, JsonNode> argsById) {
+        JsonNode args = argsById.get(evidenceId);
+        if (args instanceof ObjectNode object) {
+            return object;
         }
-
-        try {
-            if (JSON.str2node(argsBrief) instanceof ObjectNode object) {
-                return object;
-            }
-        } catch (RuntimeException _) {
-            // 摘要不是合法 JSON：交给 Guard 空对象，不抛
-        }
-
+        Trace.at(TraceStage.TOOL, "call_args_missing").kv("evidenceId", evidenceId).warn();
         return JsonNodeFactory.instance.objectNode();
+    }
+
+    /**
+     * 证据列表是否含指定 id。
+     *
+     * @param evidence   证据头
+     * @param evidenceId 目标 id
+     * @return 含有为 {@code true}
+     */
+    private static boolean containsEvidence(List<EvidenceHead> evidence, String evidenceId) {
+        for (EvidenceHead head : evidence) {
+            if (Objects.equals(head.evidenceId(), evidenceId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

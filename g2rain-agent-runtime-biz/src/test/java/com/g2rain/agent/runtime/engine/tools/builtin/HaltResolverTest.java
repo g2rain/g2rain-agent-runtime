@@ -126,6 +126,37 @@ class HaltResolverTest {
         assertDoesNotThrow(() -> HaltResolver.requireNoDecision(ctx));
     }
 
+    /** T6：最近一次调用 B 多候选；之后旧证据 A 改为 CANCELLED，仍按 B 判 AMBIGUOUS。 */
+    @Test
+    void t6_followUp_usesLatestEvidenceAfterInPlaceReplace() {
+        EvidenceHead a = new EvidenceHead("A", "list", SideEffect.NONE, EvidenceStatus.SUCCESS, true, false,
+            Map.of("id", 1), FailureKind.NONE, null, null, null, null, null, null, null, 1, "trace-1", null);
+        EvidenceHead b = new EvidenceHead("B", "list", SideEffect.NONE, EvidenceStatus.SUCCESS, true, false,
+            Map.of("id", 3), FailureKind.NONE, null, null, null, null, null, null, null, 1, "trace-1", null);
+        com.g2rain.agent.runtime.engine.state.DefaultNodeScope scope = liveScope();
+        scope.addEvidence(a);
+        scope.addEvidence(b);
+        ToolExecutionContext ctx = mock(ToolExecutionContext.class);
+        when(ctx.scope()).thenReturn(scope);
+        when(ctx.contract()).thenReturn(contract());
+
+        assertEquals(HaltReason.AMBIGUOUS, HaltResolver.followUp(ctx, List.of()));
+
+        scope.addEvidence(a.withStatus(EvidenceStatus.CANCELLED));
+        assertEquals(HaltReason.AMBIGUOUS, HaltResolver.followUp(ctx, List.of()));
+        assertEquals("B", scope.evidence().getLast().evidenceId());
+        assertEquals(EvidenceStatus.CANCELLED, scope.evidence().getFirst().status());
+    }
+
+    private static com.g2rain.agent.runtime.engine.state.DefaultNodeScope liveScope() {
+        var fence = new com.g2rain.agent.runtime.domain.state.ConversationFence("c1", "u1", null, 0L, "t", 1L);
+        var turn = new com.g2rain.agent.runtime.engine.state.DefaultTurnScope("1", "u1", "t", fence, List.of(),
+            List.of(), new HashMap<>(), null, new com.g2rain.agent.runtime.domain.graph.TaskGraph(), null,
+            new HashMap<>(), null, new HashMap<>(), 60);
+        return new com.g2rain.agent.runtime.engine.state.DefaultNodeScope(turn, "n1", Map.of(), Map.of(), Map.of(),
+            new java.util.ArrayList<>(), new java.util.ArrayList<>(), 0, 0L);
+    }
+
     /**
      * 只读写便签与证据的节点作用域。
      *

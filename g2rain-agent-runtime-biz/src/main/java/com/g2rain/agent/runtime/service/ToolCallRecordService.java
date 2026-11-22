@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.dto.ToolCallRecordDto;
 import com.g2rain.agent.runtime.dto.ToolCallRecordSelectDto;
 import com.g2rain.agent.runtime.vo.ToolCallRecordVo;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -47,4 +48,13 @@ public interface ToolCallRecordService {
      * @return 操作结果（影响行数）
      */
     int delete(Long id);
+
+    /**
+     * 按任务与调用 id 批量取完整入参（只查 call_id、request）。
+     *
+     * @param taskId  任务 id
+     * @param callIds 调用 / 证据 id；调用方保证非空
+     * @return 仅填充 callId、request 的 VO
+     */
+    List<ToolCallRecordVo> selectRequests(String taskId, Collection<String> callIds);
 }

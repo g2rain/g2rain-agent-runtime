@@ -165,6 +165,16 @@ public class ChatConversationServiceImpl implements ChatConversationService {
     }
 
     @Override
+    public int touchLastMessage(String conversationId, LocalDateTime time) {
+        return chatConversationDao.touchLastMessage(conversationId, time);
+    }
+
+    @Override
+    public int bindActiveTask(String conversationId, String taskId) {
+        return chatConversationDao.bindActiveTask(conversationId, taskId);
+    }
+
+    @Override
     public int delete(Long id) {
         ChatConversationPo existing = chatConversationDao.selectById(id);
         Asserts.isTrue(Objects.nonNull(existing), SystemErrorCode.DATA_NOT_EXISTS, id);

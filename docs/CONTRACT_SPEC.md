@@ -203,7 +203,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | sources 中的值 | 匹配条件 |
 |---|---|
 | `USER` | 当前缺参追问断点（`MISSING_INPUT`）的 `expectedFields` 包含该参数；或最近对话中某条用户消息（归一化、去空白、小写后）包含该值（值长度 ≥ 2）；值首尾为英文字母或数字时，命中处前后不能紧挨英文字母或数字（「2012」中不认「12」），原文空白处视为边界 |
-| `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等；参数配置了 `entity` 时，改为值等于这些证据中该类型实体的标识 |
+| `EVIDENCE` | 值与本节点或任一上游节点（沿依赖边追溯，含委派）某条成功证据的抽取内容中的某个值完全相等；参数配置了 `entity` 时，改为值等于这些证据中该类型实体的标识。`builtin_evidence_get` 与来源核验都按此节点/上游范围校验；越界的 evidenceId 会被拒绝 |
 | `NODE_OUTPUT` / `SHARED` / `SESSION` | 以参数路径为键，在对应数据中查到相同的值 |
 | `PRIOR_TASK` | 值等于任务前情中某个实体的 id（实体来自查询或保存结果中配置了 `entity` 的抽取项）；参数配置了 `entity` 时还要求类型一致；配置了 `from: prior.*` 时按该路径比对 |
 | `PLATFORM` / `CONTRACT` | 不会匹配（这两类来源只能通过 `from`/`const` 产生） |
@@ -480,11 +480,12 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | `builtin_node_follow_up` | `question`、`expectedFields?`、`suggestions?` | 向用户追问，节点挂起（`FOLLOW_UP`），停顿原因由 Runtime 判定。有补查待完成时拒绝（`LOOKUP_PENDING`）。有拒绝待用户决定时为 `DENIED`，不校验也不保存 `expectedFields`，挂起后清除拒绝便签。否则追问须有依据（`FOLLOW_UP_UNGROUNDED`）：带 `expectedFields` 时，每个字段须是本技能工具中允许来自 `USER` 的参数，或须来自 `EVIDENCE` 且本节点已有非空的成功查询，最近一次业务调用返回多条候选时为 `AMBIGUOUS`，否则为 `MISSING_INPUT`；不带时，最近一次业务调用返回多条候选为 `AMBIGUOUS`，结果为空或业务失败为 `UNRESOLVED`。只有 `MISSING_INPUT` 的 `expectedFields` 在用户回答后视为来源 `USER`；回答进入历史时带上问题与对应参数；本轮刚回答的问题原样再问时拒绝（`FOLLOW_UP_ANSWERED`） |
 | `builtin_node_approval` | `summary`、`toolName` | 请求用户确认被写入闸门拦下的那次写调用，节点挂起（`APPROVAL`）。未先调用写工具时拒绝（`APPROVAL_NOT_GATED`），工具名与被拦下的不一致时拒绝并给出实际工具名（`APPROVAL_TOOL_MISMATCH`）。只在本节点有被写闸门拦下待确认的写调用时提供给模型 |
 | `builtin_node_finish` | `output` | 声明完成；有补查待完成时拒绝（`LOOKUP_PENDING`）；通过完成判定（10.2）后节点 `DONE`，写入共享值和实体 |
+| `builtin_node_skip` | `reason` | 查询结果表明本节点的写操作不需要执行时调用；只有节点有完成目标、目标工具尚未成功、本节点已有非空的成功读查询时才可调用；有补查待完成时拒绝（`LOOKUP_PENDING`）；调用后节点 `SKIPPED` |
 | `builtin_node_fail` | `reason` | 声明失败，节点 `FAILED`；有补查待完成（`LOOKUP_PENDING`）或有拒绝待用户决定（`DECISION_PENDING`，须追问用户）时拒绝 |
 | `builtin_node_delegate` | `skillKey`、`objective?` | 委派一个只读技能作为前置节点（见第 15 节）。没有可委派技能或已到委派层级上限时不提供 |
 | `builtin_output_set` | `key`、`value`、`sourceType`、`sourceRef`、`sourcePath?` | 写一条产出。`sourceType` 不能是 `MODEL`；来源为 `EVIDENCE` 时 `sourceRef` 填 evidenceId、`sourcePath` 填报文路径，值必须与报文中的值相等。产出无人使用（无节点依赖本节点，且契约产出均非必填、不共享、不沉淀实体）时不提供 |
 | `builtin_state_set` | `key`、`value` | 写节点私有便签；不能写保留键 |
-| `builtin_evidence_get` | `evidenceId` | 读取证据的原始报文 |
+| `builtin_evidence_get` | `evidenceId` | 读取本节点或上游节点证据的原始报文（任意状态）；越界拒绝 |
 | `builtin_session_info` | — | 返回会话 ID、节点 ID、节点状态 |
 | `builtin_env_current_datetime` | — | 当前时间 |
 | `builtin_env_generate_uuid` | `length?` | 生成 UUID |
@@ -526,7 +527,7 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 |---|---|
 | `skillKey` / `toolName` / `arguments` / `sources` / `pin` | 既有字段，见插件扩展约定 |
 | `callId` | 本次调用标识；与证据、拦截记录同源 |
-| `calls` | 本节点与上游已成功的工具调用，读写都计入，结果为空也计入；失败、业务失败不计。本节点在前，上游由近到远，同一节点内新的在前。每项 `Call`：工具名、入参（证据头脱敏摘要）、副作用、`facts`（该调用结果按抽取项取出的原文：抽取键与值） |
+| `calls` | 本节点与上游已成功的工具调用，读写都计入，结果为空也计入；失败、业务失败不计。本节点在前，上游由近到远，同一节点内新的在前。每项 `Call`：工具名、入参（完整入参，来自 `tool_call_record.request`；查不到时为空对象）、副作用、`facts`（该调用结果按抽取项取出的原文：抽取键与值） |
 | `operator` | 当前请求用户标识；访客为空 |
 
 ---
@@ -595,12 +596,13 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 | 重复 | 同一发起节点下，相同技能、相同目标的前置节点已失败、取消或跳过时，拒绝再次委派 |
 | 执行 | 前置节点先执行，发起节点等待；前置节点结束后发起节点继续 |
 | 结果 | 前置节点成功 → 发起节点可通过 `evidence.*` 使用其证据，`TOOL succeeded` 条件也认可其证据；前置节点失败 → 发起节点收到一条委派结果说明，由它决定后续处理，任务不会因此失败 |
+| 链损坏 | 委派边指向的前置节点缺失时，发起节点 `FAILED`，错误码 `DELEGATE_BROKEN`（`agent_runtime.42238`） |
 
 ---
 
 ## 16. 装载校验
 
-Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃（只记录错误日志）；数字员工没有任何可用 Skill 时，规划失败。
+Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃（只记录错误日志）；数字员工没有任何可用 Skill 时，规划失败。续跑任务时，图中引用的技能有任何一个未装载成功，本轮失败（`SKILL_UNAVAILABLE`），任务保持原状；技能服务不可用时本轮失败（`DEPENDENCY_UNAVAILABLE`）。技能的动作语义来源暂时不可用（`SpecUnavailableException`）时，本轮失败（`DEPENDENCY_UNAVAILABLE`），新建和续跑任务都一样；来源配置错误时该技能被丢弃。
 
 | # | 规则 |
 |---|---|
@@ -667,11 +669,17 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.42235` | `EVIDENCE_PATH_INVALID` | 证据 ID 为空 |
 | `agent_runtime.40411` | `SKILL_NOT_FOUND` | 委派的技能不存在 |
 | `agent_runtime.42237` | `DELEGATE_FORBIDDEN` | 禁止委派 |
+| `agent_runtime.42238` | `DELEGATE_BROKEN` | 委派链损坏：前置节点缺失 |
 | `agent_runtime.42239` | `DELEGATE_REPEATED` | 重复委派 |
 | `agent_runtime.42212` | `PROVIDER_UNAVAILABLE` | `inputs.provider` 不可用（规划失败） |
 | `agent_runtime.42252` | `GUARD_DENIED` | 调用被前置条件拦下 |
 | `agent_runtime.42254` | `DECISION_PENDING` | 有拒绝待用户决定：不能失败，也不能执行其他写操作 |
-| `agent_runtime.42255` | `LOOKUP_PENDING` | 有补查待完成：不能追问、失败或完成 |
+| `agent_runtime.42255` | `LOOKUP_PENDING` | 有补查待完成：不能追问、失败、完成或跳过 |
+| `agent_runtime.42256` | `NODE_ROUNDS_EXHAUSTED` | 节点处理轮次已用完 |
+| `agent_runtime.42257` | `NODE_STALLED` | 节点连续多轮没有进展 |
+| `agent_runtime.42258` | `NODE_DECLARED_FAILED` | 模型声明节点失败 |
+| `agent_runtime.42259` | `SKILL_UNAVAILABLE` | 续跑时图中引用的技能未装载成功 |
+| `agent_runtime.50003` | `DEPENDENCY_UNAVAILABLE` | 依赖不可用（含技能服务） |
 | `agent_runtime.50012` | `GUARD_UNAVAILABLE` | 调用前检查不可用 |
 
 ---

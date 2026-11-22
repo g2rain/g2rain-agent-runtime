@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.domain.state.task.EntityEntry;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -94,22 +95,17 @@ final class InputBinder {
     private static @Nullable Sourced<?> resolveOne(TurnScope turn, String name, InputSpec spec, List<String> predecessors,
                                                    Map<String, Map<String, Sourced<?>>> upstreamOutputs) {
         String from = Strings.trim(spec.getFrom());
-        if (Strings.isBlank(from)) {
+        if (Strings.isBlank(from) || !ValueRef.isKnown(from)) {
             return nearestUpstream(name, predecessors, upstreamOutputs);
         }
-        if (from.startsWith("session.")) {
-            return turn.sessionShared().get(from.substring("session.".length()));
-        }
-        if (from.startsWith("shared.")) {
-            return turn.shared().get(from.substring("shared.".length()));
-        }
-        if (from.startsWith("prior.")) {
-            return priorValue(turn, from.substring("prior.".length()));
-        }
-        if (from.startsWith("outputs.")) {
-            return nearestUpstream(from.substring("outputs.".length()), predecessors, upstreamOutputs);
-        }
-        return nearestUpstream(name, predecessors, upstreamOutputs);
+        ValueRef ref = ValueRef.parse(from);
+        return switch (ref.bag()) {
+            case SESSION -> turn.sessionShared().get(ref.path());
+            case SHARED -> turn.shared().get(ref.path());
+            case PRIOR -> priorValue(turn, ref.path());
+            case OUTPUTS -> nearestUpstream(ref.path(), predecessors, upstreamOutputs);
+            default -> nearestUpstream(name, predecessors, upstreamOutputs);
+        };
     }
 
     /**

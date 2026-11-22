@@ -5,7 +5,9 @@ import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.data.isolation.annotations.DataIsolation;
 import com.g2rain.data.isolation.annotations.IgnoreIsolation;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -65,6 +67,24 @@ public interface ChatConversationDao {
      * @return 影响行数；0 表示栅栏冲突或行不存在
      */
     int advanceStateVersion(ChatConversationPo entity);
+
+    /**
+     * 只刷新 {@code last_message_time}，不改 {@code version}。
+     *
+     * @param conversationId 会话 id
+     * @param time           最后消息时间
+     * @return 影响行数
+     */
+    int touchLastMessage(@Param("conversationId") String conversationId, @Param("time") LocalDateTime time);
+
+    /**
+     * 只写 {@code active_task_id}（与当前不同时），不改 {@code state_version} / {@code version}。
+     *
+     * @param conversationId 会话 id
+     * @param taskId         活动任务 id
+     * @return 影响行数
+     */
+    int bindActiveTask(@Param("conversationId") String conversationId, @Param("taskId") String taskId);
 
     /**
      * 根据 ID 查询记录

@@ -22,6 +22,11 @@ import java.util.Map;
 public class VerifySpec {
 
     /**
+     * {@code verify.args} 引用原写操作请求参数的前缀。
+     */
+    public static final String CALL_PREFIX = "call.";
+
+    /**
      * 回查工具注册名；副作用必须是 NONE。
      */
     private String tool;

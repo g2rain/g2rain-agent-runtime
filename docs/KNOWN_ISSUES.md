@@ -25,7 +25,7 @@
 | # | 问题 | 改动 |
 |---|---|---|
 | F1 | 模型直接调 `builtin_node_approval`，绕过写工具的参数校验 | 方案 A：`WriteGateInterceptor` 拦下时记录待批调用（`NodeNoteKey.GATED_WRITE`，绑定后参数和摘要）；`ControlBuiltinTools.approval` 只接受被拦下、且工具名一致的调用，去掉 `arguments` 参数；新增错误码 `APPROVAL_NOT_GATED`（42245） |
-| F2 | 用户补参后续跑，已回答的 FOLLOW_UP 断点仍投影在 `<repair>` 里，诱导模型重复追问 | `ReactProjectionFactory.repair()` 不再投影 FOLLOW_UP 断点。2026-10-11 R2 后 `<repair>` 块已删除，等待中的断点改由 `<checkpoint>` 块投影 |
+| F2 | 用户补参后续跑，已回答的 FOLLOW_UP 断点仍投影在 `<repair>` 里，诱导模型重复追问 | `ReactProjectionFactory.repair()` 不再投影 FOLLOW_UP 断点。2026-10-11 R2 后 `<repair>` 块已删除；2026-11-22 `<checkpoint>` 块也已删除，续跑信息由节点历史承载 |
 | F3 | 意图分类空响应直接降级为 UNCERTAIN | `DefaultIntentClassifier` 空正文重试一次（`MAX_ATTEMPTS = 2`）。2026-10-12 已撤销：重试解决不了根因，空响应交调度器兜底，根因随 Q8 处理 |
 | F4 | 追问问题只在工具参数里，节点历史里没有，续跑时问答断开 | `DefaultReActLoop` 在节点以 FOLLOW_UP 挂起退出、且模型那步正文为空时，把追问问题补记为本节点 AGENT 消息（`appendNodeReply`）。已由 F14 的节点动作记录取代 |
 | F5 | 拒绝编造值时一律挂 PROVENANCE_REJECT 义务，把提示里要求先调用的查询工具也拦掉 | `ParamContractInterceptor.syntheticObligation`：契约要求先查证据时挂 CALL_TOOL 义务。2026-10-11 R2 删除补参义务后不再适用：拒绝观测的"下一步"直接给出先调的查询工具 |

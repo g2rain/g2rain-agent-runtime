@@ -6,7 +6,7 @@ package com.g2rain.agent.runtime.support.prompt;
  *
  * <p>{@link #SYSTEM} 说明身份与职责；{@link #USER} 是完整的本轮指令模板，结构为
  * 任务 → 职责边界 → 技能约束 → 拆分规则 → 节点字段 → 完成目标 → 依赖规则 → 输入说明 → 输入数据 → 输出指令。
- * 本类不拆节点、不写任务图。</p>
+ * 接续前情时输入含 priorTasks；本类不拆节点、不写任务图。</p>
  *
  * @author alpha
  * @since 2026/8/21
@@ -23,7 +23,7 @@ public final class PlanPrompt {
             """;
 
     /**
-     * 本轮指令模板。占位符为输入数据 JSON（input、goal、continuitySummary、agent、skills 含 writeTools）。
+     * 本轮指令模板。占位符为输入数据 JSON（input、goal、priorTasks、agent、skills 含 writeTools）。
      *
      * <pre>{@code
      * String user = PlanPrompt.USER.formatted(JSON.obj2str(view));
@@ -78,7 +78,7 @@ public final class PlanPrompt {
             【输入说明】
             - input：本轮用户输入；空串表示没有输入。
             - goal：任务目标摘要，节点要对准它；空串表示没有单独摘要。
-            - continuitySummary：上一个任务的综述；接续前情时让新计划接上已有结论，避免重做或冲突。
+            - priorTasks：接续前情时给出最近结束的任务（目标、状态、结论、用户原话），新计划要接上已有结论，避免重做或冲突；没有时不出现。
             - agent.profileText：数字员工的身份与职责边界，只用于理解任务，不代表额外能力。
             - skills：候选技能、操作手册（skillManual）和写工具（writeTools，name 为工具名，label 为名称）；writeTools 为空表示该技能没有写操作。
 

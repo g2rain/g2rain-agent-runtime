@@ -15,6 +15,7 @@ import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.JsonClip;
+import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.trace.Trace;
@@ -476,7 +477,8 @@ public class DefaultToolInvoker implements ToolInvoker {
 
         if (Objects.nonNull(business)) {
             if (Objects.equals(business.getErrorCode(), RuntimeErrorCode.MCP_TOOL_ERROR.code())) {
-                return ToolErrors.MCP_TOOL_ERROR.observe(messageOf(business));
+                return ToolErrors.MCP_TOOL_ERROR.observe(
+                    ModelHint.MCP_TOOL_FAILED.text("message", RuntimeUtils.fenced(messageOf(business))));
             }
 
             return ToolErrors.TOOL_ERROR.observe(messageOf(business));

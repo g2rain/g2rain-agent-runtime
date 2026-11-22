@@ -198,7 +198,8 @@ public final class IntentPrompt {
         - 不执行待确认的操作，也没有提出别的事项 → CANCEL_TASK
         - 不执行待确认的操作，改办别的事（包括提出新的问题或要求）→ REPLACE_TASK
         - 明确要求换一个数字员工 → SWITCH_AGENT（agentLocked=true 时不可用）
-        - 同意执行、回答确认问题，或要求修改待确认的操作 → CONTINUE_TASK
+        - 要求修改待确认操作的内容（如改参数、换内容）→ REPLY_ONLY
+        - 同意执行，或回答确认问题 → CONTINUE_TASK
         - 与任务无关的寒暄、致谢、闲聊 → REPLY_ONLY
 
         【选人规则】
@@ -210,6 +211,7 @@ public final class IntentPrompt {
 
         【userReply】
         - REPLY_ONLY：给用户的简短回复。
+        - WRITE_PENDING 下要求修改待确认的操作：说明待确认的操作不能直接修改；如需修改，请先拒绝（拒绝后当前事项结束），再重新描述需求。
         - 无法匹配数字员工：说明可以办理的事项。
         - 其它情况为 null。
 
@@ -417,7 +419,7 @@ public IntentResult complete(@Nullable List<AgentSelection> candidates) {
 public record IntentRequest(@JsonIgnore TurnScene scene, boolean agentLocked, @JsonIgnore @Nullable String userInput,
                             @Nullable Long continuityAgentId, @Nullable ContinuitySnippet continuation,
                             List<AgentSelection> agentCandidates, @Nullable DialogueWindow dialogue,
-                            @Nullable String recentEpisodes, List<SkillCatalogItem> skillCatalog,
+                            List<SkillCatalogItem> skillCatalog,
                             @Nullable ActiveTask activeTask) {
 }
 ```
@@ -676,6 +678,7 @@ ROUTE_UNCERTAIN("route.uncertain", "还有一项操作等待您确认，请确�
 | 7 | 上一任务已结束 | "那退款进度呢" | CONTINUITY → START_WITH_CONTEXT | 优先前情员工，带前情建任务 |
 | 8 | FOLLOW_UP 挂起 | "上海" | 入口按 REPLY 续跑 | 不调用意图模型 |
 | 9 | APPROVAL 挂起 | "好的，继续" | WRITE_PENDING → CONTINUE_TASK → UNCERTAIN | ROUTE_UNCERTAIN 确认文案，不执行写操作 |
+| 9a | APPROVAL 挂起 | "标题改成 B 再提交" | WRITE_PENDING → REPLY_ONLY | 返回 userReply，说明需先拒绝再重新描述；任务与断点不变 |
 | 10 | APPROVAL 挂起 | "算了，不办了" | WRITE_PENDING → CANCEL_TASK | 取消任务 |
 | 10a | APPROVAL 挂起 | "先别改了，测试空间有几篇文章？" | WRITE_PENDING → REPLACE_TASK | 取消原任务，按新问题建任务 |
 | 11 | APPROVAL 挂起 | 点击确认（action=CONFIRM） | 入口硬协议续跑 | 执行写操作，不调用意图模型 |

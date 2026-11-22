@@ -58,10 +58,8 @@ public final class IdempotencyKeyBuilder {
      * @return 定长幂等键
      */
     public static String effectiveKey(String toolName, @Nullable ToolSpec contract, JsonNode args) {
-        String tool = Strings.defaultIfBlank(toolName, "");
         // 没有可用业务键时，使用工具名和完整参数摘要，保证同工具同参数得到稳定结果。
-        String material = Strings.isBlank(tool) ? RuntimeUtils.argsHash(args) : tool + "|" + RuntimeUtils.argsHash(args);
-        String fallback = RuntimeUtils.sha256Hex(material.getBytes(StandardCharsets.UTF_8));
+        String fallback = RuntimeUtils.callKey(toolName, args);
         if (Objects.isNull(contract) || Collections.isEmpty(contract.getIdempotencyKey())) {
             return fallback;
         }

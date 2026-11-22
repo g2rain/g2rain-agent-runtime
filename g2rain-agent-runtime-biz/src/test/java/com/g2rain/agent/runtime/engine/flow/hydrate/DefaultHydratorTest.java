@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 import com.g2rain.agent.runtime.domain.decision.AgentSelection;
+import com.g2rain.agent.runtime.domain.graph.TaskGraph;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
@@ -65,6 +66,7 @@ class DefaultHydratorTest {
     private static TurnContext contextWith(TaskMetadata task) {
         TurnScope turn = mock(TurnScope.class);
         when(turn.task()).thenReturn(Optional.of(task));
+        when(turn.graph()).thenReturn(new TaskGraph());
         TurnContext context = new TurnContext(mock(TurnRequest.class), turn);
         AgentSelection agent = new AgentSelection();
         agent.setAgentId(AGENT_ID);

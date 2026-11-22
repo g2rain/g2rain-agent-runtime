@@ -178,6 +178,18 @@ public class RedisStateStore implements StateStore {
     }
 
     /**
+     * 统计给定 key 中实际存在的个数（同一 hash tag 下一次往返）。
+     *
+     * @param keys 待检查的 Redis key
+     * @return 实际存在的个数；底层返回 {@code null} 时按 0
+     */
+    @Override
+    public long countExisting(List<String> keys) {
+        Long count = redis.stringRedisTemplate().countExistingKeys(keys);
+        return Objects.isNull(count) ? 0L : count;
+    }
+
+    /**
      * 删除若干 key。
      *
      * @param keys 待删 Redis key

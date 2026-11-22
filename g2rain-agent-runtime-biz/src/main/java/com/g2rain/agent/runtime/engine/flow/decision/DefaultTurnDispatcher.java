@@ -282,7 +282,6 @@ public final class DefaultTurnDispatcher implements TurnDispatcher {
             IntentRequest.ContinuitySnippet.from(latest),
             AgentSelection.of(catalog),
             IntentRequest.DialogueWindow.from(turn.dialogue(DIALOGUE_LIMIT)),
-            null,
             resolveSkillCatalog(catalog, locked),
             activeTaskOf(turn, scene == TurnScene.ACTIVE_TASK || scene == TurnScene.WRITE_PENDING, writePending),
             ctx.getRequest().getModel()

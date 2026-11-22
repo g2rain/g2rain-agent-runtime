@@ -9,16 +9,19 @@ import com.g2rain.agent.runtime.service.TaskInstanceService;
 import com.g2rain.agent.runtime.service.TaskResumeRecordService;
 import com.g2rain.agent.runtime.vo.TaskInstanceVo;
 import com.g2rain.common.json.JsonCodecFactory;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,13 +39,21 @@ class TaskRepositoryTest {
 
     private static final int LIMIT = 3;
 
+    private TaskInstanceService taskInstanceService;
+
+    private TaskRepository repository;
+
+    @BeforeEach
+    void setUp() {
+        taskInstanceService = mock(TaskInstanceService.class);
+        repository = new TaskRepository(taskInstanceService, mock(TaskCheckpointService.class),
+            mock(TaskResumeRecordService.class));
+    }
+
     @Test
     void loadRecords_shouldSkipRowsWithoutRecordAndReturnChronologicalOrder() {
-        TaskInstanceService taskInstanceService = mock(TaskInstanceService.class);
         when(taskInstanceService.selectLatest(CONVERSATION_ID, LIMIT))
             .thenReturn(List.of(row("t3"), row("t2"), new TaskInstanceVo()));
-        TaskRepository repository = new TaskRepository(taskInstanceService, mock(TaskCheckpointService.class),
-            mock(TaskResumeRecordService.class));
 
         List<TaskRecord> records = repository.loadRecords(CONVERSATION_ID, LIMIT);
 
@@ -51,15 +62,12 @@ class TaskRepositoryTest {
 
     @Test
     void loadMetadata_shouldRoundTripSkillVersions() {
-        TaskInstanceService taskInstanceService = mock(TaskInstanceService.class);
         TaskInstanceVo vo = new TaskInstanceVo();
         vo.setTaskId(TASK_ID);
         vo.setConversationId(CONVERSATION_ID);
         vo.setStatus(TaskStatus.RUNNING.name());
         vo.setSkillVersions("{\"cms.article\":\"pin-1\"}");
         when(taskInstanceService.selectList(any())).thenReturn(List.of(vo));
-        TaskRepository repository = new TaskRepository(taskInstanceService, mock(TaskCheckpointService.class),
-            mock(TaskResumeRecordService.class));
 
         TaskMetadata metadata = repository.loadMetadata(TASK_ID);
 
@@ -68,14 +76,8 @@ class TaskRepositoryTest {
 
     @Test
     void save_emptySkillVersions_shouldPersistNull() {
-        TaskInstanceService taskInstanceService = mock(TaskInstanceService.class);
         when(taskInstanceService.selectList(any())).thenReturn(List.of());
-        TaskRepository repository = new TaskRepository(taskInstanceService, mock(TaskCheckpointService.class),
-            mock(TaskResumeRecordService.class));
-        TaskMetadata metadata = new TaskMetadata();
-        metadata.setTaskId(TASK_ID);
-        metadata.setConversationId(CONVERSATION_ID);
-        metadata.setStatus(TaskStatus.RUNNING);
+        TaskMetadata metadata = metadata();
 
         repository.save(metadata, Map.of(), null, 1L, null);
 
@@ -86,14 +88,8 @@ class TaskRepositoryTest {
 
     @Test
     void save_withSkillVersions_shouldPersistJson() {
-        TaskInstanceService taskInstanceService = mock(TaskInstanceService.class);
         when(taskInstanceService.selectList(any())).thenReturn(List.of());
-        TaskRepository repository = new TaskRepository(taskInstanceService, mock(TaskCheckpointService.class),
-            mock(TaskResumeRecordService.class));
-        TaskMetadata metadata = new TaskMetadata();
-        metadata.setTaskId(TASK_ID);
-        metadata.setConversationId(CONVERSATION_ID);
-        metadata.setStatus(TaskStatus.RUNNING);
+        TaskMetadata metadata = metadata();
         metadata.getSkillVersions().put("cms.article", "pin-1");
 
         repository.save(metadata, Map.of(), null, 1L, null);
@@ -101,6 +97,115 @@ class TaskRepositoryTest {
         ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
         verify(taskInstanceService).save(captor.capture());
         assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSkillVersions());
+    }
+
+    /** 固定：已有行走 CAS，不 insert。 */
+    @Test
+    void save_existingRow_advancesStateVersion() {
+        TaskInstanceVo existing = new TaskInstanceVo();
+        existing.setId(9L);
+        existing.setTaskId(TASK_ID);
+        existing.setConversationId(CONVERSATION_ID);
+        existing.setStatus(TaskStatus.RUNNING.name());
+        existing.setStateVersion(0L);
+        when(taskInstanceService.selectList(any())).thenReturn(List.of(existing));
+        when(taskInstanceService.advanceStateVersion(any())).thenReturn(1);
+
+        boolean created = repository.save(metadata(), Map.of(), null, 3L, null);
+
+        assertThat(created).isFalse();
+        verify(taskInstanceService, never()).save(any());
+        ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
+        verify(taskInstanceService).advanceStateVersion(captor.capture());
+        assertThat(captor.getValue().getStateVersion()).isEqualTo(3L);
+    }
+
+    /** R5：CAS 分支且 skillVersions 非空 → DTO 带 skillVersions。 */
+    @Test
+    void r5_save_casWithSkillVersions_passesDto() {
+        TaskInstanceVo existing = new TaskInstanceVo();
+        existing.setId(9L);
+        existing.setTaskId(TASK_ID);
+        existing.setConversationId(CONVERSATION_ID);
+        existing.setStatus(TaskStatus.RUNNING.name());
+        existing.setStateVersion(0L);
+        when(taskInstanceService.selectList(any())).thenReturn(List.of(existing));
+        when(taskInstanceService.advanceStateVersion(any())).thenReturn(1);
+        TaskMetadata metadata = metadata();
+        metadata.getSkillVersions().put("cms.article", "pin-1");
+
+        repository.save(metadata, Map.of(), null, 3L, null);
+
+        ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
+        verify(taskInstanceService).advanceStateVersion(captor.capture());
+        assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSkillVersions());
+    }
+
+    /** U1：库中没有任务 → 插入 stateVersion=0。 */
+    @Test
+    void u1_insertIfAbsent_missing_insertsVersionZero() {
+        when(taskInstanceService.selectList(any())).thenReturn(List.of());
+        TaskMetadata metadata = metadata();
+        metadata.setStartedAt(1_700_000_000_000L);
+        metadata.setTraceId("trace-open");
+        metadata.setSourceMessageId("msg-1");
+
+        boolean inserted = repository.insertIfAbsent(metadata, Map.of(), null);
+
+        assertThat(inserted).isTrue();
+        ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
+        verify(taskInstanceService).save(captor.capture());
+        TaskInstanceDto dto = captor.getValue();
+        assertThat(dto.getStateVersion()).isEqualTo(0L);
+        assertThat(dto.getTraceId()).isEqualTo("trace-open");
+        assertThat(dto.getSourceMessageId()).isEqualTo("msg-1");
+        assertThat(dto.getStartedTime()).isNotNull();
+        assertThat(dto.getTaskRecord()).isNull();
+    }
+
+    /** U2：库中已有任务 → 不写。 */
+    @Test
+    void u2_insertIfAbsent_existing_skipsWrite() {
+        TaskInstanceVo existing = new TaskInstanceVo();
+        existing.setTaskId(TASK_ID);
+        existing.setStatus(TaskStatus.RUNNING.name());
+        when(taskInstanceService.selectList(any())).thenReturn(List.of(existing));
+
+        boolean inserted = repository.insertIfAbsent(metadata(), Map.of(), null);
+
+        assertThat(inserted).isFalse();
+        verify(taskInstanceService, never()).save(any());
+    }
+
+    /** U3：先 insertIfAbsent，再 save(V≥1) 走 CAS。 */
+    @Test
+    void u3_insertIfAbsentThenSave_casWithRoundVersion() {
+        when(taskInstanceService.selectList(any())).thenReturn(List.of()).thenAnswer(invocation -> {
+            TaskInstanceVo vo = new TaskInstanceVo();
+            vo.setId(1L);
+            vo.setTaskId(TASK_ID);
+            vo.setConversationId(CONVERSATION_ID);
+            vo.setStatus(TaskStatus.RUNNING.name());
+            vo.setStateVersion(0L);
+            return List.of(vo);
+        });
+        when(taskInstanceService.advanceStateVersion(any())).thenReturn(1);
+
+        assertThat(repository.insertIfAbsent(metadata(), Map.of(), null)).isTrue();
+        boolean created = repository.save(metadata(), Map.of(), null, 2L, null);
+
+        assertThat(created).isFalse();
+        ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
+        verify(taskInstanceService).advanceStateVersion(captor.capture());
+        assertThat(captor.getValue().getStateVersion()).isEqualTo(2L);
+    }
+
+    private static TaskMetadata metadata() {
+        TaskMetadata metadata = new TaskMetadata();
+        metadata.setTaskId(TASK_ID);
+        metadata.setConversationId(CONVERSATION_ID);
+        metadata.setStatus(TaskStatus.RUNNING);
+        return metadata;
     }
 
     private static TaskInstanceVo row(String taskId) {

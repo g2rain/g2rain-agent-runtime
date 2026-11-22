@@ -2,6 +2,8 @@ package com.g2rain.agent.runtime.support.mcp;
 
 
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
@@ -80,13 +82,21 @@ public final class McpToolCallbackProvider implements ToolCallbackProvider {
         if (Collections.isEmpty(toolNames)) {
             return new ToolCallback[0];
         }
+        Set<String> allowed = Objects.requireNonNull(toolNames);
 
         try {
-            Map<String, Object> meta = Map.of(META_KEY, toolNames);
+            Map<String, Object> meta = Map.of(META_KEY, allowed);
             return Optional.of(listToolsWithRetry(meta))
                 .map(McpSchema.ListToolsResult::tools).orElseGet(List::of)
                 .stream().filter(Objects::nonNull)
                 .filter(tool -> Strings.isNotBlank(tool.name()))
+                .filter(tool -> {
+                    if (allowed.contains(tool.name())) {
+                        return true;
+                    }
+                    Trace.at(TraceStage.TOOL, "mcp_tool_unexpected").kv("tool", tool.name()).warn();
+                    return false;
+                })
                 .map(tool -> new McpToolCallback(mcpSyncClient, tool))
                 .toArray(ToolCallback[]::new);
         } catch (BusinessException ex) {
@@ -119,9 +129,15 @@ public final class McpToolCallbackProvider implements ToolCallbackProvider {
                     throw unwrap(ex);
                 }
                 lastAccessError = ex;
-                log.warn("MCP listTools access failed, will retry ({}/{}): {}",
-                    i + 1, maxRetries, ex.getMessage()
-                );
+                if (i + 1 < attempts) {
+                    log.warn("MCP listTools access failed ({}/{}), will retry: {}",
+                        i + 1, attempts, ex.getMessage()
+                    );
+                } else {
+                    log.warn("MCP listTools access failed ({}/{}): {}",
+                        i + 1, attempts, ex.getMessage()
+                    );
+                }
             }
         }
 

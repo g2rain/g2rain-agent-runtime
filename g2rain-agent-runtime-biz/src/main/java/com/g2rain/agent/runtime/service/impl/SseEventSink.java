@@ -79,22 +79,21 @@ public class SseEventSink implements EventSink {
         emitter.onCompletion(() -> unbind(streamId));
         emitter.onError(_ -> unbind(streamId));
         ContextExecutors.startVirtual(() -> {
-            String traceId = RuntimeUtils.requireTraceId();
             try {
                 callback.apply(request);
-                complete(traceId);
+                complete(streamId);
             } catch (RuntimeException ex) {
-                log.error("[SSE] turn failed traceId={}", traceId, ex);
-                StreamSession session = sessions.get(traceId);
+                log.error("[SSE] turn failed traceId={}", streamId, ex);
+                StreamSession session = sessions.get(streamId);
                 if (Objects.isNull(session) || !session.ended.get()) {
                     // 尚未发出结果帧才补一条失败结果，保证客户端收到收口
                     String conversationId = request.getConversationId();
                     String text = RuntimeMessage.ERROR_GENERIC.text();
-                    accept(TurnEvents.failed(traceId, conversationId, text));
+                    accept(TurnEvents.failed(streamId, conversationId, text));
                 }
-                complete(traceId);
+                complete(streamId);
             } finally {
-                unbind(traceId);
+                unbind(streamId);
             }
         });
         return emitter;

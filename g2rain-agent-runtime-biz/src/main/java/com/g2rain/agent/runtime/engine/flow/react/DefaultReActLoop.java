@@ -196,8 +196,12 @@ public class DefaultReActLoop implements ReActLoop {
 
             List<ChatToolCall> toolCalls = assistant.getToolCalls();
             if (Collections.isEmpty(toolCalls) && malformedCall(response)) {
-                // 声称发起了工具调用却没有结构化调用：按调用格式错误提示，重申最近一次的返回，不计无进展
+                // 声称发起了工具调用却没有结构化调用：按调用格式错误提示，并计一次无进展
                 malformedNudge(history, lastUnsuccessful);
+                stall.recordStall();
+                if (stall.exceeded(maxStall)) {
+                    return stalledFail(context, stall);
+                }
                 continue;
             }
 
@@ -298,7 +302,8 @@ public class DefaultReActLoop implements ReActLoop {
 
         // 轮次用尽仍未由控流收口 → 失败，带上停在哪一步的说明
         Trace.at(TraceStage.REACT, "exited").kv("status", NodeStatus.FAILED).kv("reason", ExitReason.MAX_ROUNDS).error();
-        return new ReActLoopResult(NodeStatus.FAILED, RuntimeMessage.NODE_ROUNDS_EXHAUSTED.text("step", titleOf(context.node())), null, null);
+        return new ReActLoopResult(NodeStatus.FAILED, RuntimeMessage.NODE_ROUNDS_EXHAUSTED.text("step", titleOf(context.node())),
+            null, null, RuntimeErrorCode.NODE_ROUNDS_EXHAUSTED.code());
     }
 
     /**
@@ -341,14 +346,14 @@ public class DefaultReActLoop implements ReActLoop {
     }
 
     /**
-     * 入参摘要：按工具契约脱敏并限长；不是合法 JSON 时原样保留。
+     * 入参：按工具契约脱敏，不截短；不是合法 JSON 时原样保留。
      *
      * @param context  循环上下文
      * @param toolName 工具名
      * @param raw      模型给出的入参；可空
-     * @return 入参摘要；没有入参为 {@code null}
+     * @return 脱敏后的完整入参；没有入参为 {@code null}
      */
-    private @Nullable String argumentsOf(ReActLoopContext context, String toolName, @Nullable String raw) {
+    private static @Nullable String argumentsOf(ReActLoopContext context, String toolName, @Nullable String raw) {
         if (Strings.isBlank(raw)) {
             return null;
         }
@@ -356,7 +361,7 @@ public class DefaultReActLoop implements ReActLoop {
         SkillContract contract = context.contract();
         ToolSpec spec = Objects.isNull(contract) ? null : contract.tool(toolName);
         try {
-            return ArgsBrief.of(JSON.str2node(raw), spec, runtimeProperties.getState().getNodeActionMaxChars());
+            return JSON.obj2str(ArgsBrief.masked(JSON.str2node(raw), spec));
         } catch (RuntimeException _) {
             return raw;
         }
@@ -400,7 +405,7 @@ public class DefaultReActLoop implements ReActLoop {
     }
 
     /**
-     * 调用格式无效时的提醒：说明原因，并重申最近一次未成功调用的返回；不记停滞，由轮次上限兜底。
+     * 调用格式无效时的提醒：说明原因，并重申最近一次未成功调用的返回。
      *
      * @param history          对话历史
      * @param lastUnsuccessful 最近一次未成功调用返回给模型的说明；可空
@@ -490,7 +495,7 @@ public class DefaultReActLoop implements ReActLoop {
         if (Objects.nonNull(tool) && !tool.isBlank()) {
             message += RuntimeMessage.NODE_STALLED_LAST.text("tool", tool, "code", Objects.toString(stall.lastErrorCode(), "-"));
         }
-        return new ReActLoopResult(NodeStatus.FAILED, message, null, null);
+        return new ReActLoopResult(NodeStatus.FAILED, message, null, null, RuntimeErrorCode.NODE_STALLED.code());
     }
 
     /**
@@ -555,10 +560,12 @@ public class DefaultReActLoop implements ReActLoop {
             .kv("missing", ctx.getMissingParameters())
             .info();
 
+        String errorCode = status == NodeStatus.FAILED ? RuntimeErrorCode.NODE_DECLARED_FAILED.code() : null;
         return new ReActLoopResult(
             status, message, ctx.getHaltReason(), ctx.getPendingAction(),
             status == NodeStatus.SUSPENDED ? ctx.getMissingParameters() : null,
-            status == NodeStatus.SUSPENDED ? ctx.getSuggestions() : null
+            status == NodeStatus.SUSPENDED ? ctx.getSuggestions() : null,
+            errorCode
         );
     }
 

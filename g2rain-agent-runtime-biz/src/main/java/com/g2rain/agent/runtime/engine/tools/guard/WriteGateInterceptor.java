@@ -18,7 +18,6 @@ import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolInterceptor;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
-import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -111,7 +110,7 @@ public class WriteGateInterceptor implements ToolInterceptor {
 
                 // 记下被拦下的调用：审批只认这一次，待批参数取已过绑定与契约校验的值
                 request.context().scope().note(NodeNoteKey.GATED_WRITE,
-                    new PendingAction(request.toolName(), args, RuntimeUtils.argsHash(args), noticeTexts(request)));
+                    new PendingAction(request.toolName(), args, noticeTexts(request)));
                 // 写调用本身正当，须先由模型申请确认：推迟，并在提示里给出下一步与工具名
                 return Optional.of(Observation.deferred(
                     RuntimeErrorCode.APPROVAL_REQUIRED,

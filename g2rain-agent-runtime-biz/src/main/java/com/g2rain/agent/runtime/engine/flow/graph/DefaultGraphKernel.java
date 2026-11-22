@@ -3,9 +3,12 @@ package com.g2rain.agent.runtime.engine.flow.graph;
 
 import com.g2rain.agent.runtime.domain.graph.GraphFrame;
 import com.g2rain.agent.runtime.domain.graph.GraphStep;
+import com.g2rain.agent.runtime.domain.graph.NodeStatus;
 import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
@@ -71,6 +74,12 @@ public class DefaultGraphKernel implements GraphKernel {
                     return new GraphStep.WakeFocus();
                 }
             }
+        }
+
+        // 委派链损坏的父节点经 mark 置 FAILED（写 finishedAt / 错误码）
+        for (String brokenId : frame.graph().resumeAwaiting()) {
+            frame.turn().mark(brokenId, NodeStatus.FAILED, RuntimeErrorCode.DELEGATE_BROKEN.code(),
+                RuntimeMessage.NODE_DELEGATE_BROKEN.text());
         }
 
         // 按依赖把可跑节点推进到 READY，并取本波（当前按单节点调度）；本轮焦点优先，唤醒的节点先执行

@@ -10,9 +10,7 @@ import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.task.DelegateResult;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
-import com.g2rain.agent.runtime.domain.state.task.PendingAction;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
-import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.support.ArgsBrief;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -91,7 +89,6 @@ public class ReactProjectionFactory {
         List<ReactProjection.TaggedBlock> blocks = new ArrayList<>();
         add(blocks, "node_goal", nodeGoal(request));
         add(blocks, "task_plan", taskPlan(request));
-        add(blocks, "checkpoint", pendingCheckpoint(request));
         // 委派结果是一次性便签且体积很小，排在前面，提示词超长从队尾丢块时不会先被丢
         add(blocks, DELEGATE_RESULT_TAG, delegateResult(request));
         add(blocks, "input_schema", inputSchema(request));
@@ -372,11 +369,11 @@ public class ReactProjectionFactory {
                 entry.getKey(), entry.getValue().displayName(), Strings.blankToNull(entry.getValue().taskId())
             ))
             .toList();
-        if (Strings.isBlank(prior.reason()) && Collections.isEmpty(tasks) && Collections.isEmpty(entities)) {
+        if (Collections.isEmpty(tasks) && Collections.isEmpty(entities)) {
             return null;
         }
 
-        return new ReactProjection.PriorView(Strings.blankToNull(prior.reason()), emptyToNull(tasks), emptyToNull(entities));
+        return new ReactProjection.PriorView(emptyToNull(tasks), emptyToNull(entities));
     }
 
     /**
@@ -395,37 +392,6 @@ public class ReactProjectionFactory {
             .map(node -> new ReactProjection.PlanStepView(node.getTitle(), node.getStatus(),
                 Objects.equals(node.getNodeId(), request.nodeId()) ? Boolean.TRUE : null))
             .toList();
-    }
-
-    /**
-     * 组装 {@code checkpoint}：仍在等待用户的断点。
-     *
-     * <p>节点被唤醒时断点已消费，这里只会是仍在等待用户回复的断点。</p>
-     *
-     * @param request 组装入参
-     * @return 断点投影；没有时为 {@code null}
-     */
-    private static ReactProjection.@Nullable CheckpointView pendingCheckpoint(PromptAssembleRequest request) {
-        return request.node().turn().checkpoint().map(ReactProjectionFactory::checkpoint).orElse(null);
-    }
-
-    /**
-     * 当前断点转投影视图。
-     *
-     * @param checkpoint 任务检查点
-     * @return 断点投影
-     */
-    private static ReactProjection.CheckpointView checkpoint(TaskCheckpoint checkpoint) {
-        PendingAction pending = checkpoint.getPendingAction();
-        String pendingTool = Objects.isNull(pending) ? null : Strings.blankToNull(pending.toolName());
-        return new ReactProjection.CheckpointView(
-            checkpoint.getType(),
-            checkpoint.getHaltReason(),
-            Strings.blankToNull(checkpoint.getQuestion()),
-            emptyToNull(checkpoint.getAllowedActions()),
-            emptyToNull(checkpoint.getExpectedFields()),
-            pendingTool
-        );
     }
 
     /**

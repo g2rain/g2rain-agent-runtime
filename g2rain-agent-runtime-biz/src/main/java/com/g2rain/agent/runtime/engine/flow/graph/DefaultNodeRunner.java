@@ -35,7 +35,6 @@ import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
-import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceScope;
@@ -193,7 +192,7 @@ public class DefaultNodeRunner implements NodeRunner {
 
         // 历史与可见工具表必须在循环外组好，循环内只追加本轮消息
         List<ToolCallback> tools = nodeToolset.of(node, frame);
-        List<ChatMessage> history = historyFor(node, frame, nodeScope, tools);
+        List<ChatMessage> history = historyFor(node, frame, nodeScope, tools, skill);
         Trace.at(TraceStage.NODE, "node_ready")
             .kv("historySize", history.size())
             .kv("toolCount", tools.size())
@@ -209,7 +208,7 @@ public class DefaultNodeRunner implements NodeRunner {
 
         // 用户确认续跑：先把挂起上的待批写动作真正派发，再进循环
         if (GraphResumeActions.isConfirm(actionFor(node, frame))) {
-            dispatchPending(node, history, frame, nodeScope);
+            dispatchPending(node, history, frame, nodeScope, tools);
         }
 
         // 节点内循环；循环结果决定节点终态，本方法不直接调控流工具
@@ -225,8 +224,10 @@ public class DefaultNodeRunner implements NodeRunner {
         node.setStatus(transition.to());
         String errorCode = null;
         String errorMessage = null;
-        if (node.getStatus() == NodeStatus.FAILED || node.getStatus() == NodeStatus.CANCELLED) {
-            errorCode = node.getStatus().name();
+        if (node.getStatus() == NodeStatus.FAILED) {
+            errorCode = nodeResult.errorCode();
+            errorMessage = Strings.defaultIfBlank(nodeResult.message(), node.getStatus().name());
+        } else if (node.getStatus() == NodeStatus.CANCELLED) {
             errorMessage = Strings.defaultIfBlank(nodeResult.message(), node.getStatus().name());
         }
         frame.turn().mark(node.getNodeId(), node.getStatus(), errorCode, errorMessage);
@@ -312,11 +313,14 @@ public class DefaultNodeRunner implements NodeRunner {
      * @param frame     当前图执行帧
      * @param nodeScope 当前节点作用域
      * @param tools     本节点可见工具
+     * @param skill     节点技能；可空
      * @return 可变对话历史；至少可能被种入一条用户目标
      */
-    private List<ChatMessage> historyFor(TaskNode node, GraphFrame frame, NodeScope nodeScope, List<ToolCallback> tools) {
+    private List<ChatMessage> historyFor(TaskNode node, GraphFrame frame, NodeScope nodeScope, List<ToolCallback> tools,
+                                         @Nullable Skill skill) {
         List<ChatMessage> history = new ArrayList<>();
-        for (ChatTurn turn : runtimeStateFacade.history(nodeScope, tools)) {
+        for (ChatTurn turn : runtimeStateFacade.history(nodeScope, tools,
+            Objects.isNull(skill) ? null : skill.contract())) {
             history.add(toChatMessage(turn));
         }
         seedUserGoalIfAbsent(history, frame, node);
@@ -399,8 +403,10 @@ public class DefaultNodeRunner implements NodeRunner {
      * @param history   本节点对话历史
      * @param frame     当前图执行帧
      * @param nodeScope 当前节点作用域
+     * @param tools     本拍已算好的可见工具表
      */
-    private void dispatchPending(TaskNode node, List<ChatMessage> history, GraphFrame frame, NodeScope nodeScope) {
+    private void dispatchPending(TaskNode node, List<ChatMessage> history, GraphFrame frame, NodeScope nodeScope,
+                                 List<ToolCallback> tools) {
         var checkpoint = frame.turn().resumed().orElse(null);
         PendingAction pending = Objects.isNull(checkpoint) ? null : checkpoint.getPendingAction();
         if (Objects.isNull(pending) || Strings.isBlank(pending.toolName())) {
@@ -413,14 +419,7 @@ public class DefaultNodeRunner implements NodeRunner {
 
         JsonNode argsNode = pending.args();
         String args = JsonCodecFactory.instance().obj2str(argsNode);
-        if (Strings.isNotBlank(pending.argsHash())) {
-            String current = RuntimeUtils.argsHash(argsNode);
-            if (!Objects.equals(current, pending.argsHash())) {
-                throw new BusinessException(RuntimeErrorCode.ARGS_HASH_MISMATCH);
-            }
-        }
 
-        List<ToolCallback> tools = nodeToolset.of(node, frame);
         ToolCallback toolCallback = ToolCallbacks.find(tools, pending.toolName());
         // 确认后工具已不可用（技能配置变更或工具停用）：本轮失败并告知用户，不让确认石沉大海
         if (Objects.isNull(toolCallback)) {

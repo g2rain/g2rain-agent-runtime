@@ -15,7 +15,6 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceHead;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.NodeSpace;
 import com.g2rain.agent.runtime.domain.state.task.Prior;
-import com.g2rain.agent.runtime.domain.state.task.SpaceSpill;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
@@ -24,7 +23,6 @@ import com.g2rain.agent.runtime.engine.TurnRequest;
 import com.g2rain.agent.runtime.engine.state.repo.CallRepository;
 import com.g2rain.agent.runtime.engine.state.repo.ConversationRepository;
 import com.g2rain.agent.runtime.engine.state.repo.GraphRepository;
-import com.g2rain.agent.runtime.engine.state.repo.PayloadRepository;
 import com.g2rain.agent.runtime.engine.state.repo.TaskRepository;
 import com.g2rain.agent.runtime.engine.store.KeyTtl;
 import com.g2rain.agent.runtime.engine.store.RenewResult;
@@ -33,29 +31,27 @@ import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
 import com.g2rain.common.exception.BusinessException;
-import com.g2rain.common.json.JsonCodec;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.type.TypeReference;
 
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 从热态和冷存储重建一次请求的会话视图。
  *
- * <p>加载过程优先读取 Redis，缺失时从持久化数据补齐，再恢复会话围栏、对话、历史记录、
- * 实体和活动任务；同时把上一执行实例遗留的中断状态规整为可恢复的事实。</p>
+ * <p>任务组按哨兵定组：元数据与图都在且组内 key 完整时只读 Redis（热组）；
+ * 否则整组以 MySQL 为准（冷组），并删除 Redis 残留。会话级 key 仍按缺失回落。
+ * 旧 {@code lastTraceId} 非空或本轮为冷组时做中断规整。</p>
  *
  * @author alpha
  * @since 2026/10/3
@@ -63,25 +59,6 @@ import java.util.Objects;
 @Component
 @Slf4j
 public class TurnSessionHydrate {
-
-    /**
-     * 反序列化实体、来源值和状态字段的 JSON 编解码器。
-     */
-    private static final JsonCodec JSON = JsonCodecFactory.instance();
-
-    /**
-     * 实体 Hash 值的反序列化类型。
-     */
-    private static final TypeReference<EntityEntry> ENTITY = new TypeReference<>() {
-
-    };
-
-    /**
-     * 共享值的来源包装类型。
-     */
-    private static final TypeReference<Sourced<?>> SOURCED = new TypeReference<>() {
-
-    };
 
     /**
      * Redis 热状态访问组件。
@@ -109,9 +86,14 @@ public class TurnSessionHydrate {
     private final CallRepository calls;
 
     /**
-     * 节点空间超长字段溢出存储。
+     * 节点空间编解码（含溢出还原）。
      */
-    private final PayloadRepository payloads;
+    private final SpaceCodec spaces;
+
+    /**
+     * 任务组 TTL 与续期。
+     */
+    private final GroupTtl groupTtl;
 
     /**
      * 状态窗口与 TTL 配置。
@@ -119,23 +101,25 @@ public class TurnSessionHydrate {
     private final RuntimeProperties properties;
 
     /**
-     * @param store          热态 Redis
-     * @param conversations  会话仓储
-     * @param tasks          任务仓储
-     * @param graphs         图仓储
-     * @param calls          工具调用仓储
-     * @param payloads       报文仓储
-     * @param properties     TTL 与窗口配置
+     * @param store         热态 Redis
+     * @param conversations 会话仓储
+     * @param tasks         任务仓储
+     * @param graphs        图仓储
+     * @param calls         工具调用仓储
+     * @param spaces        节点空间编解码
+     * @param groupTtl      任务组 TTL
+     * @param properties    TTL 与窗口配置
      */
     public TurnSessionHydrate(StateStore store, ConversationRepository conversations, TaskRepository tasks,
-                              GraphRepository graphs, CallRepository calls, PayloadRepository payloads,
+                              GraphRepository graphs, CallRepository calls, SpaceCodec spaces, GroupTtl groupTtl,
                               RuntimeProperties properties) {
         this.store = store;
         this.conversations = conversations;
         this.tasks = tasks;
         this.graphs = graphs;
         this.calls = calls;
-        this.payloads = payloads;
+        this.spaces = spaces;
+        this.groupTtl = groupTtl;
         this.properties = properties;
     }
 
@@ -165,7 +149,7 @@ public class TurnSessionHydrate {
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
         ChatConversationVo row = conversations.find(conversationId);
-        ConversationFence fence = readFence(conversationId, hash);
+        ConversationFence fence = StateCodec.fence(conversationId, hash);
         // Redis state 未命中：从 chat_conversation 回灌 version / activeTaskId / userId
         if (Collections.isEmpty(hash) && Objects.nonNull(row)) {
             Long rowUserId = row.getUserId();
@@ -190,16 +174,20 @@ public class TurnSessionHydrate {
         // 本轮新建会话时记下标题，开局下发一次 TITLE
         String createdTitle = Objects.isNull(row) ? conversations.create(conversationId, user, request.getUserInput()) : null;
         int dialogueMax = properties.getState().getDialogueMax();
-        List<DialogueMessage> dialogue = readDialogue(keys, dialogueMax);
+        List<DialogueMessage> dialogue = StateCodec.dialogue(
+            store.lRange(keys.dialogue(), 0, dialogueMax - 1L));
         if (Collections.isEmpty(dialogue)) {
             dialogue = conversations.loadDialogue(conversationId, dialogueMax);
         }
-        List<TaskRecord> records = readRecords(keys);
+        List<TaskRecord> records = StateCodec.records(
+            store.lRange(keys.records(), 0, properties.getState().getRecordsMax() - 1L));
         if (Collections.isEmpty(records)) {
             records = tasks.loadRecords(conversationId, properties.getState().getRecordsMax());
         }
-        Map<String, EntityEntry> entities = readEntities(keys);
-        Map<String, Sourced<?>> sessionShared = readShared(keys.sessionShared());
+        Map<String, String> entitiesHash = store.hGetAll(keys.entities());
+        Map<String, EntityEntry> entities = StateCodec.entities(entitiesHash);
+        Map<String, String> sessionSharedHash = store.hGetAll(keys.sessionShared());
+        Map<String, Sourced<?>> sessionShared = StateCodec.shared(sessionSharedHash);
         if (Collections.isEmpty(sessionShared)) {
             sessionShared = new LinkedHashMap<>(conversations.loadSessionShared(conversationId));
         }
@@ -208,49 +196,59 @@ public class TurnSessionHydrate {
         TaskCheckpoint checkpoint = null;
         Map<String, Sourced<?>> shared = new LinkedHashMap<>();
         Prior prior = null;
+        boolean cold = false;
+        String coldTaskId = null;
+        TaskGroup hotLoaded = null;
         String activeTaskId = fence.activeTaskId();
         if (Strings.isNotBlank(activeTaskId)) {
-            task = HashCodec.toObject(store.hGetAll(keys.metadata(activeTaskId)), TaskMetadata.class);
-            if (Objects.isNull(task)) {
-                task = tasks.loadMetadata(activeTaskId);
-            } else if (Strings.isBlank(task.getTaskId())) {
-                task.setTaskId(activeTaskId);
+            TaskGroup group = hotGroup(keys, activeTaskId);
+            if (Objects.isNull(group)) {
+                group = coldGroup(keys, activeTaskId);
             }
-        }
-        // 活动任务标识悬空（Redis 与库都取不到元数据）：清掉标识，本轮按无活动任务处理，轮末随栅栏落盘
-        if (Strings.isNotBlank(activeTaskId) && Objects.isNull(task)) {
-            log.warn("active task missing, cleared conversationId={} taskId={}", conversationId, activeTaskId);
-            fence = new ConversationFence(conversationId, fence.userId(), null, fence.version(), fence.lastTraceId(),
-                fence.updatedAt());
-        }
-        if (Strings.isNotBlank(activeTaskId) && Objects.nonNull(task)) {
-            if (Strings.isBlank(task.getConversationId())) {
-                task.setConversationId(conversationId);
-            }
-            graph = HashCodec.graphOf(store.hGetAll(keys.graph(activeTaskId)));
-            if (Objects.isNull(graph)) {
-                graph = graphs.load(activeTaskId);
-            }
-            if (Objects.isNull(graph)) {
-                graph = new TaskGraph();
-            }
-            checkpoint = JSON.str2obj(store.get(keys.checkpoint(activeTaskId)), TaskCheckpoint.class);
-            if (Objects.isNull(checkpoint)) {
-                checkpoint = tasks.loadCheckpoint(activeTaskId);
-            }
-            shared = readShared(keys.shared(activeTaskId));
-            if (Collections.isEmpty(shared)) {
-                shared = new LinkedHashMap<>(tasks.loadShared(activeTaskId));
-            }
-            prior = JSON.str2obj(store.get(keys.prior(activeTaskId)), Prior.class);
-            if (Objects.isNull(prior)) {
-                prior = tasks.loadPrior(activeTaskId);
+            // 活动任务标识悬空（热/冷都取不到元数据，或元数据已是终态）：清掉标识，本轮按无活动任务处理
+            if (Objects.isNull(group) || TaskStatus.isTerminal(group.metadata().getStatus())) {
+                log.warn("active task dangling, cleared conversationId={} taskId={} status={}", conversationId,
+                    activeTaskId, Objects.isNull(group) ? null : group.metadata().getStatus());
+                fence = new ConversationFence(conversationId, fence.userId(), null, fence.version(), fence.lastTraceId(),
+                    fence.updatedAt());
+            } else {
+                cold = group.cold();
+                task = group.metadata();
+                if (Strings.isBlank(task.getConversationId())) {
+                    task.setConversationId(conversationId);
+                }
+                graph = group.graph();
+                checkpoint = group.checkpoint();
+                shared = group.shared();
+                prior = group.prior();
+                if (cold) {
+                    coldTaskId = task.getTaskId();
+                } else {
+                    hotLoaded = group;
+                }
             }
         }
         DefaultTurnScope turn = new DefaultTurnScope(organId, userId, traceId, fence, dialogue, records, entities, task,
             graph, checkpoint, shared, prior, sessionShared, dialogueMax);
         turn.markCreated(createdTitle);
-        List<KeyTtl> extra = taskKeys(keys, turn, taskTtl(task));
+        seedSession(turn, keys, entitiesHash, sessionSharedHash);
+        // 热组：记下加载时已校验的节点，轮中 key 缺失即视为淘汰；并用 hotGroup 已读数据登记
+        if (Objects.nonNull(hotLoaded)) {
+            List<String> verifiedIds = new ArrayList<>();
+            for (TaskNode node : graph.getNodes()) {
+                verifiedIds.add(node.getNodeId());
+            }
+            turn.markVerified(verifiedIds);
+            seedHotGroup(turn, keys, hotLoaded.metadata().getTaskId(), hotLoaded);
+        }
+        // 冷组：图中全部节点立即从 MySQL 挂上，供本轮 begin flush 整组写回
+        if (Strings.isNotBlank(coldTaskId)) {
+            for (TaskNode node : graph.getNodes()) {
+                String nodeId = node.getNodeId();
+                attach(turn, nodeId, graphs.loadSpace(coldTaskId, nodeId), calls.loadNodeEvidence(coldTaskId, nodeId));
+            }
+        }
+        List<KeyTtl> extra = groupTtl.renewals(keys, turn, groupTtl.of(task));
         RenewResult renewed;
         try {
             renewed = store.renew(keys.state(), traceId, properties.getState().getConversationTtl(), keys.sessionShared(),
@@ -261,8 +259,8 @@ public class TurnSessionHydrate {
         }
         turn.replaceFence(new ConversationFence(fence.conversationId(), fence.userId(), fence.activeTaskId(),
             renewed.version(), traceId, System.currentTimeMillis()));
-        if (renewed.interrupted()) {
-            // 上一轮 lastTraceId 未清：RUNNING 回 READY，STARTED 证据改 UNKNOWN
+        // 上一轮未收尾，或本轮冷组：RUNNING→READY，STARTED→UNKNOWN
+        if (renewed.interrupted() || cold) {
             tidyInterrupt(turn, keys);
         }
 
@@ -270,43 +268,130 @@ public class TurnSessionHydrate {
     }
 
     /**
-     * 中断规整：RUNNING 节点回 READY；STARTED 证据改 UNKNOWN。
+     * 热组判定：哨兵与图都在，且组内 key 全部存在；通过则只读 Redis。
+     *
+     * @param keys   会话 Redis key
+     * @param taskId 活动任务 id
+     * @return 热组；不完整为 {@code null}
+     */
+    private @Nullable TaskGroup hotGroup(SessionKeys keys, String taskId) {
+        Map<String, String> metadataHash = store.hGetAll(keys.metadata(taskId));
+        TaskMetadata metadata = StateCodec.metadata(metadataHash);
+        if (Objects.isNull(metadata)) {
+            return null;
+        }
+        if (Strings.isBlank(metadata.getTaskId())) {
+            metadata.setTaskId(taskId);
+        }
+        Map<String, String> graphHash = store.hGetAll(keys.graph(taskId));
+        TaskGraph graph = StateCodec.graph(graphHash);
+        if (Objects.isNull(graph)) {
+            return null;
+        }
+        List<String> groupKeys = keys.group(taskId, graph);
+        if (store.countExisting(groupKeys) != groupKeys.size()) {
+            return null;
+        }
+        String checkpointRaw = store.get(keys.checkpoint(taskId));
+        Map<String, String> sharedHash = store.hGetAll(keys.shared(taskId));
+        String priorRaw = store.get(keys.prior(taskId));
+        TaskCheckpoint checkpoint = StateCodec.checkpoint(checkpointRaw);
+        Map<String, Sourced<?>> shared = StateCodec.shared(sharedHash);
+        Prior prior = StateCodec.prior(priorRaw);
+        return new TaskGroup(metadata, graph, checkpoint, shared, prior, false, metadataHash, graphHash, sharedHash,
+            checkpointRaw, priorRaw);
+    }
+
+    /**
+     * 冷组：以 MySQL 为准，删除 Redis 残留后整组回灌；库中无元数据时返回 {@code null}。
+     *
+     * @param keys   会话 Redis key
+     * @param taskId 活动任务 id
+     * @return 冷组；MySQL 无元数据为 {@code null}
+     */
+    private @Nullable TaskGroup coldGroup(SessionKeys keys, String taskId) {
+        TaskMetadata metadata = tasks.loadMetadata(taskId);
+        if (Objects.isNull(metadata)) {
+            return null;
+        }
+        if (Strings.isBlank(metadata.getTaskId())) {
+            metadata.setTaskId(taskId);
+        }
+        TaskGraph redisGraph = StateCodec.graph(store.hGetAll(keys.graph(taskId)));
+        TaskGraph mysqlGraph = graphs.load(taskId);
+        if (Objects.isNull(mysqlGraph)) {
+            mysqlGraph = new TaskGraph();
+        }
+        // 残留 key 按 Redis 图与 MySQL 图节点并集删除，避免旧字段混入
+        store.del(keys.group(taskId, unionGraph(redisGraph, mysqlGraph)).toArray(String[]::new));
+        TaskCheckpoint checkpoint = tasks.loadCheckpoint(taskId);
+        Map<String, Sourced<?>> shared = new LinkedHashMap<>(tasks.loadShared(taskId));
+        Prior prior = tasks.loadPrior(taskId);
+        return new TaskGroup(metadata, mysqlGraph, checkpoint, shared, prior, true, Map.of(), Map.of(), Map.of(), null,
+            null);
+    }
+
+    /**
+     * Redis 图与 MySQL 图的节点并集（仅用于生成待删 key）。
+     *
+     * @param redis Redis 中的图；可空
+     * @param mysql MySQL 中的图
+     * @return 并集图
+     */
+    private static TaskGraph unionGraph(@Nullable TaskGraph redis, TaskGraph mysql) {
+        TaskGraph union = new TaskGraph();
+        Set<String> seen = new HashSet<>();
+        List<TaskNode> nodes = new ArrayList<>();
+        appendUnique(nodes, seen, redis);
+        appendUnique(nodes, seen, mysql);
+        union.setNodes(nodes);
+        return union;
+    }
+
+    /**
+     * 把来源图中尚未见过的节点追加到列表。
+     *
+     * @param nodes  目标列表
+     * @param seen   已收录的 nodeId
+     * @param source 来源图；可空
+     */
+    private static void appendUnique(List<TaskNode> nodes, Set<String> seen, @Nullable TaskGraph source) {
+        if (Objects.isNull(source)) {
+            return;
+        }
+        List<TaskNode> sourceNodes = source.getNodes();
+        for (TaskNode node : sourceNodes) {
+            if (seen.add(node.getNodeId())) {
+                nodes.add(node);
+            }
+        }
+    }
+
+    /**
+     * 中断规整：RUNNING 节点回 READY；图中全部节点的 STARTED 证据改 UNKNOWN（不论任务状态）。
      *
      * @param turn 本轮视图
      * @param keys Redis key
      */
     private void tidyInterrupt(DefaultTurnScope turn, SessionKeys keys) {
-        turn.task().filter(meta -> Objects.equals(meta.getStatus(), TaskStatus.RUNNING)).ifPresent(meta -> {
-            turn.graph().getNodes().stream()
-                .filter(node -> Objects.equals(node.getStatus(), NodeStatus.RUNNING))
-                .forEach(node -> turn.mark(node.getNodeId(), NodeStatus.READY, null, null));
-            turn.graph().getNodes().forEach(node -> rewriteStarted(keys, meta.getTaskId(), node, turn));
+        turn.task().ifPresent(meta -> {
+            boolean running = Objects.equals(meta.getStatus(), TaskStatus.RUNNING);
+            turn.graph().getNodes().forEach(node -> {
+                if (running && Objects.equals(node.getStatus(), NodeStatus.RUNNING)) {
+                    turn.mark(node.getNodeId(), NodeStatus.READY, null, null);
+                }
+                DefaultNodeScope opened = openSpace(turn, keys, node.getNodeId());
+                opened.evidence().stream()
+                    .filter(head -> Objects.equals(head.status(), EvidenceStatus.STARTED))
+                    .toList()
+                    .forEach(head -> opened.addEvidence(head.withStatus(EvidenceStatus.UNKNOWN)));
+            });
         });
     }
 
     /**
-     * STARTED → UNKNOWN，挂到本轮节点视图，随后 flush。
-     *
-     * @param keys   Redis key
-     * @param taskId 任务 id
-     * @param node   图节点
-     * @param turn   本轮视图
-     */
-    private void rewriteStarted(SessionKeys keys, String taskId, TaskNode node, DefaultTurnScope turn) {
-        String evidenceKey = keys.evidence(taskId, node.getNodeId());
-        store.hGetAll(evidenceKey).forEach((id, raw) -> {
-            EvidenceHead head = JSON.str2obj(raw, EvidenceHead.class);
-            if (Objects.isNull(head) || !Objects.equals(head.status(), EvidenceStatus.STARTED)) {
-                return;
-            }
-            EvidenceHead unknown = head.withStatus(EvidenceStatus.UNKNOWN);
-            DefaultNodeScope opened = openSpace(turn, keys, node.getNodeId());
-            opened.addEvidence(unknown);
-        });
-    }
-
-    /**
-     * 打开节点空间（hydrate / Facade.open 共用）。
+     * 打开节点空间（hydrate / Facade.open 共用）。热路径只读 Redis；
+     * 已校验节点 key 缺失抛 {@code STATE_UNAVAILABLE}，本轮新建节点返回空视图。
      *
      * @param turn   本轮
      * @param keys   key
@@ -316,236 +401,103 @@ public class TurnSessionHydrate {
     public DefaultNodeScope openSpace(DefaultTurnScope turn, SessionKeys keys, String nodeId) {
         return turn.node(nodeId).orElseGet(() -> {
             String taskId = turn.task().map(TaskMetadata::getTaskId).orElse(null);
-            NodeSpace space = new NodeSpace(Map.of(), Map.of(), Map.of(), 0, 0, List.of());
-            List<EvidenceHead> evidence = new ArrayList<>();
-            if (Strings.isNotBlank(taskId)) {
-                NodeSpace loaded = HashCodec.toObject(expandSpace(store.hGetAll(keys.space(taskId, nodeId))),
-                    NodeSpace.class);
-                if (Objects.isNull(loaded)) {
-                    loaded = graphs.loadSpace(taskId, nodeId);
-                }
-                if (Objects.nonNull(loaded)) {
-                    space = loaded;
-                }
-                store.hGetAll(keys.evidence(taskId, nodeId)).values().forEach(raw -> {
-                    EvidenceHead head = JSON.str2obj(raw, EvidenceHead.class);
-                    if (Objects.nonNull(head)) {
-                        evidence.add(head);
-                    }
-                });
-                if (evidence.isEmpty()) {
-                    evidence.addAll(calls.loadNodeEvidence(taskId, nodeId));
-                }
-                // Redis Hash 不保序：按轮次恢复发生顺序，下游按「新的在前」取调用依赖这一顺序
-                evidence.sort(Comparator.comparingInt(EvidenceHead::round));
+            if (Strings.isBlank(taskId)) {
+                return attach(turn, nodeId, null, List.of());
             }
-            DefaultNodeScope node = new DefaultNodeScope(turn, nodeId, space.inputs(), space.outputs(), space.state(),
-                evidence, space.actions(), space.rounds(), space.tokens());
-            turn.attach(node);
+            Map<String, String> spaceHash = store.hGetAll(keys.space(taskId, nodeId));
+            Map<String, String> evidenceHash = store.hGetAll(keys.evidence(taskId, nodeId));
+            if (Collections.isEmpty(spaceHash) || Collections.isEmpty(evidenceHash)) {
+                // 已校验节点：轮中淘汰；否则为本轮新建节点，返回空视图
+                if (turn.verified(nodeId)) {
+                    throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
+                }
+                return attach(turn, nodeId, null, List.of());
+            }
+            NodeSpace space = spaces.decode(spaceHash);
+            DefaultNodeScope node = attach(turn, nodeId, space, StateCodec.evidence(evidenceHash));
+            // 热组按需打开：按溢出还原后的口径登记，与 flush 对比溢出前内容一致
+            turn.ledger().seedHash(keys.space(taskId, nodeId), spaces.expanded(spaceHash));
+            turn.ledger().seedHash(keys.evidence(taskId, nodeId), evidenceHash);
             return node;
         });
     }
 
     /**
-     * 任务组续期 key。
+     * 登记会话级已确认内容：实体与会话共享；栅栏不登记（每次 flush 全量写）。
      *
-     * @param keys 会话 key
-     * @param turn 本轮
-     * @param ttl  任务 TTL
-     * @return extraKeys
+     * @param turn              本轮
+     * @param keys              key
+     * @param entitiesHash      读到的实体 Hash
+     * @param sessionSharedHash 读到的会话共享 Hash
      */
-    public List<KeyTtl> taskKeys(SessionKeys keys, DefaultTurnScope turn, Duration ttl) {
-        return turn.task().map(meta -> {
-            String taskId = meta.getTaskId();
-            long taskMs = ttl.toMillis();
-            long sentinel = Math.max(1L, taskMs - properties.getState().getSentinelGap().toMillis());
-            List<KeyTtl> extras = new ArrayList<>();
-            extras.add(new KeyTtl(keys.metadata(taskId), sentinel));
-            extras.add(new KeyTtl(keys.graph(taskId), taskMs));
-            extras.add(new KeyTtl(keys.checkpoint(taskId), taskMs));
-            extras.add(new KeyTtl(keys.shared(taskId), taskMs));
-            extras.add(new KeyTtl(keys.prior(taskId), taskMs));
-            extras.add(new KeyTtl(keys.writes(taskId), taskMs));
-            turn.graph().getNodes().forEach(node -> {
-                extras.add(new KeyTtl(keys.space(taskId, node.getNodeId()), taskMs));
-                extras.add(new KeyTtl(keys.evidence(taskId, node.getNodeId()), taskMs));
-            });
-            return extras;
-        }).orElse(List.of());
+    private static void seedSession(DefaultTurnScope turn, SessionKeys keys, Map<String, String> entitiesHash,
+                                    Map<String, String> sessionSharedHash) {
+        turn.ledger().seedHash(keys.entities(), entitiesHash);
+        turn.ledger().seedHash(keys.sessionShared(), sessionSharedHash);
     }
 
     /**
-     * 按任务粗状态选 TTL。
+     * 登记热组已确认内容：元数据、图、任务共享、断点、前情；写索引与节点只在打开时登记。
      *
-     * @param task 活跃任务；无任务为空
-     * @return TTL
-     */
-    public Duration taskTtl(@Nullable TaskMetadata task) {
-        if (Objects.nonNull(task) && Objects.equals(task.getStatus(), TaskStatus.SUSPENDED)) {
-            return properties.getState().getTaskTtlSuspended();
-        }
-        return properties.getState().getTaskTtlRunning();
-    }
-
-    /**
-     * NodeSpace → Redis Hash；单字段超过 {@code spaceFieldMaxBytes} 时写 OUTPUT 并用占位替换。
-     *
+     * @param turn   本轮
+     * @param keys   key
      * @param taskId 任务 id
-     * @param nodeId 节点 id
-     * @param space  节点空间
-     * @return 可写入 Redis 的 Hash
+     * @param group  hotGroup 已读到的原始数据
      */
-    public Map<String, String> encodeSpace(String taskId, String nodeId, NodeSpace space) {
-        Map<String, String> hash = HashCodec.toHash(space);
-        int max = properties.getState().getSpaceFieldMaxBytes();
-        Map<String, String> out = new LinkedHashMap<>();
-        hash.forEach((field, raw) -> out.put(field, spillField(taskId, nodeId, field, raw, max)));
-        return out;
+    private static void seedHotGroup(DefaultTurnScope turn, SessionKeys keys, String taskId, TaskGroup group) {
+        FlushLedger ledger = turn.ledger();
+        ledger.seedHash(keys.metadata(taskId), group.metadataHash());
+        ledger.seedHash(keys.graph(taskId), group.graphHash());
+        ledger.seedHash(keys.shared(taskId), group.sharedHash());
+        ledger.seedString(keys.checkpoint(taskId), group.checkpointRaw());
+        ledger.seedString(keys.prior(taskId), group.priorRaw());
     }
 
     /**
-     * 把 OUTPUT 占位还原成完整字段 JSON，再交给 {@link HashCodec#toObject}。
+     * 构造节点视图并挂到本轮；证据按轮次排序。
      *
-     * @param hash Redis hGetAll
-     * @return 还原后的 Hash
+     * @param turn     本轮视图
+     * @param nodeId   节点 id
+     * @param space    节点空间；可空则空空间
+     * @param evidence 证据列表
+     * @return 已挂上的节点视图
      */
-    public Map<String, String> expandSpace(Map<String, String> hash) {
-        if (Collections.isEmpty(hash)) {
-            return hash;
+    private DefaultNodeScope attach(DefaultTurnScope turn, String nodeId, @Nullable NodeSpace space,
+                                    List<EvidenceHead> evidence) {
+        if (Objects.isNull(space)) {
+            space = new NodeSpace(Map.of(), Map.of(), Map.of(), 0, 0, List.of());
         }
-        Map<String, String> out = new LinkedHashMap<>();
-        hash.forEach((field, raw) -> out.put(field, expandField(raw)));
-        return out;
+        List<EvidenceHead> ordered = new ArrayList<>(evidence);
+        ordered.sort(Comparator.comparingInt(EvidenceHead::round));
+        DefaultNodeScope node = new DefaultNodeScope(turn, nodeId, space.inputs(), space.outputs(), space.state(),
+            ordered, space.actions(), space.rounds(), space.tokens());
+        turn.attach(node);
+        return node;
     }
 
     /**
-     * 超长字段落库并换成 {@link SpaceSpill} JSON。
+     * 任务组装载结果：热组只含 Redis 数据，冷组只含 MySQL 数据。
      *
-     * @param taskId 任务 id
-     * @param nodeId 节点 id
-     * @param field  NodeSpace 字段名
-     * @param raw    原始 JSON 文本
-     * @param max    允许留在 Redis 的最大字节数
-     * @return 原文本或占位 JSON
+     * @param metadata      任务元数据
+     * @param graph         任务图
+     * @param checkpoint    断点；可空
+     * @param shared        任务共享
+     * @param prior         前情；可空
+     * @param cold          是否冷组
+     * @param metadataHash  热组读到的元数据 Hash；冷组为空
+     * @param graphHash     热组读到的图 Hash；冷组为空
+     * @param sharedHash    热组读到的任务共享 Hash；冷组为空
+     * @param checkpointRaw 热组读到的断点原文；冷组为 null
+     * @param priorRaw      热组读到的前情原文；冷组为 null
+     * @author alpha
+     * @since 2026/11/22
      */
-    private String spillField(String taskId, String nodeId, String field, String raw, int max) {
-        if (Strings.isBlank(raw) || raw.getBytes(StandardCharsets.UTF_8).length <= max) {
-            return raw;
-        }
-        String payloadId = RuntimeUtils.uuid();
-        try {
-            payloads.saveSpaceField(payloadId, taskId, nodeId, field, PrincipalContextHolder.getTraceId(), raw);
-        } catch (RuntimeException e) {
-            log.error("failed to spillField", e);
-            throw new BusinessException(RuntimeErrorCode.STATE_WRITE_FAILED);
-        }
-        return JSON.obj2str(SpaceSpill.of(payloadId));
-    }
+    private record TaskGroup(TaskMetadata metadata, TaskGraph graph, @Nullable TaskCheckpoint checkpoint,
+                             Map<String, Sourced<?>> shared, @Nullable Prior prior, boolean cold,
+                             Map<String, String> metadataHash, Map<String, String> graphHash,
+                             Map<String, String> sharedHash, @Nullable String checkpointRaw,
+                             @Nullable String priorRaw) {
 
-    /**
-     * 占位则读 OUTPUT；读不到则失败关闭。
-     *
-     * @param raw Redis 字段文本
-     * @return 完整 JSON；非占位则原样返回
-     */
-    private String expandField(String raw) {
-        if (Strings.isBlank(raw) || !raw.trim().startsWith("{")) {
-            return raw;
-        }
-        SpaceSpill spill = JSON.str2obj(raw, SpaceSpill.class);
-        if (Objects.isNull(spill) || !spill.valid()) {
-            return raw;
-        }
-        String body = payloads.loadSpaceField(spill.payloadId());
-        if (Strings.isBlank(body)) {
-            throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
-        }
-        return body;
-    }
-
-    /**
-     * 从 Redis 列表读取交互历史，时间正序。
-     *
-     * @param keys 会话 Redis key
-     * @param max  最多条数
-     * @return 交互历史；空列表表示没有记录
-     */
-    private List<DialogueMessage> readDialogue(SessionKeys keys, int max) {
-        List<String> raw = new ArrayList<>(store.lRange(keys.dialogue(), 0, max - 1L));
-        java.util.Collections.reverse(raw);
-        List<DialogueMessage> dialogue = new ArrayList<>();
-        raw.forEach(item -> {
-            DialogueMessage message = JSON.str2obj(item, DialogueMessage.class);
-            if (Objects.nonNull(message)) {
-                dialogue.add(message);
-            }
-        });
-        return dialogue;
-    }
-
-    /**
-     * 从 Redis 读取已结束任务记录，时间正序。
-     *
-     * @param keys 会话 Redis key
-     * @return 任务记录；空列表表示没有记录
-     */
-    private List<TaskRecord> readRecords(SessionKeys keys) {
-        List<String> raw = new ArrayList<>(store.lRange(keys.records(), 0, properties.getState().getRecordsMax() - 1L));
-        java.util.Collections.reverse(raw);
-        List<TaskRecord> records = new ArrayList<>();
-        raw.forEach(item -> {
-            TaskRecord record = JSON.str2obj(item, TaskRecord.class);
-            if (Objects.nonNull(record)) {
-                records.add(record);
-            }
-        });
-        return records;
-    }
-
-    /**
-     * 从 Redis Hash 读取会话实体索引。
-     *
-     * @param keys 会话 Redis key
-     * @return {@code type:id →} 实体；空 Map 表示没有实体
-     */
-    private Map<String, EntityEntry> readEntities(SessionKeys keys) {
-        Map<String, EntityEntry> entities = new LinkedHashMap<>();
-        store.hGetAll(keys.entities()).forEach((field, raw) -> {
-            EntityEntry entry = JSON.str2obj(raw, ENTITY);
-            entities.put(field, entry);
-        });
-        return entities;
-    }
-
-    /**
-     * 从 Redis Hash 读取任务共享或会话共享。
-     *
-     * @param key Redis Hash key
-     * @return 带源值；空 Map 表示没有共享字段
-     */
-    private Map<String, Sourced<?>> readShared(String key) {
-        Map<String, Sourced<?>> shared = new LinkedHashMap<>();
-        store.hGetAll(key).forEach((field, raw) -> {
-            Sourced<?> value = JSON.str2obj(raw, SOURCED);
-            shared.put(field, value);
-        });
-        return shared;
-    }
-
-    /**
-     * Redis {@code state} Hash → {@link ConversationFence}（字段名即 record 属性，不按字符串抠 key）。
-     *
-     * @param conversationId 会话 id（在 key 上，不在 Hash 里）
-     * @param hash           hGetAll 结果
-     * @return 栅栏；{@code userId} 以 Hash 为准，缺字段为空
-     */
-    private ConversationFence readFence(String conversationId, Map<String, String> hash) {
-        ConversationFence parsed = HashCodec.toObject(hash, ConversationFence.class);
-        if (Objects.isNull(parsed)) {
-            return new ConversationFence(conversationId, null, null, 0L, null, System.currentTimeMillis());
-        }
-        long updatedAt = parsed.updatedAt() == 0L ? System.currentTimeMillis() : parsed.updatedAt();
-        return new ConversationFence(conversationId, parsed.userId(), parsed.activeTaskId(), parsed.version(),
-            parsed.lastTraceId(), updatedAt);
     }
 }
+

@@ -6,11 +6,8 @@ import com.g2rain.agent.runtime.domain.hydrate.ExecutionMode;
 import com.g2rain.agent.runtime.domain.hydrate.OutputType;
 import com.g2rain.agent.runtime.domain.hydrate.ShareScope;
 import com.g2rain.agent.runtime.spec.SourceType;
-import com.g2rain.agent.runtime.domain.state.task.CheckpointType;
 import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
-import com.g2rain.agent.runtime.domain.state.task.HaltReason;
-import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
@@ -146,8 +143,7 @@ public final class ReactProjection {
      * {@code prior}：可供当前节点参考的任务前情与实体摘要。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record PriorView(@Nullable String reason, @Nullable List<PriorTaskView> tasks,
-                            @Nullable List<PriorEntityView> entities) {
+    public record PriorView(@Nullable List<PriorTaskView> tasks, @Nullable List<PriorEntityView> entities) {
 
     }
 
@@ -180,16 +176,6 @@ public final class ReactProjection {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record PriorEntityView(String key, String displayName, @Nullable String taskId) {
-
-    }
-
-    /**
-     * 当前挂起断点的用户可见信息；不含 pending 原参数。
-     */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record CheckpointView(@Nullable CheckpointType type, @Nullable HaltReason haltReason, @Nullable String question,
-                                 @Nullable List<ResumeAction> allowedActions, @Nullable List<String> expectedFields,
-                                 @Nullable String pendingTool) {
 
     }
 

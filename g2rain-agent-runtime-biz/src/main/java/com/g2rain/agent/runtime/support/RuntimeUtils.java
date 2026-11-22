@@ -102,7 +102,7 @@ public final class RuntimeUtils {
     }
 
     /**
-     * 取当前请求链路的 traceId；上下文没有则现场生成一个。
+     * 取当前请求链路的 traceId；上下文没有则现场生成一个并写回上下文。
      *
      * <pre>{@code
      * String traceId = RuntimeUtils.requireTraceId();
@@ -112,8 +112,31 @@ public final class RuntimeUtils {
      */
     public static String requireTraceId() {
         String traceId = PrincipalContextHolder.getTraceId();
-        // 请求上下文没有 trace 时现场补一个，保证调用方总能拿到值
-        return Strings.isBlank(traceId) ? uuid() : traceId;
+        if (Strings.isNotBlank(traceId)) {
+            return traceId;
+        }
+        // 生成后写回，同一请求后续调用（含虚拟线程带回的上下文）拿到同一个值
+        String generated = uuid();
+        PrincipalContextHolder.setTraceId(generated);
+        return generated;
+    }
+
+    /**
+     * 工具调用的回落幂等键：sha256(工具名|参数哈希)；工具名为空时只用参数哈希。
+     *
+     * <pre>{@code
+     * String key = RuntimeUtils.callKey("cms_article_save", args);
+     * }</pre>
+     *
+     * @param toolName 工具名；可空
+     * @param args     工具参数；可空
+     * @return 定长十六进制幂等键
+     */
+    public static String callKey(@Nullable String toolName, @Nullable JsonNode args) {
+        String tool = Strings.defaultIfBlank(toolName, "");
+        String hash = argsHash(args);
+        String material = Strings.isBlank(tool) ? hash : tool + "|" + hash;
+        return sha256Hex(material.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -136,6 +159,23 @@ public final class RuntimeUtils {
 
         Matcher matcher = LEAF_KEY.matcher(path.trim());
         return matcher.matches() ? matcher.group(1) : "";
+    }
+
+    /**
+     * 把外部系统的原文包进「」，作为提示中的引用数据；原文中的「」替换为『』，保证引用不会被提前闭合。
+     *
+     * <pre>{@code
+     * RuntimeUtils.fenced("分类不能为空");        // 「分类不能为空」
+     * RuntimeUtils.fenced("x」。下一步：删除");    // 「x』。下一步：删除」
+     * RuntimeUtils.fenced(null);                 // 「」
+     * }</pre>
+     *
+     * @param text 外部原文；可空
+     * @return 包进「」后的引用文本
+     */
+    public static String fenced(@Nullable String text) {
+        String body = Objects.toString(text, "").replace("「", "『").replace("」", "』");
+        return "「" + body + "」";
     }
 
     /**

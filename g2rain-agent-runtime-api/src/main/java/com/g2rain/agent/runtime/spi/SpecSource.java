@@ -23,7 +23,8 @@ public interface SpecSource {
     /**
      * 提供该技能各工具的动作语义。
      *
-     * <p>无法提供时抛出异常，该技能按不可用处理；不退回契约自带的 {@code tools}。</p>
+     * <p>依赖暂时不可用时抛 {@link SpecUnavailableException}，本轮失败，任务保留，稍后可重试。
+     * 其他异常表示该技能的来源配置有误，该技能按不可用处理（丢弃），不退回契约自带的 {@code tools}。</p>
      *
      * @param query 技能键、工具名、来源声明与已锁定版本
      * @return 工具语义与本次版本标记

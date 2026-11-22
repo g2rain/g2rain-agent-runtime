@@ -5,12 +5,15 @@ import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.domain.hydrate.ArgSpecHydrate;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spi.SpecQuery;
 import com.g2rain.agent.runtime.spi.SpecSet;
 import com.g2rain.agent.runtime.spi.SpecSource;
 import com.g2rain.agent.runtime.spi.SpecSourceField;
 import com.g2rain.agent.runtime.spi.SpecSourceType;
+import com.g2rain.agent.runtime.spi.SpecUnavailableException;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
+import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -147,7 +150,8 @@ public class DefaultBundleLoader implements BundleLoader {
     }
 
     /**
-     * 解析技能契约；空白、解析失败或 source 不可用返回 {@code null}。
+     * 解析技能契约；空白、解析失败或 source 配置错误返回 {@code null}。
+     * 来源暂时不可用时抛 {@link BusinessException}（{@link RuntimeErrorCode#DEPENDENCY_UNAVAILABLE}）。
      *
      * <p>顺序：JSON 解析 → 若有 source 则替换 tools → ArgSpecHydrate。</p>
      *
@@ -155,7 +159,7 @@ public class DefaultBundleLoader implements BundleLoader {
      * @param skillContract 契约原文；可空
      * @param toolNames     业务工具名；在 source.load 之前算好
      * @param pin           任务已锁定的版本；可空
-     * @return 契约与 pin；不可用时为 {@code null}
+     * @return 契约与 pin；配置错误时为 {@code null}
      */
     private @Nullable ParsedContract parseContract(String skillKey, @Nullable String skillContract,
                                                    List<String> toolNames, @Nullable String pin) {
@@ -164,6 +168,7 @@ public class DefaultBundleLoader implements BundleLoader {
             return null;
         }
 
+        SpecSourceType type = null;
         try {
             SkillContract parsed = JSON.str2obj(skillContract, SkillContract.class);
             if (Objects.isNull(parsed)) {
@@ -178,7 +183,7 @@ public class DefaultBundleLoader implements BundleLoader {
                 return null;
             }
 
-            SpecSourceType type = SpecSourceType.of(typeName);
+            type = SpecSourceType.of(typeName);
             if (Objects.isNull(type)) {
                 log.error("[BundleLoader] skill unavailable skillKey={} reason=source_type_invalid type={}",
                     skillKey, typeName);
@@ -198,6 +203,11 @@ public class DefaultBundleLoader implements BundleLoader {
 
             ArgSpecHydrate.hydrate(parsed);
             return new ParsedContract(parsed, resolvedPin);
+        } catch (SpecUnavailableException ex) {
+            SpecSourceType unavailableType = Objects.requireNonNull(type);
+            log.error("[BundleLoader] skill unavailable skillKey={} reason=spec_source_unavailable type={}",
+                skillKey, unavailableType, ex);
+            throw new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, ex, unavailableType.name());
         } catch (RuntimeException ex) {
             log.error("[BundleLoader] skill unavailable skillKey={} reason=contract_parse_failed", skillKey, ex);
             return null;
@@ -220,14 +230,15 @@ public class DefaultBundleLoader implements BundleLoader {
     }
 
     /**
-     * 按来源类型选择 {@link SpecSource} 并加载动作语义；失败时打日志并返回 {@code null}。
+     * 按来源类型选择 {@link SpecSource} 并加载动作语义；配置错误时打日志并返回 {@code null}。
+     * {@link SpecUnavailableException} 原样抛出，由 {@link #parseContract} 转为依赖不可用。
      *
      * @param skillKey  技能键
      * @param type      来源类型（非 {@link SpecSourceType#CONTRACT}）
      * @param source    来源声明原文
      * @param toolNames 业务工具名
      * @param pin       已锁定版本；可空
-     * @return 语义集合；不可用时为 {@code null}
+     * @return 语义集合；配置错误时为 {@code null}
      */
     private @Nullable SpecSet loadSpecSet(String skillKey, SpecSourceType type, JsonNode source, List<String> toolNames,
                                           @Nullable String pin) {
@@ -240,6 +251,8 @@ public class DefaultBundleLoader implements BundleLoader {
             }
 
             return matched.load(new SpecQuery(skillKey, toolNames, source, pin));
+        } catch (SpecUnavailableException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             log.error("[BundleLoader] skill unavailable skillKey={} reason=spec_source_failed", skillKey, ex);
             return null;

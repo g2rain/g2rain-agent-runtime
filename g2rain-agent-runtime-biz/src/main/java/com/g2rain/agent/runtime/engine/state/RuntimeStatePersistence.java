@@ -68,13 +68,31 @@ public class RuntimeStatePersistence {
     private final ProgressRepository progress;
 
     /**
-     * 轮末冷库事务：首句推进会话 {@code state_version}，再写任务 / 图节点空间 / 证据头 / 检查点 / 消息。
-     * <p>CAS 影响 0 行则抛 {@link RuntimeErrorCode#STATE_FENCED}，整事务回滚。</p>
+     * 写调用登记前补写任务壳：任务行、缺失的节点与边、会话活动任务。只插入库中没有的行。
      *
      * @param scope 本轮视图
      */
     @Transactional(rollbackFor = Exception.class)
-    public void persistTurn(DefaultTurnScope scope) {
+    public void persistShell(DefaultTurnScope scope) {
+        scope.task().ifPresent(task -> {
+            String taskId = task.getTaskId();
+            if (tasks.insertIfAbsent(task, scope.shared(), scope.prior().orElse(null))) {
+                conversations.bindTask(task.getSourceMessageId(), taskId);
+            }
+            graphs.insertMissing(taskId, scope.graph(), spacesOf(scope.nodes()));
+            conversations.bindActiveTask(scope.conversation().conversationId(), taskId);
+        });
+    }
+
+    /**
+     * 轮末冷库事务：首句推进会话 {@code state_version}，再写任务 / 图节点空间 / 证据头 / 检查点 / 消息。
+     * <p>CAS 影响 0 行则抛 {@link RuntimeErrorCode#STATE_FENCED}，整事务回滚。</p>
+     *
+     * @param scope 本轮视图
+     * @return 本次写入的任务记录（taskId → 记录）；没有结束任务时为空 Map
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, TaskRecord> persistTurn(DefaultTurnScope scope) {
         long stateVersion = scope.conversation().version();
         String conversationId = scope.conversation().conversationId();
         boolean terminal = scope.task().map(task -> TaskStatus.isTerminal(task.getStatus())).orElse(false);
@@ -87,18 +105,27 @@ public class RuntimeStatePersistence {
             throw new BusinessException(RuntimeErrorCode.STATE_FENCED);
         }
 
-        scope.closedTasks().forEach(closed -> persistClosed(closed, scope, stateVersion));
+        Map<String, TaskRecord> written = new LinkedHashMap<>();
+        for (ClosedTask closed : scope.closedTasks()) {
+            TaskRecord record = recordOf(closed.metadata(), scope);
+            written.put(closed.metadata().getTaskId(), record);
+            persistClosed(closed, stateVersion, record);
+        }
         scope.task().ifPresent(task -> {
             TaskRecord record = terminal ? recordOf(task, scope) : null;
+            if (Objects.nonNull(record)) {
+                written.put(task.getTaskId(), record);
+            }
             if (tasks.save(task, scope.shared(), scope.prior().orElse(null), stateVersion, record)) {
                 conversations.bindTask(task.getSourceMessageId(), task.getTaskId());
             }
             graphs.save(task.getTaskId(), scope.graph(), spacesOf(scope.nodes()));
             calls.syncHeads(task.getTaskId(), headsOf(scope.nodes()));
-            scope.lastResumeAction().ifPresent(action -> tasks.consumeCheckpoint(task.getTaskId(), action,
-                scope.lastResumeMessageId().orElse(""), scope.lastResumeAt()));
             scope.checkpoint().ifPresent(checkpoint -> tasks.suspend(task.getTaskId(), checkpoint));
         });
+        // 按被恢复任务的 id 消费断点（换任务时仍是旧任务）
+        scope.resumeMark().ifPresent(mark -> tasks.consumeCheckpoint(mark.taskId(), mark.action(),
+            Objects.toString(mark.messageId(), ""), mark.actedAt()));
 
         scope.pendingPersistDialogue().forEach(message -> {
             if (Objects.equals(message.getRole(), DialogueRole.USER)) {
@@ -110,18 +137,19 @@ public class RuntimeStatePersistence {
 
         // 本轮执行步骤与消息同事务落库，历史接口按 traceId 关联到最终回复
         progress.insert(conversationId, scope.traceId(), scope.progress().pending());
+        return written;
     }
 
     /**
      * 被顶替的旧任务：写终态行与图壳。
      *
      * @param closed       已关闭任务快照
-     * @param scope        本轮视图
      * @param stateVersion 本轮栅栏版本
+     * @param record       本轮生成的任务记录（与返回值共用同一对象）
      */
-    private void persistClosed(ClosedTask closed, DefaultTurnScope scope, long stateVersion) {
+    private void persistClosed(ClosedTask closed, long stateVersion, TaskRecord record) {
         TaskMetadata task = closed.metadata();
-        if (tasks.save(task, closed.shared(), closed.prior(), stateVersion, recordOf(task, scope))) {
+        if (tasks.save(task, closed.shared(), closed.prior(), stateVersion, record)) {
             conversations.bindTask(task.getSourceMessageId(), task.getTaskId());
         }
         graphs.save(task.getTaskId(), closed.graph(), closed.spaces());

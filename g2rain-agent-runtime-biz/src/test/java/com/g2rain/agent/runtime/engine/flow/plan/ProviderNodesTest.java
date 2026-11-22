@@ -6,7 +6,10 @@ import com.g2rain.agent.runtime.domain.graph.TaskNode;
 import com.g2rain.agent.runtime.domain.hydrate.InputSpec;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
+import com.g2rain.agent.runtime.domain.state.Source;
+import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
+import com.g2rain.agent.runtime.spec.SourceType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,7 +17,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * {@link ProviderNodes} 前置节点补全测试。
@@ -27,6 +32,26 @@ class ProviderNodesTest {
     private static final String PUBLISH = "publish";
 
     private static final String LIST = "list";
+
+    /** T2：alreadyBound — session 有值 / shared 为空 / prior。 */
+    @Test
+    void t2_alreadyBound_sessionSharedPrior() {
+        TurnScope turn = mock(TurnScope.class);
+        when(turn.sessionShared()).thenReturn(Map.of("a",
+            new Sourced<>("1", new Source(SourceType.SESSION, "session", "a"), false)));
+        when(turn.shared()).thenReturn(Map.of());
+
+        InputSpec session = new InputSpec();
+        session.setFrom("session.a");
+        InputSpec shared = new InputSpec();
+        shared.setFrom("shared.a");
+        InputSpec prior = new InputSpec();
+        prior.setFrom("prior.a");
+
+        assertTrue(ProviderNodes.alreadyBound(turn, session));
+        assertFalse(ProviderNodes.alreadyBound(turn, shared));
+        assertFalse(ProviderNodes.alreadyBound(turn, prior));
+    }
 
     @Test
     void expand_shouldInsertNewProviderWhenReuseWouldFormCycle() {

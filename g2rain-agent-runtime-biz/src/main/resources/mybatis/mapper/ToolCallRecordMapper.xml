@@ -569,4 +569,16 @@
     <select id="selectListWithoutIsolation" parameterType="com.g2rain.agent.runtime.dto.ToolCallRecordSelectDto" resultMap="BaseResultMap">
         <include refid="selectListBody"/>
     </select>
+
+    <!-- 按任务与调用 id 批量取完整入参（只查 call_id、request） -->
+    <select id="selectRequests" resultMap="BaseResultMap">
+        SELECT call_id, request
+        FROM tool_call_record
+        WHERE task_id = #{taskId, jdbcType=VARCHAR}
+        AND call_id IN
+        <foreach collection="callIds" item="item" open="(" separator="," close=")">
+            #{item, jdbcType=VARCHAR}
+        </foreach>
+        AND (delete_flag = 0 OR delete_flag IS NULL)
+    </select>
 </mapper>

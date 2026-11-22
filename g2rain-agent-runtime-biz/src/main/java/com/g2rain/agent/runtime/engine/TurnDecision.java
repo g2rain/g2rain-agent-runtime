@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
  * @param mode             本轮模式
  * @param shouldContinue   是否在已有 Task 上继续跑
  * @param createTask       是否新建 Task
- * @param useContinuity    是否加载任务前情
+ * @param useContinuity    规划时是否带入最近任务（{@code priorTasks}）；节点层始终装入前情，不受此影响
  * @param loadExistingPlan 是否沿用已有执行计划/图
  * @param createPlan       是否重新规划构图
  * @param abandonPrevious  是否放弃上一任务脉络（替换/换 Agent 等）
@@ -50,22 +50,22 @@ public record TurnDecision(TurnMode mode, boolean shouldContinue, boolean create
     }
 
     /**
-     * 带前情开局：新建 Task 与计划，并使用任务前情。
+     * 带前情开局：新建 Task 与计划，规划带入最近任务。
      *
      * @return START_WITH_CONTEXT 决策
      */
     public static TurnDecision startFollowup() {
-        // START_WITH_CONTEXT：新建 Task/计划，并加载任务前情
+        // START_WITH_CONTEXT：新建 Task/计划，规划带入最近任务
         return new TurnDecision(TurnMode.START_WITH_CONTEXT, false, true, true, false, true, false, null);
     }
 
     /**
-     * 全新开局：新建 Task 与计划，不继承任务前情。
+     * 全新开局：新建 Task 与计划，规划不带入最近任务（节点层仍装入前情供参考）。
      *
      * @return START_FRESH 决策
      */
     public static TurnDecision startFresh() {
-        // START_FRESH：全新 Task/计划，不用前情、不放弃标记（无上一脉络可弃）
+        // START_FRESH：全新 Task/计划，规划不带入最近任务（节点层仍装入前情供参考）；不放弃标记（无上一脉络可弃）
         return new TurnDecision(TurnMode.START_FRESH, false, true, false, false, true, false, null);
     }
 

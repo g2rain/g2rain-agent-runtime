@@ -233,16 +233,19 @@ public final class DefaultGoalGate implements GoalGate {
      * @param writable  技能是否有写工具
      * @param delegated 是否为委派前置节点
      * @param result    节点结论；可空
+     * @param truncated 结论被截短时为 true；否则为 null
      * @param evidence  节点最近的成功调用摘要
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record NodeView(@Nullable String title, @Nullable String objective, String status, @Nullable String target,
                             boolean claimed, boolean writable, boolean delegated, @Nullable String result,
-                            List<GoalNodeSummary.Call> evidence) {
+                            @Nullable Boolean truncated, List<GoalNodeSummary.Call> evidence) {
 
         static NodeView from(GoalNodeSummary node, int maxChars) {
+            String clipped = clip(node.result(), maxChars);
             return new NodeView(node.title(), clip(node.objective(), maxChars), node.status(), node.target(),
-                node.claimed(), node.writable(), node.delegated(), clip(node.result(), maxChars), node.evidence());
+                node.claimed(), node.writable(), node.delegated(), clipped, truncatedFlag(node.result(), clipped),
+                node.evidence());
         }
     }
 
@@ -269,6 +272,20 @@ public final class DefaultGoalGate implements GoalGate {
      */
     private static @Nullable String clip(@Nullable String text, int max) {
         return Strings.isBlank(text) ? null : RuntimeUtils.clip(text.trim(), max);
+    }
+
+    /**
+     * 结论是否因上限被截短。
+     *
+     * @param original 原文；可空
+     * @param clipped  截断结果；可空
+     * @return 被截短时为 {@code true}；否则为 {@code null}
+     */
+    private static @Nullable Boolean truncatedFlag(@Nullable String original, @Nullable String clipped) {
+        if (Strings.isBlank(original) || Objects.isNull(clipped)) {
+            return null;
+        }
+        return original.trim().length() > clipped.length() ? Boolean.TRUE : null;
     }
 
     /**

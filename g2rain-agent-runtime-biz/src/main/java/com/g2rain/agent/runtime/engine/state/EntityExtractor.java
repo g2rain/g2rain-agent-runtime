@@ -76,6 +76,26 @@ public class EntityExtractor {
     private static final JsonNode EMPTY_ATTRS = JsonNodeFactory.instance.objectNode();
 
     /**
+     * finish 落库前：带 share 的产出键不得与平台字段同名。
+     *
+     * @param contract 技能契约；可空则直接返回
+     */
+    public void requireShareable(@Nullable SkillContract contract) {
+        if (Objects.isNull(contract) || Collections.isEmpty(contract.getOutputs())) {
+            return;
+        }
+        for (Map.Entry<String, OutputSpec> entry : contract.getOutputs().entrySet()) {
+            OutputSpec spec = entry.getValue();
+            if (Objects.isNull(spec.getShare())) {
+                continue;
+            }
+            if (platformCatalog.keys().contains(entry.getKey())) {
+                throw new BusinessException(RuntimeErrorCode.PLATFORM_FIELD_FORBIDDEN, entry.getKey());
+            }
+        }
+    }
+
+    /**
      * finish 通过后：记下 outputs.entity 候选，并按 share 写出 TASK/SESSION。
      *
      * @param node     当前节点
@@ -151,7 +171,7 @@ public class EntityExtractor {
                 .limit(overflow)
                 .map(Map.Entry::getKey)
                 .toList()
-                .forEach(scope::evictEntity);
+                .forEach(scope.entityIndex()::remove);
         }
     }
 
@@ -178,9 +198,6 @@ public class EntityExtractor {
     private void share(NodeScope node, String key, OutputSpec spec, Sourced<?> sourced) {
         if (!(node instanceof DefaultNodeScope scoped) || Objects.isNull(spec.getShare())) {
             return;
-        }
-        if (platformCatalog.keys().contains(key)) {
-            throw new BusinessException(RuntimeErrorCode.PLATFORM_FIELD_FORBIDDEN, key);
         }
         if (spec.getShare() == ShareScope.SESSION) {
             scoped.turn().shareSession(key, sourced);

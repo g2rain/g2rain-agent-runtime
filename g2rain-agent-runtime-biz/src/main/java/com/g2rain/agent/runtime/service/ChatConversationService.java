@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.dto.ChatConversationDto;
 import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -66,6 +67,24 @@ public interface ChatConversationService {
      * @return 影响行数；0 表示冲突或行不存在
      */
     int advanceStateVersion(String conversationId, long stateVersion, String sessionShared, String activeTaskId);
+
+    /**
+     * 只刷新 {@code last_message_time}。
+     *
+     * @param conversationId 会话 id
+     * @param time           最后消息时间
+     * @return 影响行数
+     */
+    int touchLastMessage(String conversationId, LocalDateTime time);
+
+    /**
+     * 只写 {@code active_task_id}（与当前不同时），不改 {@code state_version}。
+     *
+     * @param conversationId 会话 id
+     * @param taskId         活动任务 id
+     * @return 影响行数
+     */
+    int bindActiveTask(String conversationId, String taskId);
 
     /**
      * 根据 ID 删除数据

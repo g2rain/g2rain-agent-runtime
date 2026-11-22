@@ -38,4 +38,17 @@ class IntentPromptTest {
         }
         assertThat(IntentPrompt.USER).doesNotContain(TurnMode.UNCERTAIN.name());
     }
+
+    /** PR-6：WRITE_PENDING 下“要求修改”在“同意执行”之前，且为 REPLY_ONLY；userReply 有修改说明。 */
+    @Test
+    void writePending_modifyBeforeContinue_replyOnly() {
+        String user = IntentPrompt.USER;
+        int writePending = user.indexOf("WRITE_PENDING（");
+        int modify = user.indexOf("要求修改待确认操作的内容（如改参数、换内容）→ REPLY_ONLY", writePending);
+        int continueTask = user.indexOf("同意执行，或回答确认问题 → CONTINUE_TASK", writePending);
+        assertThat(modify).isGreaterThan(writePending);
+        assertThat(continueTask).isGreaterThan(modify);
+        assertThat(user).contains(
+            "WRITE_PENDING 下要求修改待确认的操作：说明待确认的操作不能直接修改；如需修改，请先拒绝（拒绝后当前事项结束），再重新描述需求。");
+    }
 }

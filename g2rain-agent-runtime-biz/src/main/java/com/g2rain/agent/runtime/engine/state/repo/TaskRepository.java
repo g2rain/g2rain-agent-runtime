@@ -222,27 +222,7 @@ public class TaskRepository {
         if (Objects.isNull(existing)) {
             applyOrigin(dto, metadata);
         }
-        dto.setConversationId(metadata.getConversationId());
-        dto.setTaskId(taskId);
-        dto.setAgentId(metadata.getAgentId());
-        dto.setGoalSummary(metadata.getGoalSummary());
-        dto.setRequest(metadata.getRequest());
-        dto.setStatus(Objects.requireNonNull(metadata.getStatus()).name());
-        dto.setCurrentNodeId(metadata.getCurrentNodeId());
-        dto.setFinalMessage(RuntimeUtils.clip(metadata.getFinalMessage(), TASK_FINAL_MESSAGE_MAX));
-        dto.setStateVersion(stateVersion);
-        dto.setShared(RepoSupport.toJson(shared));
-        dto.setPrior(Objects.isNull(prior) ? null : RepoSupport.toJson(prior));
-        dto.setTaskRecord(RepoSupport.toJson(record));
-        // 空 map 写 null，与列默认一致
-        dto.setSkillVersions(Collections.isEmpty(metadata.getSkillVersions())
-            ? null : RepoSupport.toJson(metadata.getSkillVersions()));
-        if (Objects.nonNull(metadata.getSuspendedAt())) {
-            dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
-        }
-        if (TaskStatus.isTerminal(metadata.getStatus())) {
-            dto.setFinishedTime(Moments.now());
-        }
+        fillTaskRow(dto, metadata, shared, prior, stateVersion, record);
         if (Objects.isNull(existing)) {
             taskInstanceService.save(dto);
             return true;
@@ -251,6 +231,26 @@ public class TaskRepository {
             throw new BusinessException(RuntimeErrorCode.STATE_FENCED);
         }
         return false;
+    }
+
+    /**
+     * 库中没有该任务时插入任务壳（{@code state_version = 0}）；已有行不动。
+     *
+     * @param metadata 任务元数据
+     * @param shared   任务共享
+     * @param prior    任务前情；可空
+     * @return 本次插入了任务行
+     */
+    public boolean insertIfAbsent(TaskMetadata metadata, Map<String, Sourced<?>> shared, @Nullable Prior prior) {
+        String taskId = Objects.requireNonNull(metadata.getTaskId());
+        if (Objects.nonNull(findTask(taskId))) {
+            return false;
+        }
+        TaskInstanceDto dto = new TaskInstanceDto();
+        applyOrigin(dto, metadata);
+        fillTaskRow(dto, metadata, shared, prior, 0L, null);
+        taskInstanceService.save(dto);
+        return true;
     }
 
     /**
@@ -322,6 +322,41 @@ public class TaskRepository {
         } catch (Exception e) {
             log.warn("[TaskRepository] consumeCheckpoint failed taskId={} action={}", taskId, action, e);
             throw RepoSupport.unavailable(e);
+        }
+    }
+
+    /**
+     * 写入任务行可变字段（元数据、共享、前情、版本与记录）。
+     *
+     * @param dto          待写 DTO
+     * @param metadata     任务元数据
+     * @param shared       任务共享
+     * @param prior        任务前情；可空
+     * @param stateVersion 栅栏版本
+     * @param record       结束记录；可空
+     */
+    private static void fillTaskRow(TaskInstanceDto dto, TaskMetadata metadata, Map<String, Sourced<?>> shared,
+                                    @Nullable Prior prior, long stateVersion, @Nullable TaskRecord record) {
+        dto.setConversationId(metadata.getConversationId());
+        dto.setTaskId(metadata.getTaskId());
+        dto.setAgentId(metadata.getAgentId());
+        dto.setGoalSummary(metadata.getGoalSummary());
+        dto.setRequest(metadata.getRequest());
+        dto.setStatus(Objects.requireNonNull(metadata.getStatus()).name());
+        dto.setCurrentNodeId(metadata.getCurrentNodeId());
+        dto.setFinalMessage(RuntimeUtils.clip(metadata.getFinalMessage(), TASK_FINAL_MESSAGE_MAX));
+        dto.setStateVersion(stateVersion);
+        dto.setShared(RepoSupport.toJson(shared));
+        dto.setPrior(Objects.isNull(prior) ? null : RepoSupport.toJson(prior));
+        dto.setTaskRecord(RepoSupport.toJson(record));
+        // 空 map 写 null，与列默认一致
+        dto.setSkillVersions(Collections.isEmpty(metadata.getSkillVersions())
+            ? null : RepoSupport.toJson(metadata.getSkillVersions()));
+        if (Objects.nonNull(metadata.getSuspendedAt())) {
+            dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
+        }
+        if (TaskStatus.isTerminal(metadata.getStatus())) {
+            dto.setFinishedTime(Moments.now());
         }
     }
 

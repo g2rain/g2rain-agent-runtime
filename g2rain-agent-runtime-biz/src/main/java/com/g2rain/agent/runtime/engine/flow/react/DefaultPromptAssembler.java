@@ -5,6 +5,8 @@ import com.g2rain.agent.runtime.config.RuntimeProperties;
 import com.g2rain.agent.runtime.domain.state.NodeNoteKey;
 import com.g2rain.agent.runtime.support.prompt.ReactPrompt;
 import com.g2rain.agent.runtime.support.RequestLocale;
+import com.g2rain.agent.runtime.support.trace.Trace;
+import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -21,7 +23,9 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 /**
@@ -106,9 +110,19 @@ public class DefaultPromptAssembler implements PromptAssembler {
         }
 
         // 超长时从队尾丢掉低优先级整块，避免半截 JSON
+        Deque<String> dropped = new ArrayDeque<>();
+        int beforeDrop = total;
         while (rendered.size() > 1 && total > max) {
+            dropped.addFirst(blocks.getLast().tag());
             total -= rendered.removeLast().length();
             blocks.removeLast();
+        }
+        if (!dropped.isEmpty()) {
+            Trace.at(TraceStage.REACT, "prompt_blocks_dropped")
+                .kv("tags", List.copyOf(dropped))
+                .kv("total", beforeDrop)
+                .kv("max", max)
+                .warn();
         }
 
         // 委派结果是一次性便签：确认进入最终提示词后才清，被丢弃时留到下一轮

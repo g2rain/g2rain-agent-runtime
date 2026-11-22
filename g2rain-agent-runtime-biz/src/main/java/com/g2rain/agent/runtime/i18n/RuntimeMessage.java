@@ -13,6 +13,8 @@ import com.g2rain.common.utils.Strings;
 public enum RuntimeMessage {
 
     TASK_GONE("task.gone", "之前的事项已结束或已过期，请重新发起。"),
+    SKILLS_UNAVAILABLE("skills.unavailable", "技能暂时无法加载，请稍后再试。"),
+    TASK_SKILLS_UNAVAILABLE("task.skills_unavailable", "当前事项所需的技能暂时无法加载，事项已保留，请稍后再试。"),
     ACTION_MISSING("action.missing", "请先在页面上选择要执行的操作。"),
     ACTION_DENIED("action.denied", "当前不能执行这个操作，请按页面上的选项操作。"),
     NOTHING_PENDING("action.nothing_pending", "当前没有待确认的操作。"),
@@ -43,6 +45,7 @@ public enum RuntimeMessage {
     NODE_STALLED("node.stalled", "「{step}」连续多轮没有进展，已停止处理。"),
     NODE_STALLED_LAST("node.stalled_last", "最后一次：{tool}未成功（{code}）。"),
     NODE_ROUNDS_EXHAUSTED("node.rounds_exhausted", "「{step}」处理轮次已用完，仍未完成，已停止处理。"),
+    NODE_DELEGATE_BROKEN("node.delegate_broken", "委派链损坏：委派的前置节点缺失。"),
     NODE_HANDED_OVER("node.handed_over", "已完成「{step}」，「{owner}」由后续步骤执行。"),
     VERIFY_ASK("verify.ask", "上次的写操作结果不确定，请确认是否已经完成。"),
     APPROVAL_ACTION("approval.action", "即将执行：{tool}"),

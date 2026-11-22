@@ -108,7 +108,7 @@ public class ResponseContractInterceptor implements ToolInterceptor {
      * 业务失败原因：带上下游错误码与错误信息；响应体为空时给固定原因。
      *
      * <p>例：响应 {@code {"errorCode":"system.50001","errorMessage":"分类不能为空"}} 得到
-     * {@code 业务失败 [system.50001]：分类不能为空}。</p>
+     * {@code 业务失败 [system.50001]，业务系统返回：「分类不能为空」}。</p>
      *
      * @param body      响应体；可空
      * @param errorPath 错误字段路径；可空
@@ -119,7 +119,7 @@ public class ResponseContractInterceptor implements ToolInterceptor {
             return ModelHint.BUSINESS_EMPTY_BODY.text();
         }
 
-        String message = extractErrorMessage(body, errorPath);
+        String message = RuntimeUtils.fenced(extractErrorMessage(body, errorPath));
         String code = extractErrorCode(body, errorPath);
         if (Strings.isBlank(code)) {
             return ModelHint.BUSINESS_FAILED.text("message", message);

@@ -14,6 +14,7 @@ import com.g2rain.agent.runtime.engine.state.OutputContractValidator;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
+import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.engine.tools.guard.SourceVerifier;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
@@ -66,6 +67,11 @@ public class NodeBuiltinTools implements BuiltinTools {
      * 按需读取证据报文。
      */
     private final RuntimeStateFacade stateFacade;
+
+    /**
+     * 证据可达范围判断。
+     */
+    private final EvidenceReader evidenceReader;
 
     /**
      * 按来源类型和引用路径校验节点参数。
@@ -196,7 +202,7 @@ public class NodeBuiltinTools implements BuiltinTools {
     @Tool(
         name = "builtin_evidence_get",
         description = """
-            按 evidenceId 读取证据报文
+            按 evidenceId 读取证据报文；只能读取本节点及上游节点的证据
             """
     )
     @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.READ)
@@ -205,8 +211,13 @@ public class NodeBuiltinTools implements BuiltinTools {
         if (Strings.isBlank(evidenceId)) {
             throw new ToolRejectedException(RuntimeErrorCode.EVIDENCE_PATH_INVALID, ModelHint.NEXT_EVIDENCE_ID.text(), "evidenceId 为空");
         }
+        String id = evidenceId.trim();
+        if (!evidenceReader.reachable(ctx, id)) {
+            throw new ToolRejectedException(RuntimeErrorCode.EVIDENCE_PATH_INVALID, ModelHint.NEXT_EVIDENCE_ID.text(),
+                "evidenceId 不可达");
+        }
 
-        return stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), evidenceId.trim());
+        return stateFacade.payload(ctx.getFrame().turn(), ctx.getTaskId(), id);
     }
 
     /**

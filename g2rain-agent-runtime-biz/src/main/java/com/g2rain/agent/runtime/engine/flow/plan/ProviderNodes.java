@@ -14,6 +14,7 @@ import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
+import com.g2rain.agent.runtime.spec.ValueRef;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
@@ -248,21 +249,18 @@ public final class ProviderNodes {
      * @param spec 当前 input 声明
      * @return 共享值已绑定时为 {@code true}
      */
-    private static boolean alreadyBound(TurnScope turn, InputSpec spec) {
+    static boolean alreadyBound(TurnScope turn, InputSpec spec) {
         String from = Strings.trim(spec.getFrom());
-        if (Strings.isBlank(from)) {
+        if (Strings.isBlank(from) || !ValueRef.isKnown(from)) {
             return false;
         }
 
-        if (from.startsWith("session.")) {
-            return Objects.nonNull(turn.sessionShared().get(from.substring("session.".length())));
-        }
-
-        if (from.startsWith("shared.")) {
-            return Objects.nonNull(turn.shared().get(from.substring("shared.".length())));
-        }
-
-        return false;
+        ValueRef ref = ValueRef.parse(from);
+        return switch (ref.bag()) {
+            case SESSION -> Objects.nonNull(turn.sessionShared().get(ref.path()));
+            case SHARED -> Objects.nonNull(turn.shared().get(ref.path()));
+            default -> false;
+        };
     }
 
     /**

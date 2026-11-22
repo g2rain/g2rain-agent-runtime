@@ -160,8 +160,6 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     APPROVAL_EXPIRED("agent_runtime.40912", "确认已过期"),
 
-    ARGS_HASH_MISMATCH("agent_runtime.40913", "已批准参数与确认时不一致"),
-
     INVALID_DEFAULT("agent_runtime.42201", "非法默认值：{0:detail}"),
 
     UNKNOWN_FIELD("agent_runtime.42202", "未知字段：{0:detail}"),
@@ -269,6 +267,14 @@ public enum RuntimeErrorCode implements ErrorCode {
     DECISION_PENDING("agent_runtime.42254", "调用被拦下，须先由用户决定如何处理 [{0:toolName}]"),
 
     LOOKUP_PENDING("agent_runtime.42255", "须先补查数据并重新调用 [{0:toolName}]"),
+
+    NODE_ROUNDS_EXHAUSTED("agent_runtime.42256", "处理轮次已用完：{0:detail}"),
+
+    NODE_STALLED("agent_runtime.42257", "连续多轮没有进展：{0:detail}"),
+
+    NODE_DECLARED_FAILED("agent_runtime.42258", "节点声明失败：{0:detail}"),
+
+    SKILL_UNAVAILABLE("agent_runtime.42259", "技能不可用：{0:skillKey}"),
 
     GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 

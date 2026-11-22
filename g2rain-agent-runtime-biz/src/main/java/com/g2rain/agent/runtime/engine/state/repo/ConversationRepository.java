@@ -1,6 +1,5 @@
 package com.g2rain.agent.runtime.engine.state.repo;
 
-import com.g2rain.agent.runtime.converter.ChatConversationConverter;
 import com.g2rain.agent.runtime.converter.ChatMessageConverter;
 import com.g2rain.agent.runtime.domain.state.Sourced;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
@@ -19,7 +18,6 @@ import com.g2rain.common.utils.Moments;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalContextHolder;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +31,6 @@ import java.util.Objects;
  * @author alpha
  * @since 2026/10/12
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ConversationRepository {
@@ -200,19 +197,22 @@ public class ConversationRepository {
     }
 
     /**
+     * 会话的活动任务不是 taskId 时改为 taskId；不动 state_version。
+     *
+     * @param conversationId 会话 id
+     * @param taskId         活动任务 id
+     */
+    public void bindActiveTask(String conversationId, String taskId) {
+        chatConversationService.bindActiveTask(conversationId, taskId);
+    }
+
+    /**
      * 刷新会话最后消息时间。
      *
      * @param conversationId 会话 id
      */
     private void touch(String conversationId) {
-        ChatConversationVo existing = find(conversationId);
-        if (Objects.isNull(existing)) {
-            return;
-        }
-
-        var dto = ChatConversationConverter.INSTANCE.vo2dto(existing);
-        dto.setLastMessageTime(Moments.now());
-        chatConversationService.save(dto);
+        chatConversationService.touchLastMessage(conversationId, Moments.now());
     }
 
     /**

@@ -14,12 +14,10 @@ import java.util.Map;
  * @param tasks     近期已结束任务的回合摘要
  * @param entities  按指代匹配的会话记忆实体
  * @param artifacts 产物引用（taskId + evidenceId）
- * @param reason    生成说明
  * @author alpha
  * @since 2026/10/3
  */
-public record Prior(List<TaskRecord> tasks, Map<String, EntityEntry> entities, List<Map<String, String>> artifacts,
-                    String reason) {
+public record Prior(List<TaskRecord> tasks, Map<String, EntityEntry> entities, List<Map<String, String>> artifacts) {
 
     public Prior {
         tasks = List.copyOf(tasks);

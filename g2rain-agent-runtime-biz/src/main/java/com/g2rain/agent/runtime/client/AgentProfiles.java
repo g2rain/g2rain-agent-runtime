@@ -1,9 +1,11 @@
 package com.g2rain.agent.runtime.client;
 
 
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.studio.vo.AgentBundleVo;
 import com.g2rain.agent.studio.vo.AgentCatalogItemVo;
 import com.g2rain.agent.studio.vo.SkillDigestVo;
+import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.utils.Collections;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,23 +89,23 @@ public class AgentProfiles {
     }
 
     /**
-     * 加载能力包；无 skills 视为不可用。
+     * 加载能力包；远程失败抛依赖不可用，成功但无 skills 返回 null。
      *
      * @param agentId Agent ID
-     * @return 能力包；失败或无技能可空
+     * @return 能力包；成功但无技能为 {@code null}
      */
     public @Nullable AgentBundleVo loadCapabilityBundle(Long agentId) {
         var result = profileClient.selectCapabilityBundle(agentId);
-        // 远程失败视为未加载
+        // 远程失败：与“确实没有技能”区分，向上抛依赖不可用
         if (Objects.isNull(result) || !result.isSuccess()) {
             log.warn("[AgentProfiles] loadCapabilityBundle failed agentId={} success={}",
                 agentId, Objects.isNull(result) ? null : result.isSuccess());
-            return null;
+            throw new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "agent-studio");
         }
 
         AgentBundleVo bundle = result.getData();
         // 空技能包对 Runtime 无意义，直接当作未加载
-        if (Collections.isEmpty(bundle.getSkills())) {
+        if (Objects.isNull(bundle) || Collections.isEmpty(bundle.getSkills())) {
             return null;
         }
 
