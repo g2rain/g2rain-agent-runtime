@@ -5,7 +5,9 @@ import com.g2rain.agent.runtime.dto.ToolBlockRecordSelectDto;
 import com.g2rain.data.isolation.annotations.DataIsolation;
 import com.g2rain.data.isolation.annotations.IgnoreIsolation;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -109,4 +111,12 @@ public interface ToolBlockRecordDao {
      */
     @IgnoreIsolation
     List<ToolBlockRecordPo> selectListWithoutIsolation(ToolBlockRecordSelectDto selectDto);
+
+    /**
+     * 按任务主键集合查询拦截记录，按创建时间、主键升序。
+     *
+     * @param taskIds 任务业务标识集合；调用方保证非空
+     * @return 拦截记录列表
+     */
+    List<ToolBlockRecordPo> selectByTaskIds(@Param("taskIds") Collection<String> taskIds);
 }

@@ -89,6 +89,24 @@ public class AgentProfiles {
     }
 
     /**
+     * 拉取某 Agent 的技能短摘要；远程失败抛依赖不可用。
+     *
+     * @param agentId Agent ID
+     * @return 摘要列表；成功但无技能为空列表
+     */
+    public List<SkillDigestVo> requireSkillDigest(Long agentId) {
+        var result = profileClient.selectSkillDigest(agentId);
+        if (Objects.isNull(result) || !result.isSuccess()) {
+            log.warn("[AgentProfiles] requireSkillDigest failed agentId={} success={}",
+                agentId, Objects.isNull(result) ? null : result.isSuccess());
+            throw new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "agent-studio");
+        }
+
+        List<SkillDigestVo> digests = result.getData();
+        return Objects.isNull(digests) ? List.of() : digests;
+    }
+
+    /**
      * 加载能力包；远程失败抛依赖不可用，成功但无 skills 返回 null。
      *
      * @param agentId Agent ID

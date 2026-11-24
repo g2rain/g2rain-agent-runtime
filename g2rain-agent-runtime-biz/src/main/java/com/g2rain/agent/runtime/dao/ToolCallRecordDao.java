@@ -121,4 +121,12 @@ public interface ToolCallRecordDao {
      */
     List<ToolCallRecordPo> selectRequests(@Param("taskId") String taskId,
                                          @Param("callIds") Collection<String> callIds);
+
+    /**
+     * 按任务主键集合查询调用记录（不含响应原文），按创建时间、主键升序。
+     *
+     * @param taskIds 任务业务标识集合；调用方保证非空
+     * @return 调用记录列表
+     */
+    List<ToolCallRecordPo> selectByTaskIds(@Param("taskIds") Collection<String> taskIds);
 }

@@ -18,6 +18,7 @@ import com.g2rain.agent.runtime.support.JsonClip;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
+import com.g2rain.agent.runtime.support.tool.CapabilityFailure;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceEvent;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
@@ -344,6 +345,11 @@ public class DefaultToolInvoker implements ToolInvoker {
      * @param ex      工具调用抛出的异常
      */
     private static void logFailure(ToolInvokeRequest request, RuntimeException ex) {
+        // 能力失败已由回调侧处理（插件异常已记 ERROR）；此处不再重复打堆栈
+        if (ex instanceof CapabilityFailure) {
+            return;
+        }
+
         BusinessException business = businessOf(ex);
         if (business instanceof ToolRejectedException && ToolCallbacks.isBuiltin(request.toolCallback())) {
             return;
@@ -452,6 +458,11 @@ public class DefaultToolInvoker implements ToolInvoker {
      * @return 执行失败或拒绝观测
      */
     private Observation observationOf(ToolInvokeRequest request, RuntimeException ex) {
+        // 能力工具失败：原因与下一步原样进入失败观测
+        if (ex instanceof CapabilityFailure failure) {
+            return Observation.failed(RuntimeErrorCode.TOOL_ERROR, failure.reason(), failure.next());
+        }
+
         Throwable cause = ex;
         while (Objects.nonNull(cause)) {
             if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {

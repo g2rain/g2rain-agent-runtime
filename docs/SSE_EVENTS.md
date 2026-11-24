@@ -62,6 +62,7 @@
 | `channel` | String | 是 | 来源渠道，例如 `web`、`app` |
 | `conversationId` | String | 否 | 会话 ID。新会话不传，从返回的第一条事件中取得，之后每轮都要带上 |
 | `agentId` | Long | 否 | 指定数字员工。不传时由服务端根据内容选择 |
+| `skillKey` | String | 否 | 指定只跑这一个技能，用于调试；须同时给 `agentId`，仅开新任务时生效；继续挂起任务或回应按钮时忽略 |
 | `userInput` | String | 否 | 用户输入的文字，或点选的候选答案 |
 | `action` | String | 否 | 回应上一轮结果中的按钮时填写，取值见第 6 节；普通发言时不传 |
 | `model` | String | 否 | 本轮选用的模型名，透传给模型服务；不传时由模型服务按默认路由。每轮可不同，记录在本轮用户消息上 |
@@ -119,6 +120,7 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 | `elapsedMs` | Integer | | 有回复时 | 本轮耗时（毫秒），从服务端开始处理本次请求算起，与历史消息一致 |
 | `errorCode` | String | | 仅 `FAILED` | 失败时的业务错误码，如 `agent_runtime.40201`（模型额度不足） |
 | `traceId` | String | ✓ | ✓ | 本轮追踪号；失败时建议展示末 6 位，便于反馈问题时定位日志 |
+| `haltReason` | String | | 仅 `WAITING` | 停顿原因（检查点 `HaltReason` 名），如 `MISSING_INPUT`、`APPROVAL`；其他状态不出现 |
 
 ### 4.1 PROGRESS：执行步骤
 
@@ -133,7 +135,7 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 |---|---|---|
 | `stepId` | String | 步骤 ID；同一步骤的开始与结束共用 |
 | `parentStepId` | String | 上级步骤；顶层不出现 |
-| `stage` | String | 环节：`ROUTE` 理解问题、`PLAN` 规划、`NODE` 节点、`ROUND` 推理轮次、`MODEL` 模型调用、`TOOL` 工具调用（含完成、追问、申请确认、委派等控流动作，如"完成""委派：知识问答"）、`VERIFY` 校验结果 |
+| `stage` | String | 环节：`ROUTE` 理解问题、`PLAN` 规划、`NODE` 节点、`ROUND` 推理轮次、`MODEL` 模型调用、`TOOL` 工具调用（**每次**工具调用都推送，含内置工具；标题如「调用 查询标签」「向您追问」「申请确认」「委派：知识问答」「完成」「记录节点产出」「记录任务状态」「查阅已取得的结果」「读取会话信息」「调用工具」）、`VERIFY` 校验结果 |
 | `status` | String | `RUNNING` / `DONE` / `FAILED` |
 | `title` | String | 标题，如"调用 查询标签"、"第 2 轮" |
 | `detail` | String | 补充说明，如"成功"、"规划 2 个节点：查询文章 → 添加标签"；可能不出现 |
@@ -167,7 +169,8 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
   "conversationId": "6e96…",
   "status": "WAITING",
   "text": "确认为《G2rain 2.0 正式发布》添加标签吗？\n文章 ID：101，标签 ID：7",
-  "actions": ["CONFIRM", "REJECT", "CANCEL"]
+  "actions": ["CONFIRM", "REJECT", "CANCEL"],
+  "haltReason": "APPROVAL"
 }
 ```
 
@@ -276,7 +279,7 @@ data: {"type":"RESULT","status":"DONE","text":"目前共有 3 个标签：产品
 
 ```text
 event: RESULT
-data: {"type":"RESULT","status":"WAITING","text":"找到 2 篇标题为《发布公告》的文章，要操作哪一篇？","actions":["REPLY","CANCEL"],"suggestions":["2026-09-01 发布的","2026-10-01 发布的"]}
+data: {"type":"RESULT","status":"WAITING","text":"找到 2 篇标题为《发布公告》的文章，要操作哪一篇？","actions":["REPLY","CANCEL"],"suggestions":["2026-09-01 发布的","2026-10-01 发布的"],"haltReason":"AMBIGUOUS"}
 ```
 
 用户点击第二个选项：
@@ -291,7 +294,7 @@ data: {"type":"RESULT","status":"WAITING","text":"找到 2 篇标题为《发布
 
 ```text
 event: RESULT
-data: {"type":"RESULT","status":"WAITING","text":"确认为这篇文章添加标签吗？\n文章 ID：101，标签 ID：7","actions":["CONFIRM","REJECT","CANCEL"]}
+data: {"type":"RESULT","status":"WAITING","text":"确认为这篇文章添加标签吗？\n文章 ID：101，标签 ID：7","actions":["CONFIRM","REJECT","CANCEL"],"haltReason":"APPROVAL"}
 ```
 
 用户点击"确认"：
@@ -330,7 +333,7 @@ data: {"type":"RESULT","status":"FAILED","text":"已按你的要求放弃本次�
 
 ```text
 event: RESULT
-data: {"type":"RESULT","status":"WAITING","text":"上次的写操作结果不确定，请确认是否已经完成。","actions":["CONFIRM","REJECT"]}
+data: {"type":"RESULT","status":"WAITING","text":"上次的写操作结果不确定，请确认是否已经完成。","actions":["CONFIRM","REJECT"],"haltReason":"VERIFY"}
 ```
 
 - 点击"已生效"：`{"action":"CONFIRM"}`，服务端视为已完成，不会重复执行。

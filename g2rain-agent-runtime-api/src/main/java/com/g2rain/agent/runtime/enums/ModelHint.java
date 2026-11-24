@@ -52,6 +52,7 @@ public enum ModelHint {
     BUSINESS_FAILED("model.business.failed", "业务失败，业务系统返回：{message}"),
     BUSINESS_FAILED_CODE("model.business.failed_code", "业务失败 [{code}]，业务系统返回：{message}"),
     MCP_TOOL_FAILED("model.mcp.failed", "工具执行出错，工具返回：{message}"),
+    CAPABILITY_FAILED("model.capability.failed", "能力工具执行出错"),
 
     NEXT_FIX_ARGS("model.next.fix_args", "按工具参数说明修正入参后再调用"),
     MALFORMED_CALL("model.malformed_call", "上一轮没有形成有效的工具调用：工具调用被写进了正文，或调用了当前不可用的工具。只能调用本轮工具列表中的工具，并用原生工具调用发起，不要在正文中书写调用。"),
@@ -74,6 +75,7 @@ public enum ModelHint {
     NEXT_APPROVED_FAILED("model.next.approved_failed", "用户已批准的写操作执行失败：用 builtin_node_follow_up 向用户说明失败原因并询问如何处理（如修改后重试或放弃）；用户不再继续时调用 builtin_node_fail 说明原因；不要自行改用其它写操作补救"),
     NEXT_WAIT_WRITE("model.next.wait_write", "不要重复调用该写工具；先用查询工具确认结果，无法确认时调用 builtin_node_fail 说明原因"),
     NEXT_BUSINESS("model.next.business", "根据失败原因修正参数后再调用；无法修正时调用 builtin_node_follow_up 询问用户，或调用 builtin_node_fail 说明原因"),
+    NEXT_CAPABILITY_FALLBACK("model.next.capability_fallback", "换一种方式或说明无法完成"),
     NEXT_RETRY("model.next.retry", "可再调用一次；仍失败则调用 builtin_node_fail 说明原因"),
     NEXT_TIMEOUT("model.next.timeout", "写操作不要重复调用，先用查询工具确认是否已生效；读操作可再调用一次；仍失败则调用 builtin_node_fail 说明原因"),
     NEXT_OUTPUT_KEY("model.next.output_key", "key 只能取契约声明的产出：{keys}"),

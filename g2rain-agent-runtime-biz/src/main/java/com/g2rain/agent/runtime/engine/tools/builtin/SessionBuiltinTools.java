@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.tools.builtin;
 
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
@@ -39,7 +40,7 @@ public class SessionBuiltinTools implements BuiltinTools {
             查看当前会话与节点状态
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.SESSION, action = BuiltinToolAction.READ)
+    @BuiltinToolKind(category = BuiltinToolCategory.SESSION, action = BuiltinToolAction.READ, step = RuntimeMessage.STEP_SESSION)
     public SessionInfo info(ToolContext toolContext) {
         // 只读现场，不写控流或任务记忆
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);

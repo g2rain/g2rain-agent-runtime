@@ -20,6 +20,7 @@ import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
@@ -103,7 +104,7 @@ public class NodeBuiltinTools implements BuiltinTools {
             写入本节点一条 output，必须带来源
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.OUTPUT)
+    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.OUTPUT, step = RuntimeMessage.STEP_OUTPUT)
     public KeyResult outputSet(@ToolParam(description = "output 键") String key,
                                @ToolParam(description = "值") JsonNode value,
                                @ToolParam(description = "来源类型") String sourceType,
@@ -172,7 +173,7 @@ public class NodeBuiltinTools implements BuiltinTools {
             写入本节点私有便签
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.WRITE)
+    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.WRITE, step = RuntimeMessage.STEP_STATE)
     public KeyResult stateSet(@ToolParam(description = "便签键") String key,
                               @ToolParam(description = "值") JsonNode value,
                               ToolContext toolContext) {
@@ -205,7 +206,7 @@ public class NodeBuiltinTools implements BuiltinTools {
             按 evidenceId 读取证据报文；只能读取本节点及上游节点的证据
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.READ)
+    @BuiltinToolKind(category = BuiltinToolCategory.NODE, action = BuiltinToolAction.READ, step = RuntimeMessage.STEP_EVIDENCE)
     public JsonNode evidenceGet(@ToolParam(description = "证据 id") String evidenceId, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         if (Strings.isBlank(evidenceId)) {

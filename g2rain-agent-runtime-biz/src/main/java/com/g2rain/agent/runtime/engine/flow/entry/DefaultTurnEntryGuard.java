@@ -12,11 +12,15 @@ import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
 import com.g2rain.agent.runtime.engine.TurnContext;
 import com.g2rain.agent.runtime.engine.TurnRequest;
+import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import com.g2rain.agent.runtime.support.trace.TraceStage;
 import com.g2rain.agent.studio.enums.ResourceStatus;
 import com.g2rain.agent.studio.vo.AgentCatalogItemVo;
+import com.g2rain.agent.studio.vo.SkillDigestVo;
+import com.g2rain.common.exception.BusinessException;
+import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Strings;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
@@ -70,6 +74,7 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             return agentReject;
         }
 
+        String skillKey = request.getSkillKey();
         String taskId = turn.conversation().activeTaskId();
         ResumeAction requested = request.getAction();
         // 带了确认/拒绝/取消，但现场没有可恢复断点：直接拒回，避免空跑协议
@@ -79,12 +84,12 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         if (Strings.isBlank(taskId) || turn.task().isEmpty()) {
-            return EntryResult.accept(agentId);
+            return acceptOpening(agentId, skillKey);
         }
 
         TaskMetadata metadata = turn.task().orElseThrow();
         if (!isSuspended(metadata, turn)) {
-            return EntryResult.accept(agentId);
+            return acceptOpening(agentId, skillKey);
         }
 
         TaskCheckpoint checkpoint = turn.checkpoint().orElse(null);
@@ -96,12 +101,13 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         Long boundAgentId = metadata.getAgentId();
         // 请求 Agent 与挂起任务绑定不一致：换人而不是在旧 Agent 上续跑
         if (Objects.nonNull(agentId) && Objects.nonNull(boundAgentId) && !Objects.equals(agentId, boundAgentId)) {
+            validateForcedSkill(agentId, skillKey);
             return EntryResult.switchAgent(agentId, focusNodeId, checkpoint);
         }
 
         // 审批过期：不强制续跑，交给后续意图分类重新确认
         if (approvalExpired(metadata, checkpoint)) {
-            return EntryResult.accept(agentId);
+            return acceptOpening(agentId, skillKey);
         }
 
         if (Objects.isNull(request.getAction())) {
@@ -109,13 +115,13 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             ResumeAction implied = resolveAction(null, checkpoint);
             if (Objects.nonNull(implied)) {
                 return answersFollowUp(implied, checkpoint, request.getUserInput())
-                    ? EntryResult.accept(agentId)
+                    ? acceptOpening(agentId, skillKey)
                     : EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, implied);
             }
 
             // 审批与回查没有安全默认动作：有文字交给意图判断，无文字要求显式选择
             if (Strings.isNotBlank(request.getUserInput())) {
-                return EntryResult.accept(agentId);
+                return acceptOpening(agentId, skillKey);
             }
 
             return EntryResult.reject(new RejectedReply(conversationId, taskId, RuntimeMessage.ACTION_MISSING.text()));
@@ -132,10 +138,22 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         if (answersFollowUp(action, checkpoint, request.getUserInput())) {
-            return EntryResult.accept(agentId);
+            return acceptOpening(agentId, skillKey);
         }
 
         return EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, action);
+    }
+
+    /**
+     * 可能开新任务的受理：先校验指定技能，再返回受理结论。
+     *
+     * @param agentId  显式 Agent id；可空
+     * @param skillKey 指定技能键；可空
+     * @return 受理结论
+     */
+    private EntryResult acceptOpening(@Nullable Long agentId, @Nullable String skillKey) {
+        validateForcedSkill(agentId, skillKey);
+        return EntryResult.accept(agentId);
     }
 
     /**
@@ -239,6 +257,33 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         return null;
+    }
+
+    /**
+     * 校验指定技能：须同时给出 Agent，且技能属于该数字员工的启用技能。
+     *
+     * <p>空白 {@code skillKey} 跳过。只在可能开新任务的受理路径调用；续跑挂起任务时不调用。</p>
+     *
+     * @param agentId  显式 Agent id；可空
+     * @param skillKey 指定技能键；可空
+     */
+    private void validateForcedSkill(@Nullable Long agentId, @Nullable String skillKey) {
+        if (Strings.isBlank(skillKey)) {
+            return;
+        }
+
+        if (Objects.isNull(agentId)) {
+            throw new BusinessException(SystemErrorCode.PARAM_REQUIRED, "agentId");
+        }
+
+        String key = skillKey.trim();
+        for (SkillDigestVo digest : agentProfiles.requireSkillDigest(agentId)) {
+            if (key.equals(Strings.blankToNull(digest.getSkillKey()))) {
+                return;
+            }
+        }
+
+        throw new BusinessException(RuntimeErrorCode.SKILL_NOT_OF_AGENT, key);
     }
 
     /**

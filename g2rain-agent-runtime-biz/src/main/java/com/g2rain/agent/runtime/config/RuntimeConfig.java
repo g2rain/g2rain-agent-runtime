@@ -1,8 +1,12 @@
 package com.g2rain.agent.runtime.config;
 
 
+import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
+import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
+import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallbackProvider;
 import com.g2rain.agent.runtime.support.tool.BuiltinTools;
+import com.g2rain.agent.runtime.support.tool.CapabilityRegistry;
 import com.g2rain.agent.runtime.support.trace.Trace;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,5 +44,20 @@ public class RuntimeConfig {
     BuiltinToolCallbackProvider builtinToolCallbackProvider(List<BuiltinTools> tools) {
         // 扫描全部 BuiltinTools Bean，装饰为带 category/action 的 ToolCallback
         return new BuiltinToolCallbackProvider(tools);
+    }
+
+    /**
+     * 收集能力工具 Bean 并校验名称；可为空列表。
+     *
+     * @param capabilities   能力实现
+     * @param builtinTools   内置工具（用于同名冲突）
+     * @param evidenceReader 证据读取器
+     * @param stateFacade    状态门面
+     * @return 能力注册表
+     */
+    @Bean
+    CapabilityRegistry capabilityRegistry(List<Capability> capabilities, BuiltinToolCallbackProvider builtinTools,
+                                          EvidenceReader evidenceReader, RuntimeStateFacade stateFacade) {
+        return new CapabilityRegistry(capabilities, builtinTools, evidenceReader, stateFacade);
     }
 }

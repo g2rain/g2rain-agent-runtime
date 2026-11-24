@@ -5,7 +5,9 @@ import com.g2rain.agent.runtime.dto.TaskGraphNodeSelectDto;
 import com.g2rain.data.isolation.annotations.DataIsolation;
 import com.g2rain.data.isolation.annotations.IgnoreIsolation;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -109,4 +111,12 @@ public interface TaskGraphNodeDao {
      */
     @IgnoreIsolation
     List<TaskGraphNodePo> selectListWithoutIsolation(TaskGraphNodeSelectDto selectDto);
+
+    /**
+     * 按任务主键集合查询节点，按创建时间升序。
+     *
+     * @param taskIds 任务业务标识集合；调用方保证非空
+     * @return 节点列表
+     */
+    List<TaskGraphNodePo> selectByTaskIds(@Param("taskIds") Collection<String> taskIds);
 }

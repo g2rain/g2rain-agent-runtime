@@ -10,6 +10,7 @@ import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.mcp.McpToolCallbackProvider;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallbackProvider;
+import com.g2rain.agent.runtime.support.tool.CapabilityRegistry;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
@@ -27,7 +28,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * 节点工具集：按节点筛选内置工具，并挂载技能声明的 MCP 工具。
+ * 节点工具集：按节点筛选内置工具，挂载能力工具与技能声明的 MCP 工具。
  *
  * @author alpha
  * @since 2026/10/12
@@ -43,6 +44,11 @@ public class NodeToolset {
     private final BuiltinToolCallbackProvider builtinTools;
 
     /**
+     * 能力工具注册表；无插件时为空。
+     */
+    private final CapabilityRegistry capabilityRegistry;
+
+    /**
      * MCP 同步客户端：按技能声明装配外部工具。
      */
     private final McpSyncClient mcpSyncClient;
@@ -53,20 +59,23 @@ public class NodeToolset {
     private final RuntimeProperties runtimeProperties;
 
     /**
-     * 组装本节点可用工具：内置工具 + 技能声明的 MCP 工具。
+     * 组装本节点可用工具：内置工具 + 能力工具 + 技能声明的 MCP 工具。
      *
      * <p>业务 MCP 按 {@code skill.toolNames()} 挂载；内置控流按需提供（委派、写产出、跳过）。
-     * 节点完成目标（target）只供完成判定锚定，不收窄可见工具。
+     * 能力工具对所有节点可见。节点完成目标（target）只供完成判定锚定，不收窄可见工具。
      *
      * @param node  当前节点
      * @param frame 当前图执行帧
-     * @return 内置工具加技能 MCP 工具；无技能时仅内置
+     * @return 内置、能力与技能 MCP 工具；无技能时为内置加能力
      */
     public List<ToolCallback> of(TaskNode node, GraphFrame frame) {
         // 内置工具只给本节点用得上的：没有可委派技能不给委派，产出无人使用不给写产出
         List<ToolCallback> result = Arrays.stream(builtinTools.getToolCallbacks())
             .filter(tool -> offers(tool, node, frame))
             .collect(Collectors.toCollection(ArrayList::new));
+
+        // 能力工具在内置之后、业务工具之前，对所有节点可见
+        result.addAll(capabilityRegistry.callbacks());
 
         String sk = node.getSkillKey();
         if (Strings.isBlank(sk)) {

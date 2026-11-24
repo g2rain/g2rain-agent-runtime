@@ -143,7 +143,7 @@ public class DefaultPlanner implements Planner {
         }
 
         String goal = goalOf(task, ctx);
-        List<SkillItem> candidates = skillSelector.select(ctx, allSkills, goal);
+        List<SkillItem> candidates = resolveCandidates(ctx, allSkills, goal);
         // 筛不出候选宁可失败，也不把全量技能硬画进图
         if (Collections.isEmpty(candidates)) {
             Trace.at(TraceStage.PLAN, "failed").kv("reason", FailReason.NO_CANDIDATE).kv("skillCount", allSkills.size()).error();
@@ -204,6 +204,30 @@ public class DefaultPlanner implements Planner {
             .kv("skills", graph.getNodes().stream().map(TaskNode::getSkillKey).toList())
             .kv("firstReady", focusNodeId)
             .info();
+    }
+
+    /**
+     * 解析本轮候选技能：请求指定技能时跳过筛选，候选只有该技能；否则走技能筛选。
+     *
+     * @param ctx       本轮上下文
+     * @param allSkills 已装载技能短目录
+     * @param goal      规划目标
+     * @return 候选技能；指定技能不在目录中时为空列表
+     */
+    private List<SkillItem> resolveCandidates(TurnContext ctx, List<SkillItem> allSkills, String goal) {
+        String forcedKey = Strings.blankToNull(ctx.getRequest().getSkillKey());
+        if (Objects.isNull(forcedKey)) {
+            return skillSelector.select(ctx, allSkills, goal);
+        }
+
+        Trace.at(TraceStage.PLAN, "forced_skill").kv("skillKey", forcedKey).info();
+        for (SkillItem item : allSkills) {
+            if (forcedKey.equals(item.skillKey())) {
+                return List.of(item);
+            }
+        }
+
+        return List.of();
     }
 
     /**

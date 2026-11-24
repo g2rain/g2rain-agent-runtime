@@ -2,19 +2,21 @@ package com.g2rain.agent.runtime.engine.tools;
 
 
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
-import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.event.StepEvents;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
+import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spi.Notice;
+import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.mcp.McpToolCallback;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
+import com.g2rain.agent.runtime.support.tool.CapabilityToolCallback;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
@@ -32,8 +34,8 @@ import java.util.Objects;
 /**
  * 工具调用的执行步骤：开始时开启 TOOL 步骤，结束时按观测结果收尾。
  *
- * <p>内置工具只记 {@link BuiltinToolAction#step()} 声明了标题的动作（完成、失败、追问、申请确认、委派），
- * 记账类动作不记。业务工具标题优先契约 label，其次 MCP title，都没有时用通用的「调用工具」，
+ * <p>每次工具调用（含内置工具）都推送步骤。内置工具标题取自注解配置的 {@link RuntimeMessage}；
+ * 委派标题带目标技能名。业务工具标题优先契约 label，其次 MCP title，都没有时用通用的「调用工具」，
  * 不把内部工具名透给客户端；参数摘要只进排查信息。</p>
  *
  * @author alpha
@@ -64,15 +66,14 @@ public class ToolEvents {
     private final StepEvents stepEvents;
 
     /**
-     * 开启工具步骤；不展示的内置工具不记。
+     * 开启工具步骤；内置与业务工具一律推送。
      *
      * @param request 本次工具请求
-     * @return 步骤标识；不展示的内置工具或未绑定本轮时为空
+     * @return 步骤标识；未绑定本轮时由 {@link StepEvents} 决定是否为空
      */
     public @Nullable String started(ToolInvokeRequest request) {
         if (request.toolCallback() instanceof BuiltinToolCallback builtin) {
-            String title = builtinTitleOf(builtin.action(), request);
-            return Objects.isNull(title) ? null : stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(),
+            return stepEvents.start(StepStage.TOOL, builtinTitleOf(builtin, request), request.context().getNodeId(),
                 request.context().scope().rounds());
         }
 
@@ -97,6 +98,19 @@ public class ToolEvents {
         Map<String, Object> extra = new LinkedHashMap<>();
         if (Strings.isNotBlank(args)) {
             extra.put("args", argsValue(args));
+        }
+
+        // 能力工具：按观测结论标成功或失败，不走内置「只记完成」
+        if (ToolCallbacks.is(request.toolCallback(), BuiltinToolAction.CAPABILITY)) {
+            if (observation.outcome() == Outcome.SUCCESS) {
+                stepEvents.done(stepId, RuntimeMessage.STEP_TOOL_OK.text(), extra);
+                return;
+            }
+
+            extra.put("error", observation.message());
+            String errorCode = Objects.isNull(observation.errorCode()) ? null : observation.errorCode().code();
+            stepEvents.fail(stepId, observation.text(), errorCode, extra);
+            return;
         }
 
         // 内置工具：完成被门槛拒绝记为失败并带原因，其余只记完成，不加"成功"说明
@@ -128,19 +142,19 @@ public class ToolEvents {
     }
 
     /**
-     * 内置工具的步骤标题：动作未声明标题时为空；委派带上目标技能名。
+     * 内置工具的步骤标题：取回调上的文案；委派带上目标技能名。
      *
-     * @param action  内置工具动作；可空
+     * @param builtin 内置工具回调
      * @param request 本次工具请求
-     * @return 步骤标题；不展示时为空
+     * @return 步骤标题
      */
-    private static @Nullable String builtinTitleOf(@Nullable BuiltinToolAction action, ToolInvokeRequest request) {
-        RuntimeMessage step = Objects.isNull(action) ? null : action.step();
-        if (Objects.isNull(step)) {
-            return null;
+    private static String builtinTitleOf(BuiltinToolCallback builtin, ToolInvokeRequest request) {
+        RuntimeMessage step = builtin.step();
+        if (builtin.action() == BuiltinToolAction.CAPABILITY) {
+            return step.text("name", capabilityLabel(builtin));
         }
 
-        if (action != BuiltinToolAction.DELEGATE) {
+        if (builtin.action() != BuiltinToolAction.DELEGATE) {
             return step.text();
         }
 
@@ -148,10 +162,24 @@ public class ToolEvents {
     }
 
     /**
+     * 能力工具展示名：取 {@link CapabilityToolCallback} 在请求语言下的 label，缺省 {@code zh-CN}。
+     *
+     * @param builtin 装饰后的能力回调
+     * @return 展示名
+     */
+    private static String capabilityLabel(BuiltinToolCallback builtin) {
+        if (builtin.delegate() instanceof CapabilityToolCallback capability) {
+            return capability.label(RequestLocale.tag());
+        }
+
+        return builtin.getToolDefinition().name();
+    }
+
+    /**
      * 委派目标技能的标题：按入参技能键在本节点可见技能中查找，找不到时用技能键。
      *
-     * @param ctx       节点执行现场
-     * @param args      委派工具入参
+     * @param ctx  节点执行现场
+     * @param args 委派工具入参
      * @return 技能标题；入参不可读时为空串
      */
     private static String skillTitleOf(ToolExecutionContext ctx, JsonNode args) {
@@ -161,11 +189,13 @@ public class ToolEvents {
             return "";
         }
 
-        return ctx.getSkills().stream()
-            .filter(skill -> skillKey.equals(skill.skillKey()))
-            .map(Skill::title)
-            .findFirst()
-            .orElse(skillKey);
+        for (Skill skill : ctx.getSkills()) {
+            if (skillKey.equals(skill.skillKey())) {
+                return skill.title();
+            }
+        }
+
+        return skillKey;
     }
 
     /**

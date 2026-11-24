@@ -5,6 +5,7 @@ import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.progress.StepView;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
+import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -34,7 +35,7 @@ public final class TurnEvents {
      */
     public static TurnEvent progress(TurnScope turn, StepView step) {
         return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), null, null,
-            List.of(), List.of(), null, null, null, step, turn.traceId());
+            List.of(), List.of(), null, null, null, step, turn.traceId(), null);
     }
 
     /**
@@ -46,11 +47,11 @@ public final class TurnEvents {
      */
     public static TurnEvent title(TurnScope turn, String title) {
         return new TurnEvent(TurnEventType.TITLE, turn.conversation().conversationId(), title, null,
-            List.of(), List.of(), null, null, null, null, turn.traceId());
+            List.of(), List.of(), null, null, null, null, turn.traceId(), null);
     }
 
     /**
-     * 本轮结果帧；只有 WAITING 才带动作，时间与耗时取自本轮最终回复。
+     * 本轮结果帧；只有 WAITING 才带动作与停顿原因，时间与耗时取自本轮最终回复。
      *
      * @param turn        本轮
      * @param status      本轮结果状态；空按 FAILED
@@ -71,7 +72,7 @@ public final class TurnEvents {
             Objects.isNull(reply) ? null : reply.getCreatedAt(),
             Objects.isNull(reply) ? null : reply.getElapsedMs(),
             outward == TurnStatus.FAILED ? errorCode : null,
-            null, turn.traceId());
+            null, turn.traceId(), haltReason(turn, outward));
     }
 
     /**
@@ -84,7 +85,26 @@ public final class TurnEvents {
      */
     public static TurnEvent failed(String traceId, String conversationId, String text) {
         return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(),
-            null, null, null, null, traceId);
+            null, null, null, null, traceId, null);
+    }
+
+    /**
+     * WAITING 时从当前检查点取停顿原因名；其他状态不写。
+     *
+     * @param turn    本轮
+     * @param outward 对外状态
+     * @return 停顿原因名；非 WAITING 或无检查点为空
+     */
+    private static @Nullable String haltReason(TurnScope turn, TurnStatus outward) {
+        if (outward != TurnStatus.WAITING) {
+            return null;
+        }
+        TaskCheckpoint checkpoint = turn.checkpoint().orElse(null);
+        if (Objects.isNull(checkpoint)) {
+            return null;
+        }
+
+        return checkpoint.getHaltReason().name();
     }
 
     /**

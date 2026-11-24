@@ -37,5 +37,12 @@ public enum BuiltinToolCategory {
      * <p>
      * 读写节点侧任务记忆：写产出、读证据摘要等。
      */
-    NODE
+    NODE,
+
+    /**
+     * 能力工具
+     * <p>
+     * 插件提供的通用工具，对所有节点可见。
+     */
+    CAPABILITY
 }

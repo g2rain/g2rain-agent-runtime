@@ -276,6 +276,8 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     SKILL_UNAVAILABLE("agent_runtime.42259", "技能不可用：{0:skillKey}"),
 
+    SKILL_NOT_OF_AGENT("agent_runtime.42260", "指定的技能不属于该数字员工：{0:skillKey}"),
+
     GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 
     /**

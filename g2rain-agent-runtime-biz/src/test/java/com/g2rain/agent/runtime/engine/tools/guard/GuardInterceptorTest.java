@@ -21,6 +21,7 @@ import com.g2rain.agent.runtime.spi.Fact;
 import com.g2rain.agent.runtime.spi.GuardVerdict;
 import com.g2rain.agent.runtime.spi.Notice;
 import com.g2rain.agent.runtime.spi.ToolGuard;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
@@ -79,7 +80,7 @@ class GuardInterceptorTest {
         ToolCallback delegate = mock(ToolCallback.class);
         ToolInvokeRequest request = mock(ToolInvokeRequest.class);
         when(request.toolCallback()).thenReturn(new BuiltinToolCallback(delegate, BuiltinToolCategory.CONTROL,
-            BuiltinToolAction.FINISH));
+            BuiltinToolAction.FINISH, RuntimeMessage.STEP_FINISH));
 
         assertTrue(interceptor.before(request).isEmpty());
         verify(guard, never()).check(any());

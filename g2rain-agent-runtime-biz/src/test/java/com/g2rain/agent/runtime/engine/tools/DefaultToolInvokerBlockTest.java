@@ -10,6 +10,7 @@ import com.g2rain.agent.runtime.domain.state.TurnScope;
 import com.g2rain.agent.runtime.dto.ToolBlockRecordDto;
 import com.g2rain.agent.runtime.engine.state.repo.BlockRepository;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCallback;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
@@ -80,7 +81,7 @@ class DefaultToolInvokerBlockTest {
         when(request.context()).thenReturn(context);
         when(request.toolName()).thenReturn("builtin_node_finish");
         when(request.toolCallback()).thenReturn(new BuiltinToolCallback(delegate, BuiltinToolCategory.CONTROL,
-            BuiltinToolAction.FINISH));
+            BuiltinToolAction.FINISH, RuntimeMessage.STEP_FINISH));
         when(context.claimTarget(any())).thenReturn(false);
 
         Observation obs = invoker.invoke(request);

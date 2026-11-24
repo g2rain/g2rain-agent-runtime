@@ -4,6 +4,7 @@ package com.g2rain.agent.runtime.engine;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -44,6 +45,14 @@ public final class TurnRequest {
     @Nullable
     @Schema(description = "显式指定的 Agent 主键；为空则由路由决策", example = "1001")
     private Long agentId;
+
+    /**
+     * 指定只跑这一个技能，用于调试；须同时给 {@link #agentId}，仅开新任务时生效。
+     */
+    @Nullable
+    @Size(max = 128)
+    @Schema(description = "指定只跑这一个技能，用于调试；须同时给 agentId，仅开新任务时生效", example = "cms.article.lifecycle")
+    private String skillKey;
 
     /**
      * 本轮选用的模型名；为空时由模型服务按默认路由。

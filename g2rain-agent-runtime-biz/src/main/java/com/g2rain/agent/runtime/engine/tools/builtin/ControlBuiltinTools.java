@@ -22,6 +22,7 @@ import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.enums.ModelHint;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolCategory;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolKind;
@@ -88,7 +89,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             """
     )
     @SuppressWarnings("UnusedReturnValue")
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.ASK)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.ASK, step = RuntimeMessage.STEP_ASK)
     public NodeActionResult followUp(@ToolParam(description = "追问文案") String question,
                                      @ToolParam(required = false, description = "待补参数名") @Nullable List<String> expectedFields,
                                      @ToolParam(required = false, description = "快捷气泡建议") @Nullable List<String> suggestions,
@@ -127,7 +128,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             写工具被拦下要求确认后调用: 请求用户批准该次调用, 节点挂起, 人确认后 Runtime 派发
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.APPROVAL)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.APPROVAL, step = RuntimeMessage.STEP_APPROVAL)
     public NodeActionResult approval(@ToolParam(description = "给人看的摘要") String summary,
                                      @ToolParam(description = "被拦下的写工具名") String toolName,
                                      ToolContext toolContext) {
@@ -158,7 +159,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             委派前置步骤：插入前置节点先执行，当前步骤进入等待，前置完成后唤醒继续
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.DELEGATE)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.DELEGATE, step = RuntimeMessage.STEP_DELEGATE)
     public NodeActionResult delegate(@ToolParam(description = "前置步骤技能键") String skillKey,
                                      @ToolParam(required = false, description = "前置步骤说明") @Nullable String objective,
                                      ToolContext toolContext) {
@@ -184,7 +185,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             本节点完成, 结束本节点循环。output 必须是给用户看的结论（查询写清有哪些或没有），禁止空。
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FINISH)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FINISH, step = RuntimeMessage.STEP_FINISH)
     public NodeActionResult finish(@ToolParam(description = "节点正式产出") String output, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         HaltResolver.requireNoLookup(ctx);
@@ -209,7 +210,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             查询结果表明本节点的写操作不需要执行（如对象已存在）时调用: 结束本节点循环并标记跳过。reason 写明依据。
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.SKIP)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.SKIP, step = RuntimeMessage.STEP_SKIP)
     public NodeActionResult skip(@ToolParam(description = "不需要执行的原因") String reason, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         reason = RuntimeUtils.unescapeLiteral(reason);
@@ -237,7 +238,7 @@ public class ControlBuiltinTools implements BuiltinTools {
             本节点失败: 结束本节点循环并标记失败
             """
     )
-    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FAIL)
+    @BuiltinToolKind(category = BuiltinToolCategory.CONTROL, action = BuiltinToolAction.FAIL, step = RuntimeMessage.STEP_FAIL)
     public NodeActionResult fail(@ToolParam(description = "失败原因") String reason, ToolContext toolContext) {
         ToolExecutionContext ctx = ToolExecutionContexts.requireSpring(toolContext);
         reason = RuntimeUtils.unescapeLiteral(reason);

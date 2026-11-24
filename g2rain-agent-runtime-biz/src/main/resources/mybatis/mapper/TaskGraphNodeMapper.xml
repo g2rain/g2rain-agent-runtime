@@ -478,4 +478,21 @@
     <select id="selectListWithoutIsolation" parameterType="com.g2rain.agent.runtime.dto.TaskGraphNodeSelectDto" resultMap="BaseResultMap">
         <include refid="selectListBody"/>
     </select>
+
+    <!-- 按任务主键集合查节点（轨迹只读） -->
+    <select id="selectByTaskIds" resultMap="BaseResultMap">
+        SELECT
+        id,
+        create_time, update_time,
+        organ_id, task_id, node_id, title, objective, skill_key, target, target_claimed, provider_inserted, delegate_depth, status, result, error_code, error_message, started_time, finished_time, state,
+        delete_flag,
+        version
+        FROM task_graph_node
+        WHERE task_id IN
+        <foreach collection="taskIds" item="item" open="(" separator="," close=")">
+            #{item, jdbcType=VARCHAR}
+        </foreach>
+        AND (delete_flag = 0 OR delete_flag IS NULL)
+        ORDER BY create_time ASC, id ASC
+    </select>
 </mapper>
