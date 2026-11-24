@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.ChatConversationDto;
 import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class ChatConversationController implements ChatConversationApi {
     private ChatConversationService chatConversationService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<ChatConversationVo>> selectList(ChatConversationSelectDto selectDto) {
         return Result.success(chatConversationService.selectSummaryList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<ChatConversationVo>> selectPage(PageSelectListDto<ChatConversationSelectDto> selectDto) {
         return Result.successPage(chatConversationService.selectSummaryPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新聊天会话表信息", description = "新增或更新聊天会话表基础信息")
     public Result<Long> save(@RequestBody ChatConversationDto dto) {
         return Result.success(chatConversationService.save(dto));

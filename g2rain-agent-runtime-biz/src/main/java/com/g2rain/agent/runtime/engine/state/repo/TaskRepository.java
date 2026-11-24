@@ -109,7 +109,7 @@ public class TaskRepository {
             }
             metadata.setTraceId(vo.getTraceId());
             metadata.setSourceMessageId(vo.getSourceMessageId());
-            metadata.setSkillVersions(parseSkillVersions(vo.getSkillVersions()));
+            metadata.setSpecPins(parseSpecPins(vo.getSpecPins()));
             return metadata;
         } catch (Exception e) {
             log.warn("[TaskRepository] loadMetadata failed taskId={}", taskId, e);
@@ -350,8 +350,8 @@ public class TaskRepository {
         dto.setPrior(Objects.isNull(prior) ? null : RepoSupport.toJson(prior));
         dto.setTaskRecord(RepoSupport.toJson(record));
         // 空 map 写 null，与列默认一致
-        dto.setSkillVersions(Collections.isEmpty(metadata.getSkillVersions())
-            ? null : RepoSupport.toJson(metadata.getSkillVersions()));
+        dto.setSpecPins(Collections.isEmpty(metadata.getSpecPins())
+            ? null : RepoSupport.toJson(metadata.getSpecPins()));
         if (Objects.nonNull(metadata.getSuspendedAt())) {
             dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
         }
@@ -436,12 +436,12 @@ public class TaskRepository {
     }
 
     /**
-     * 解析 {@code skill_versions} JSON 为技能键 → pin。
+     * 解析 {@code spec_pins} JSON 为技能键 → 动作语义版本标记。
      *
      * @param json JSON 对象文本；可空
      * @return 可写 map；空白为空 map
      */
-    private static Map<String, String> parseSkillVersions(@Nullable String json) {
+    private static Map<String, String> parseSpecPins(@Nullable String json) {
         if (Strings.isBlank(json)) {
             return new LinkedHashMap<>();
         }

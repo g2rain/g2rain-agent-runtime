@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.ToolBlockRecordDto;
 import com.g2rain.agent.runtime.dto.ToolBlockRecordSelectDto;
 import com.g2rain.agent.runtime.service.ToolBlockRecordService;
 import com.g2rain.agent.runtime.vo.ToolBlockRecordVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class ToolBlockRecordController implements ToolBlockRecordApi {
     private ToolBlockRecordService toolBlockRecordService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<ToolBlockRecordVo>> selectList(ToolBlockRecordSelectDto selectDto) {
         return Result.success(toolBlockRecordService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<ToolBlockRecordVo>> selectPage(PageSelectListDto<ToolBlockRecordSelectDto> selectDto) {
         return Result.successPage(toolBlockRecordService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新工具调用拦截记录表信息", description = "新增或更新工具调用拦截记录表基础信息")
     public Result<Long> save(@RequestBody ToolBlockRecordDto dto) {
         return Result.success(toolBlockRecordService.save(dto));

@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskGraphEdgeDto;
 import com.g2rain.agent.runtime.dto.TaskGraphEdgeSelectDto;
 import com.g2rain.agent.runtime.service.TaskGraphEdgeService;
 import com.g2rain.agent.runtime.vo.TaskGraphEdgeVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class TaskGraphEdgeController implements TaskGraphEdgeApi {
     private TaskGraphEdgeService taskGraphEdgeService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskGraphEdgeVo>> selectList(TaskGraphEdgeSelectDto selectDto) {
         return Result.success(taskGraphEdgeService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskGraphEdgeVo>> selectPage(PageSelectListDto<TaskGraphEdgeSelectDto> selectDto) {
         return Result.successPage(taskGraphEdgeService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新任务图依赖边表信息", description = "新增或更新任务图依赖边表基础信息")
     public Result<Long> save(@RequestBody TaskGraphEdgeDto dto) {
         return Result.success(taskGraphEdgeService.save(dto));

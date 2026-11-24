@@ -130,11 +130,11 @@ public class TaskInstanceDto extends BaseDto {
     private Long stateVersion;
 
     /**
-     * 开跑时固定的 skill 版本
+     * 开任务时锁定的动作语义版本标记（技能键 → 版本标记）
      */
     @Size(max = 1073741824)
-    @Schema(description = "开跑时固定的 skill 版本", maxLength = 1073741824)
-    private String skillVersions;
+    @Schema(description = "开任务时锁定的动作语义版本标记（技能键 → 版本标记）", maxLength = 1073741824)
+    private String specPins;
 
     /**
      * 任务级共享值

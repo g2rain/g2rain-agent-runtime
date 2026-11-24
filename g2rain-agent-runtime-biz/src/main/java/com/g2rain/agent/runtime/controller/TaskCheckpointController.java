@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskCheckpointDto;
 import com.g2rain.agent.runtime.dto.TaskCheckpointSelectDto;
 import com.g2rain.agent.runtime.service.TaskCheckpointService;
 import com.g2rain.agent.runtime.vo.TaskCheckpointVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class TaskCheckpointController implements TaskCheckpointApi {
     private TaskCheckpointService taskCheckpointService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskCheckpointVo>> selectList(TaskCheckpointSelectDto selectDto) {
         return Result.success(taskCheckpointService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskCheckpointVo>> selectPage(PageSelectListDto<TaskCheckpointSelectDto> selectDto) {
         return Result.successPage(taskCheckpointService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新任务检查点表信息", description = "新增或更新任务检查点表基础信息")
     public Result<Long> save(@RequestBody TaskCheckpointDto dto) {
         return Result.success(taskCheckpointService.save(dto));

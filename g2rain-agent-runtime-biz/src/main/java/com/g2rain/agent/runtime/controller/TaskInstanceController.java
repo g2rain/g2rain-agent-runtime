@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskInstanceDto;
 import com.g2rain.agent.runtime.dto.TaskInstanceSelectDto;
 import com.g2rain.agent.runtime.service.TaskInstanceService;
 import com.g2rain.agent.runtime.vo.TaskInstanceVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -35,11 +36,13 @@ public class TaskInstanceController implements TaskInstanceApi {
     private TaskInstanceService taskInstanceService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskInstanceVo>> selectList(TaskInstanceSelectDto selectDto) {
         return Result.success(taskInstanceService.selectSummaryList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskInstanceVo>> selectPage(PageSelectListDto<TaskInstanceSelectDto> selectDto) {
         return Result.successPage(taskInstanceService.selectSummaryPage(selectDto));
     }
@@ -51,6 +54,7 @@ public class TaskInstanceController implements TaskInstanceApi {
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新任务实例表信息", description = "新增或更新任务实例表基础信息")
     public Result<Long> save(@RequestBody TaskInstanceDto dto) {
         return Result.success(taskInstanceService.save(dto));

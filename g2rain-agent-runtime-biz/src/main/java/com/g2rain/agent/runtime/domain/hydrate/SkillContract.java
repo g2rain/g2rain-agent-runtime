@@ -28,6 +28,11 @@ import java.util.Objects;
 public class SkillContract {
 
     /**
+     * 契约格式版本（根属性 {@code version}）；必填，格式 {@code 主版本.次版本}。
+     */
+    private @Nullable String version;
+
+    /**
      * 出图模式；缺省 REACT。
      */
     private @Nullable ExecutionMode mode;

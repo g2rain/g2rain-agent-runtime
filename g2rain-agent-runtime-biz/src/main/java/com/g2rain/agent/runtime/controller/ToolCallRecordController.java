@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.ToolCallRecordDto;
 import com.g2rain.agent.runtime.dto.ToolCallRecordSelectDto;
 import com.g2rain.agent.runtime.service.ToolCallRecordService;
 import com.g2rain.agent.runtime.vo.ToolCallRecordVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class ToolCallRecordController implements ToolCallRecordApi {
     private ToolCallRecordService toolCallRecordService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<ToolCallRecordVo>> selectList(ToolCallRecordSelectDto selectDto) {
         return Result.success(toolCallRecordService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<ToolCallRecordVo>> selectPage(PageSelectListDto<ToolCallRecordSelectDto> selectDto) {
         return Result.successPage(toolCallRecordService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新工具调用记录表信息", description = "新增或更新工具调用记录表基础信息")
     public Result<Long> save(@RequestBody ToolCallRecordDto dto) {
         return Result.success(toolCallRecordService.save(dto));

@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link TaskRepository} 任务记录回灌与 skillVersions 测试。
+ * {@link TaskRepository} 任务记录回灌与 specPins 测试。
  *
  * @author alpha
  * @since 2026/11/16
@@ -61,21 +61,21 @@ class TaskRepositoryTest {
     }
 
     @Test
-    void loadMetadata_shouldRoundTripSkillVersions() {
+    void loadMetadata_shouldRoundTripSpecPins() {
         TaskInstanceVo vo = new TaskInstanceVo();
         vo.setTaskId(TASK_ID);
         vo.setConversationId(CONVERSATION_ID);
         vo.setStatus(TaskStatus.RUNNING.name());
-        vo.setSkillVersions("{\"cms.article\":\"pin-1\"}");
+        vo.setSpecPins("{\"cms.article\":\"pin-1\"}");
         when(taskInstanceService.selectList(any())).thenReturn(List.of(vo));
 
         TaskMetadata metadata = repository.loadMetadata(TASK_ID);
 
-        assertEquals(Map.of("cms.article", "pin-1"), metadata.getSkillVersions());
+        assertEquals(Map.of("cms.article", "pin-1"), metadata.getSpecPins());
     }
 
     @Test
-    void save_emptySkillVersions_shouldPersistNull() {
+    void save_emptySpecPins_shouldPersistNull() {
         when(taskInstanceService.selectList(any())).thenReturn(List.of());
         TaskMetadata metadata = metadata();
 
@@ -83,20 +83,20 @@ class TaskRepositoryTest {
 
         ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
         verify(taskInstanceService).save(captor.capture());
-        assertNull(captor.getValue().getSkillVersions());
+        assertNull(captor.getValue().getSpecPins());
     }
 
     @Test
-    void save_withSkillVersions_shouldPersistJson() {
+    void save_withSpecPins_shouldPersistJson() {
         when(taskInstanceService.selectList(any())).thenReturn(List.of());
         TaskMetadata metadata = metadata();
-        metadata.getSkillVersions().put("cms.article", "pin-1");
+        metadata.getSpecPins().put("cms.article", "pin-1");
 
         repository.save(metadata, Map.of(), null, 1L, null);
 
         ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
         verify(taskInstanceService).save(captor.capture());
-        assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSkillVersions());
+        assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSpecPins());
     }
 
     /** 固定：已有行走 CAS，不 insert。 */
@@ -120,9 +120,9 @@ class TaskRepositoryTest {
         assertThat(captor.getValue().getStateVersion()).isEqualTo(3L);
     }
 
-    /** R5：CAS 分支且 skillVersions 非空 → DTO 带 skillVersions。 */
+    /** R5：CAS 分支且 specPins 非空 → DTO 带 specPins。 */
     @Test
-    void r5_save_casWithSkillVersions_passesDto() {
+    void r5_save_casWithSpecPins_passesDto() {
         TaskInstanceVo existing = new TaskInstanceVo();
         existing.setId(9L);
         existing.setTaskId(TASK_ID);
@@ -132,13 +132,13 @@ class TaskRepositoryTest {
         when(taskInstanceService.selectList(any())).thenReturn(List.of(existing));
         when(taskInstanceService.advanceStateVersion(any())).thenReturn(1);
         TaskMetadata metadata = metadata();
-        metadata.getSkillVersions().put("cms.article", "pin-1");
+        metadata.getSpecPins().put("cms.article", "pin-1");
 
         repository.save(metadata, Map.of(), null, 3L, null);
 
         ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
         verify(taskInstanceService).advanceStateVersion(captor.capture());
-        assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSkillVersions());
+        assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSpecPins());
     }
 
     /** U1：库中没有任务 → 插入 stateVersion=0。 */

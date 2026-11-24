@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskNodePayloadDto;
 import com.g2rain.agent.runtime.dto.TaskNodePayloadSelectDto;
 import com.g2rain.agent.runtime.service.TaskNodePayloadService;
 import com.g2rain.agent.runtime.vo.TaskNodePayloadVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class TaskNodePayloadController implements TaskNodePayloadApi {
     private TaskNodePayloadService taskNodePayloadService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskNodePayloadVo>> selectList(TaskNodePayloadSelectDto selectDto) {
         return Result.success(taskNodePayloadService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskNodePayloadVo>> selectPage(PageSelectListDto<TaskNodePayloadSelectDto> selectDto) {
         return Result.successPage(taskNodePayloadService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新大报文溢出表信息", description = "新增或更新大报文溢出表基础信息")
     public Result<Long> save(@RequestBody TaskNodePayloadDto dto) {
         return Result.success(taskNodePayloadService.save(dto));

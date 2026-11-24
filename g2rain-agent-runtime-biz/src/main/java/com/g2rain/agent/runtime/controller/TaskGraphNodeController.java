@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskGraphNodeDto;
 import com.g2rain.agent.runtime.dto.TaskGraphNodeSelectDto;
 import com.g2rain.agent.runtime.service.TaskGraphNodeService;
 import com.g2rain.agent.runtime.vo.TaskGraphNodeVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class TaskGraphNodeController implements TaskGraphNodeApi {
     private TaskGraphNodeService taskGraphNodeService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskGraphNodeVo>> selectList(TaskGraphNodeSelectDto selectDto) {
         return Result.success(taskGraphNodeService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskGraphNodeVo>> selectPage(PageSelectListDto<TaskGraphNodeSelectDto> selectDto) {
         return Result.successPage(taskGraphNodeService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新任务图步骤表信息", description = "新增或更新任务图步骤表基础信息")
     public Result<Long> save(@RequestBody TaskGraphNodeDto dto) {
         return Result.success(taskGraphNodeService.save(dto));

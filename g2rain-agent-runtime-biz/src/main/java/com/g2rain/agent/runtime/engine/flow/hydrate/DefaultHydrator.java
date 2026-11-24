@@ -34,7 +34,7 @@ import java.util.Set;
  * 默认 Hydrator：按已绑定 Agent 装本轮技能列表。
  *
  * <p>只装载技能；Prior 由 {@code turn.start} 生成，本类不写任务记忆。
- * 有任务时把已锁定的 {@code skillVersions} 传入装载，并把新出现的 pin 写回任务。
+ * 有任务时把已锁定的 {@code specPins} 传入装载，并把新出现的 pin 写回任务。
  * 技能服务不可用或续跑缺技能时只让本轮失败，不改任务。</p>
  *
  * @author alpha
@@ -164,16 +164,16 @@ public class DefaultHydrator implements Hydrator {
             return Map.of();
         }
 
-        Map<String, String> versions = task.getSkillVersions();
-        if (versions.isEmpty()) {
+        Map<String, String> pins = task.getSpecPins();
+        if (pins.isEmpty()) {
             return Map.of();
         }
 
-        return Map.copyOf(versions);
+        return Map.copyOf(pins);
     }
 
     /**
-     * 把装载得到、任务里尚未有的 pin 写入 {@code skillVersions}；已有的不覆盖。
+     * 把装载得到、任务里尚未有的 pin 写入 {@code specPins}；已有的不覆盖。
      *
      * @param task   当前任务；可空
      * @param skills 本轮技能；可空
@@ -183,19 +183,19 @@ public class DefaultHydrator implements Hydrator {
             return;
         }
 
-        Map<String, String> versions = task.getSkillVersions();
+        Map<String, String> pins = task.getSpecPins();
         for (Skill skill : skills) {
             String pin = skill.pin();
             if (Strings.isBlank(pin)) {
                 continue;
             }
 
-            // 已锁定的版本不覆盖，保证同任务跨轮一致
-            if (versions.containsKey(skill.skillKey())) {
+            // 已锁定的动作语义版本标记不覆盖，保证同任务跨轮一致
+            if (pins.containsKey(skill.skillKey())) {
                 continue;
             }
 
-            versions.put(skill.skillKey(), pin);
+            pins.put(skill.skillKey(), pin);
         }
     }
 }

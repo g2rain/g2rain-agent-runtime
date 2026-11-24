@@ -106,7 +106,7 @@ public class TaskMetadata {
     private @Nullable String sourceMessageId;
 
     /**
-     * 开任务时锁定的动作语义版本：技能键 → pin；后续轮次原样传入装载。
+     * 开任务时锁定的动作语义版本标记：技能键 → pin；后续轮次原样传入装载。
      */
-    private Map<String, String> skillVersions = new LinkedHashMap<>();
+    private Map<String, String> specPins = new LinkedHashMap<>();
 }

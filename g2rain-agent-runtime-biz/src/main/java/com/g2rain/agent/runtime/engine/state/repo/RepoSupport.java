@@ -32,7 +32,7 @@ final class RepoSupport {
     };
 
     /**
-     * 技能版本 Map：技能键 → pin。
+     * 动作语义版本标记 Map：技能键 → pin。
      */
     static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {
 
@@ -47,6 +47,7 @@ final class RepoSupport {
      * 仓储共用工具，禁止实例化。
      */
     private RepoSupport() {
+
     }
 
     /**

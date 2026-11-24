@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.domain.hydrate.ArgSpecHydrate;
+import com.g2rain.agent.runtime.domain.hydrate.ContractVersion;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.hydrate.SkillContract;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
@@ -153,7 +154,7 @@ public class DefaultBundleLoader implements BundleLoader {
      * 解析技能契约；空白、解析失败或 source 配置错误返回 {@code null}。
      * 来源暂时不可用时抛 {@link BusinessException}（{@link RuntimeErrorCode#DEPENDENCY_UNAVAILABLE}）。
      *
-     * <p>顺序：JSON 解析 → 若有 source 则替换 tools → ArgSpecHydrate。</p>
+     * <p>顺序：JSON 解析 → 检查根属性 {@code version} → 若有 source 则替换 tools → ArgSpecHydrate。</p>
      *
      * @param skillKey      技能键（仅用于告警与查询）
      * @param skillContract 契约原文；可空
@@ -175,6 +176,9 @@ public class DefaultBundleLoader implements BundleLoader {
                 log.error("[BundleLoader] skill unavailable skillKey={} reason=contract_null", skillKey);
                 return null;
             }
+
+            // 根属性 version：不通过则本轮直接失败
+            requireAcceptedVersion(skillKey, parsed.getVersion());
 
             JsonNode source = parsed.getSource();
             String typeName = typeOf(source);
@@ -208,10 +212,39 @@ public class DefaultBundleLoader implements BundleLoader {
             log.error("[BundleLoader] skill unavailable skillKey={} reason=spec_source_unavailable type={}",
                 skillKey, unavailableType, ex);
             throw new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, ex, unavailableType.name());
+        } catch (BusinessException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             log.error("[BundleLoader] skill unavailable skillKey={} reason=contract_parse_failed", skillKey, ex);
             return null;
         }
+    }
+
+    /**
+     * 检查契约根属性 {@code version}；不通过则抛对应错误码。
+     *
+     * @param skillKey 技能键
+     * @param version  契约上的版本串；可空
+     */
+    private static void requireAcceptedVersion(String skillKey, @Nullable String version) {
+        ContractVersion.Verdict verdict = ContractVersion.check(version);
+        if (verdict == ContractVersion.Verdict.ACCEPTED) {
+            return;
+        }
+
+        String reported = Objects.requireNonNullElse(version, "");
+        if (verdict == ContractVersion.Verdict.INVALID) {
+            throw new BusinessException(RuntimeErrorCode.CONTRACT_VERSION_INVALID, skillKey,
+                ContractVersion.CURRENT);
+        }
+
+        if (verdict == ContractVersion.Verdict.OUTDATED) {
+            throw new BusinessException(RuntimeErrorCode.CONTRACT_VERSION_OUTDATED, skillKey, reported,
+                ContractVersion.CURRENT);
+        }
+
+        throw new BusinessException(RuntimeErrorCode.CONTRACT_VERSION_AHEAD, skillKey, reported,
+            ContractVersion.CURRENT);
     }
 
     /**

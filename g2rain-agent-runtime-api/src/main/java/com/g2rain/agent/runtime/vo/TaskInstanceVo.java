@@ -116,10 +116,10 @@ public class TaskInstanceVo extends BaseVo {
     private Long stateVersion;
 
     /**
-     * 开跑时固定的 skill 版本
+     * 开任务时锁定的动作语义版本标记（技能键 → 版本标记）
      */
-    @Schema(description = "开跑时固定的 skill 版本")
-    private String skillVersions;
+    @Schema(description = "开任务时锁定的动作语义版本标记（技能键 → 版本标记）")
+    private String specPins;
 
     /**
      * 任务级共享值

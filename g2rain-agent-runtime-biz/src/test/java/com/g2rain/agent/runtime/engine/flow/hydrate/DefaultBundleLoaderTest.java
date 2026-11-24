@@ -2,6 +2,7 @@ package com.g2rain.agent.runtime.engine.flow.hydrate;
 
 import com.g2rain.agent.runtime.client.AgentProfiles;
 import com.g2rain.agent.runtime.config.RuntimeProperties;
+import com.g2rain.agent.runtime.domain.hydrate.ContractVersion;
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spec.ArgSpec;
@@ -98,7 +99,7 @@ class DefaultBundleLoaderTest {
     @Test
     void load_withUnknownSourceType_shouldDropSkill() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
-            {"source":{"type":"OTHER"},"tools":{}}
+            {"version":"1.0","source":{"type":"OTHER"},"tools":{}}
             """));
 
         assertNull(loader.load(AGENT_ID, Map.of()));
@@ -107,7 +108,7 @@ class DefaultBundleLoaderTest {
     @Test
     void load_withoutSourceType_shouldDropSkill() {
         when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
-            {"tools":{"%s":{}}}
+            {"version":"1.0","tools":{"%s":{}}}
             """.formatted(TOOL_NAME)));
 
         assertNull(loader.load(AGENT_ID, Map.of()));
@@ -180,12 +181,42 @@ class DefaultBundleLoaderTest {
         assertEquals(List.of(TOOL_NAME), captor.getValue().toolNames());
     }
 
-    private static AgentBundleVo bundle(String contractJson) {
-        return bundleTwoSkills(SKILL_KEY, contractJson);
+    @Test
+    void load_missingContractVersion_throwsInvalid() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+            {"source":{"type":"CONTRACT"},"tools":{}}
+            """));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        assertEquals(RuntimeErrorCode.CONTRACT_VERSION_INVALID.code(), ex.getErrorCode());
+        assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
+        assertEquals(ContractVersion.CURRENT, ex.getIndexArgs()[1]);
     }
 
-    private static AgentBundleVo bundleTwoSkills(String key1, String contract1) {
-        return bundleTwoSkills(key1, contract1, null, null);
+    @Test
+    void load_outdatedContractVersion_throwsOutdated() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithVersion("0.9")));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        assertEquals(RuntimeErrorCode.CONTRACT_VERSION_OUTDATED.code(), ex.getErrorCode());
+        assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
+        assertEquals("0.9", ex.getIndexArgs()[1]);
+        assertEquals(ContractVersion.CURRENT, ex.getIndexArgs()[2]);
+    }
+
+    @Test
+    void load_aheadContractVersion_throwsAhead() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithVersion("2.0")));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        assertEquals(RuntimeErrorCode.CONTRACT_VERSION_AHEAD.code(), ex.getErrorCode());
+        assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
+        assertEquals("2.0", ex.getIndexArgs()[1]);
+        assertEquals(ContractVersion.CURRENT, ex.getIndexArgs()[2]);
+    }
+
+    private static AgentBundleVo bundle(String contractJson) {
+        return bundleTwoSkills(SKILL_KEY, contractJson, null, null);
     }
 
     private static AgentBundleVo bundleTwoSkills(String key1, String contract1,
@@ -214,14 +245,20 @@ class DefaultBundleLoaderTest {
 
     private static String contractOwnSource() {
         return """
-            {"source":{"type":"CONTRACT"},"tools":{"%s":{"args":{"title":{"from":"inputs.title"}}}}}
+            {"version":"1.0","source":{"type":"CONTRACT"},"tools":{"%s":{"args":{"title":{"from":"inputs.title"}}}}}
             """.formatted(TOOL_NAME);
     }
 
     private static String contractWithSource() {
         return """
-            {"source":{"type":"ONTOLOGY","ontology":"cms"},"tools":{"old_tool":{}}}
+            {"version":"1.0","source":{"type":"ONTOLOGY","ontology":"cms"},"tools":{"old_tool":{}}}
             """;
+    }
+
+    private static String contractWithVersion(String version) {
+        return """
+            {"version":"%s","source":{"type":"CONTRACT"},"tools":{}}
+            """.formatted(version);
     }
 
     private static ToolSpec replacementTool() {

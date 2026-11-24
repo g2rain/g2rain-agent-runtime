@@ -278,6 +278,24 @@ public enum RuntimeErrorCode implements ErrorCode {
 
     SKILL_NOT_OF_AGENT("agent_runtime.42260", "指定的技能不属于该数字员工：{0:skillKey}"),
 
+    /**
+     * 执行契约缺少有效的格式版本号。
+     */
+    CONTRACT_VERSION_INVALID("agent_runtime.42261",
+        "技能「{0:skillKey}」的执行契约缺少有效的版本号，请按当前格式（{1:current}）补充"),
+
+    /**
+     * 执行契约格式版本已过时，须升级契约。
+     */
+    CONTRACT_VERSION_OUTDATED("agent_runtime.42262",
+        "技能「{0:skillKey}」的执行契约版本 {1:version} 已过时，当前运行时要求 {2:current}，请按新格式升级执行契约"),
+
+    /**
+     * 执行契约格式版本高于当前 Runtime，须升级运行时。
+     */
+    CONTRACT_VERSION_AHEAD("agent_runtime.42263",
+        "技能「{0:skillKey}」的执行契约版本 {1:version} 高于当前运行时支持的 {2:current}，请升级运行时"),
+
     GUARD_UNAVAILABLE("agent_runtime.50012", "调用前检查不可用");
 
     /**

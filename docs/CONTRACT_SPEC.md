@@ -10,6 +10,7 @@
 
 1. [Skill 的组成](#1-skill-的组成)
 2. [契约结构总览](#2-契约结构总览)
+2.1. [契约格式版本](#21-契约格式版本)
 3. [根属性](#3-根属性)
 4. [tools：工具契约](#4-tools工具契约)
 5. [args：参数契约](#5-args参数契约)
@@ -54,7 +55,7 @@ Skill 配置在 agent-studio 的四张表中，Runtime 每轮通过 studio 接�
 | `skill_name` | `semantic_desc` 为空时作为技能短描述 | 简短名称 |
 | `semantic_desc` | 意图判定的技能目录、规划阶段的候选筛选、前置节点标题 | 一段话说明"适用于什么、不负责什么"，供模型选择技能 |
 | `skill_manual` | 规划出图的提示词、节点执行的提示词（`node_goal.skillManual`） | 目标、业务规则、前置与产出，供模型执行时遵守 |
-| `skill_contract` | Runtime 的确定性约束：参数从哪来、何时算成功、何时可完成 | 本规范的主体 |
+| `skill_contract` | Runtime 的确定性约束：参数从哪来、何时算成功、何时可完成；根属性 `version` 声明格式版本 | 本规范的主体，见 [2.1](#21-契约格式版本) |
 | `toolNames` | 节点可调用的业务工具集合 | 只写业务工具，不写内置工具 |
 
 ### 1.3 toolNames 与 contract.tools 的关系
@@ -73,6 +74,7 @@ Skill 配置在 agent-studio 的四张表中，Runtime 每轮通过 studio 接�
 
 ```text
 skill_contract
+├── version                 契约格式版本（必填，主版本.次版本）
 ├── mode                    执行模式
 ├── delegatable             能否被委派
 ├── target                  默认完成目标（写工具）
@@ -112,10 +114,34 @@ skill_contract
 
 ---
 
+## 2.1 契约格式版本
+
+契约格式版本描述 Runtime 能否理解这份 `skill_contract` 的结构，与动作语义版本标记（`spec_pins`）无关。版本写在契约 JSON 根属性 `version` 上；Studio 只存储契约，不理解格式版本。
+
+| 项 | 规则 |
+|---|---|
+| 位置 | 契约根属性 `version`（必填，字符串） |
+| 格式 | `主版本.次版本`，两段均为非负整数；第一版为 `1.0`。缺少或格式非法不做猜测 |
+| 合法取值 | 以本节「版本历史」表为准；Runtime 改契约格式时，同一次提交修改 `ContractVersion.CURRENT` 并在表中加一行 |
+| Runtime 接受条件 | 契约主版本 = Runtime 主版本，且契约次版本 ≤ Runtime 次版本；当前写死支持 `1.0`（`ContractVersion.CURRENT`） |
+| 升主版本 | 字段改名、删除或含义改变等不兼容修改：`1.x` → `2.0`；契约数据用脚本整体迁移，Runtime 不保留旧主版本处理代码 |
+| 升次版本 | 兼容新增（如新增可选字段）：`1.0` → `1.1` |
+| 检查时机 | `DefaultBundleLoader` 解析契约后立刻检查根属性 `version`；不通过即本轮失败（不跳过该技能） |
+| 报错 | 缺少或非法 → `CONTRACT_VERSION_INVALID`（`agent_runtime.42261`）；契约主版本更低 → `CONTRACT_VERSION_OUTDATED`（`42262`）；契约更高 → `CONTRACT_VERSION_AHEAD`（`42263`） |
+
+### 版本历史
+
+| 版本 | 说明 |
+|---|---|
+| `1.0` | 初始格式 |
+
+---
+
 ## 3. 根属性
 
 | 属性 | 类型 | 默认 | 含义 | 运行时行为 |
 |---|---|---|---|---|
+| `version` | String | 无（必填） | 契约格式版本，`主版本.次版本` | 装载时对照 `ContractVersion.CURRENT`；不通过则本轮失败，见 [2.1](#21-契约格式版本) |
 | `mode` | `REACT` / `PLAN` | `REACT` | 执行模式 | 规划时候选技能只有一个且为 `REACT` → 跳过大模型规划，直接生成单节点图；否则由大模型规划 |
 | `delegatable` | boolean | `false` | 能否被其他节点委派调用 | 为 `true` 时进入同一数字员工的委派目录；要求 `tools` 中没有写工具 |
 | `target` | String | 无 | 默认完成目标：本技能的一个写工具名 | 规划未给节点指定完成目标时采用（见第 10 节）；只做一种写操作的技能配置，承担多种操作的技能留空 |
@@ -602,10 +628,11 @@ Runtime 按以下顺序处理每个列在 `args` 中的参数（`ParamContractIn
 
 ## 16. 装载校验
 
-Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃（只记录错误日志）；数字员工没有任何可用 Skill 时，规划失败。续跑任务时，图中引用的技能有任何一个未装载成功，本轮失败（`SKILL_UNAVAILABLE`），任务保持原状；技能服务不可用时本轮失败（`DEPENDENCY_UNAVAILABLE`）。技能的动作语义来源暂时不可用（`SpecUnavailableException`）时，本轮失败（`DEPENDENCY_UNAVAILABLE`），新建和续跑任务都一样；来源配置错误时该技能被丢弃。
+Skill 每轮加载时先解析 `skill_contract`，再检查根属性 `version`：不通过则本轮直接失败（`CONTRACT_VERSION_INVALID` / `OUTDATED` / `AHEAD`），不跳过该技能。通过后再校验契约；任一装载规则不满足，该 Skill 被丢弃（只记录错误日志）；数字员工没有任何可用 Skill 时，规划失败。续跑任务时，图中引用的技能有任何一个未装载成功，本轮失败（`SKILL_UNAVAILABLE`），任务保持原状；技能服务不可用时本轮失败（`DEPENDENCY_UNAVAILABLE`）。技能的动作语义来源暂时不可用（`SpecUnavailableException`）时，本轮失败（`DEPENDENCY_UNAVAILABLE`），新建和续跑任务都一样；来源配置错误时该技能被丢弃。
 
 | # | 规则 |
 |---|---|
+| 0 | 根属性 `version` 被当前 Runtime 接受（见 [2.1](#21-契约格式版本)） |
 | 1 | `skill_contract` 非空，且是合法 JSON |
 | 2 | 所有 `args.*.from` 的前缀合法 |
 | 3 | 配置了 `target` 时，它是 `tools` 中的 `WRITE` 工具 |
@@ -679,6 +706,9 @@ Skill 每轮加载时校验契约。任一规则不满足，该 Skill 被丢弃�
 | `agent_runtime.42257` | `NODE_STALLED` | 节点连续多轮没有进展 |
 | `agent_runtime.42258` | `NODE_DECLARED_FAILED` | 模型声明节点失败 |
 | `agent_runtime.42259` | `SKILL_UNAVAILABLE` | 续跑时图中引用的技能未装载成功 |
+| `agent_runtime.42261` | `CONTRACT_VERSION_INVALID` | 执行契约缺少有效的格式版本号 |
+| `agent_runtime.42262` | `CONTRACT_VERSION_OUTDATED` | 执行契约格式版本已过时，须升级契约 |
+| `agent_runtime.42263` | `CONTRACT_VERSION_AHEAD` | 执行契约格式版本高于当前 Runtime，须升级运行时 |
 | `agent_runtime.50003` | `DEPENDENCY_UNAVAILABLE` | 依赖不可用（含技能服务） |
 | `agent_runtime.50012` | `GUARD_UNAVAILABLE` | 调用前检查不可用 |
 

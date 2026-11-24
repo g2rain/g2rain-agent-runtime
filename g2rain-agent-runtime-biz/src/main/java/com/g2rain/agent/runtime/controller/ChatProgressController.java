@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.ChatProgressDto;
 import com.g2rain.agent.runtime.dto.ChatProgressSelectDto;
 import com.g2rain.agent.runtime.service.ChatProgressService;
 import com.g2rain.agent.runtime.vo.ChatProgressVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class ChatProgressController implements ChatProgressApi {
     private ChatProgressService chatProgressService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<ChatProgressVo>> selectList(ChatProgressSelectDto selectDto) {
         return Result.success(chatProgressService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<ChatProgressVo>> selectPage(PageSelectListDto<ChatProgressSelectDto> selectDto) {
         return Result.successPage(chatProgressService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新执行过程步骤表信息", description = "新增或更新执行过程步骤表基础信息")
     public Result<Long> save(@RequestBody ChatProgressDto dto) {
         return Result.success(chatProgressService.save(dto));

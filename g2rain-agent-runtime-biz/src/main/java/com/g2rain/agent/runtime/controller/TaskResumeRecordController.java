@@ -8,6 +8,7 @@ import com.g2rain.agent.runtime.dto.TaskResumeRecordDto;
 import com.g2rain.agent.runtime.dto.TaskResumeRecordSelectDto;
 import com.g2rain.agent.runtime.service.TaskResumeRecordService;
 import com.g2rain.agent.runtime.vo.TaskResumeRecordVo;
+import com.g2rain.web.interceptors.annotations.IdentityInject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.annotation.Resource;
@@ -34,16 +35,19 @@ public class TaskResumeRecordController implements TaskResumeRecordApi {
     private TaskResumeRecordService taskResumeRecordService;
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<List<TaskResumeRecordVo>> selectList(TaskResumeRecordSelectDto selectDto) {
         return Result.success(taskResumeRecordService.selectList(selectDto));
     }
 
     @Override
+    @IdentityInject(organIdPropertyName = "organId")
     public Result<PageData<TaskResumeRecordVo>> selectPage(PageSelectListDto<TaskResumeRecordSelectDto> selectDto) {
         return Result.successPage(taskResumeRecordService.selectPage(selectDto));
     }
 
     @PostMapping("/save")
+    @IdentityInject(organIdPropertyName = "organId")
     @Operation(summary = "新增或更新任务恢复动作审计表信息", description = "新增或更新任务恢复动作审计表基础信息")
     public Result<Long> save(@RequestBody TaskResumeRecordDto dto) {
         return Result.success(taskResumeRecordService.save(dto));

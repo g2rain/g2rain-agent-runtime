@@ -44,7 +44,7 @@ class DefaultHydratorTest {
         new DefaultHydrator(bundleLoader).hydrate(context);
 
         verify(bundleLoader).load(AGENT_ID, Map.of());
-        assertEquals(Map.of(SKILL_KEY, "pin-a"), task.getSkillVersions());
+        assertEquals(Map.of(SKILL_KEY, "pin-a"), task.getSpecPins());
     }
 
     @Test
@@ -54,13 +54,13 @@ class DefaultHydratorTest {
         when(bundleLoader.load(eq(AGENT_ID), eq(Map.copyOf(locked))))
             .thenReturn(List.of(skill("pin-b")));
         TaskMetadata task = new TaskMetadata();
-        task.setSkillVersions(locked);
+        task.setSpecPins(locked);
         TurnContext context = contextWith(task);
 
         new DefaultHydrator(bundleLoader).hydrate(context);
 
         verify(bundleLoader).load(AGENT_ID, Map.of(SKILL_KEY, "pin-a"));
-        assertEquals("pin-a", task.getSkillVersions().get(SKILL_KEY));
+        assertEquals("pin-a", task.getSpecPins().get(SKILL_KEY));
     }
 
     private static TurnContext contextWith(TaskMetadata task) {
