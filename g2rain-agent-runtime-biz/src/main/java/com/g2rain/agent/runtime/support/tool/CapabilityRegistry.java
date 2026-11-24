@@ -27,19 +27,14 @@ import java.util.regex.Pattern;
 public final class CapabilityRegistry {
 
     /**
-     * 工具名：小写字母、数字、下划线，2–64 位。
+     * 工具名：必须以 {@code builtin_} 开头，后接小写字母、数字、下划线。
      */
-    private static final Pattern NAME_PATTERN = Pattern.compile("^[a-z0-9_]{2,64}$");
+    private static final Pattern NAME_PATTERN = Pattern.compile("^builtin_[a-z0-9_]+$");
 
     /**
-     * 禁止的名称前缀：内置工具。
+     * 工具名最长字符数。
      */
-    private static final String PREFIX_BUILTIN = "builtin_";
-
-    /**
-     * 禁止的名称前缀：原生保留。
-     */
-    private static final String PREFIX_NATIVE = "native_";
+    private static final int NAME_MAX_LENGTH = 64;
 
     /**
      * 装饰后的回调（类别 CAPABILITY），构造后只读。
@@ -99,8 +94,7 @@ public final class CapabilityRegistry {
      * @param source 来源类名
      */
     private static void validateName(@Nullable String name, String source) {
-        if (Strings.isBlank(name) || !NAME_PATTERN.matcher(name).matches()
-            || name.startsWith(PREFIX_BUILTIN) || name.startsWith(PREFIX_NATIVE)) {
+        if (Strings.isBlank(name) || name.length() > NAME_MAX_LENGTH || !NAME_PATTERN.matcher(name).matches()) {
             throw new IllegalStateException("invalid capability name '" + name + "' from " + source);
         }
     }

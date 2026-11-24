@@ -5,6 +5,7 @@ import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.enums.ModelHint;
+import com.g2rain.agent.runtime.i18n.RuntimeMessageRegistry;
 import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.spi.CapabilityCall;
 import com.g2rain.agent.runtime.spi.CapabilityResult;
@@ -12,8 +13,6 @@ import com.g2rain.agent.runtime.spi.CapabilitySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
 import tools.jackson.databind.node.JsonNodeFactory;
-
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,7 +43,27 @@ class CapabilityToolCallbackTest {
             mock(RuntimeStateFacade.class));
 
         String result = callback.call("{}", toolContext());
-        assertThat(result).isEqualTo(ExternalContent.wrap("sample_tool", "payload"));
+        assertThat(result).isEqualTo(ExternalContent.wrap("builtin_sample_lookup", "payload"));
+    }
+
+    @Test
+    void label_usesRegistryWhenPresent() {
+        String name = "builtin_sample_label_hit";
+        RuntimeMessageRegistry.put(CapabilityToolCallback.MESSAGE_CODE_PREFIX + name, "en-US", "Sample lookup");
+        CapabilityToolCallback callback = new CapabilityToolCallback(
+            capability(name, "示例查询", false, call -> CapabilityResult.success("{}")),
+            mock(EvidenceReader.class), mock(RuntimeStateFacade.class));
+
+        assertThat(callback.label("en-US")).isEqualTo("Sample lookup");
+    }
+
+    @Test
+    void label_fallsBackToSpecWhenMissing() {
+        CapabilityToolCallback callback = new CapabilityToolCallback(
+            capability("builtin_sample_label_miss", "示例查询", false, call -> CapabilityResult.success("{}")),
+            mock(EvidenceReader.class), mock(RuntimeStateFacade.class));
+
+        assertThat(callback.label("en-US")).isEqualTo("示例查询");
     }
 
     @Test
@@ -125,10 +144,15 @@ class CapabilityToolCallbackTest {
 
     private static Capability capability(boolean external,
                                          java.util.function.Function<CapabilityCall, CapabilityResult> handler) {
+        return capability("builtin_sample_lookup", "示例工具", external, handler);
+    }
+
+    private static Capability capability(String name, String label, boolean external,
+                                         java.util.function.Function<CapabilityCall, CapabilityResult> handler) {
         return new Capability() {
             @Override
             public CapabilitySpec spec() {
-                return new CapabilitySpec("sample_tool", Map.of("zh-CN", "示例工具"), "desc",
+                return new CapabilitySpec(name, label, "desc",
                     JsonNodeFactory.instance.objectNode(), external);
             }
 

@@ -592,4 +592,7 @@ VALUES
 
 ## 9. 能力工具
 
-安装插件后，能力工具对所有节点可见，不必写入 `toolNames` 或 `contract.tools`。需要使用某能力的技能，在手册中说明何时调用、如何理解返回结果。示例工具名：`sample_lookup`。
+安装插件后，能力工具对所有节点可见，不必写入 `toolNames` 或 `contract.tools`。需要使用某能力的技能，在手册中说明何时调用、如何理解返回结果。
+
+- **命名**：与内置工具相同，必须以 `builtin_` 开头，后接小写字母、数字、下划线，总长不超过 64。示例工具名：`builtin_sample_lookup`。
+- **展示名**：多语言文案放在 Infra 的 `UI_MESSAGE`（标签 `AGENT_RUNTIME`），编码为 `capability.{工具名}`（如 `capability.builtin_sample_lookup`）；插件只提供中文兜底。

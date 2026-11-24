@@ -5,6 +5,7 @@ import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.ToolExecutionContexts;
 import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.enums.ModelHint;
+import com.g2rain.agent.runtime.i18n.RuntimeMessageRegistry;
 import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.spi.CapabilityCall;
 import com.g2rain.agent.runtime.spi.CapabilityResult;
@@ -40,9 +41,9 @@ public final class CapabilityToolCallback implements ToolCallback {
     private static final JsonCodec JSON = JsonCodecFactory.instance();
 
     /**
-     * 展示名缺省语言。
+     * 能力工具多语言文案编码前缀；完整编码为 {@code capability.{name}}。
      */
-    static final String DEFAULT_LOCALE = "zh-CN";
+    public static final String MESSAGE_CODE_PREFIX = "capability.";
 
     /**
      * 能力实现。
@@ -90,25 +91,14 @@ public final class CapabilityToolCallback implements ToolCallback {
     }
 
     /**
-     * 按请求语言取展示名；缺语言或未配置时回落 {@link #DEFAULT_LOCALE}，再回落工具名。
+     * 按请求语言取展示名：查 {@link RuntimeMessageRegistry}，编码为前缀加工具名；没有文案时回落 {@link CapabilitySpec#label()}。
      *
      * @param locale 请求语言；可空
      * @return 展示名
      */
     public String label(@Nullable String locale) {
         CapabilitySpec spec = capability.spec();
-        String tag = Strings.isBlank(locale) ? DEFAULT_LOCALE : locale;
-        String value = spec.label().get(tag);
-        if (Strings.isNotBlank(value)) {
-            return value;
-        }
-
-        value = spec.label().get(DEFAULT_LOCALE);
-        if (Strings.isNotBlank(value)) {
-            return value;
-        }
-
-        return spec.name();
+        return RuntimeMessageRegistry.resolve(MESSAGE_CODE_PREFIX + spec.name(), locale, spec.label());
     }
 
     @Override

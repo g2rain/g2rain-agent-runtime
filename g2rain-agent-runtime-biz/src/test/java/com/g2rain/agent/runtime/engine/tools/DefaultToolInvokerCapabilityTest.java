@@ -36,7 +36,7 @@ class DefaultToolInvokerCapabilityTest {
     @Test
     void capabilityFailureBecomesFailedObservation() {
         ToolDefinition definition = mock(ToolDefinition.class);
-        when(definition.name()).thenReturn("sample_lookup");
+        when(definition.name()).thenReturn("builtin_sample_lookup");
         ToolCallback delegate = mock(ToolCallback.class);
         when(delegate.getToolDefinition()).thenReturn(definition);
         when(delegate.call(any(), any())).thenThrow(new CapabilityFailure("条件不满足", "换个条件再试"));

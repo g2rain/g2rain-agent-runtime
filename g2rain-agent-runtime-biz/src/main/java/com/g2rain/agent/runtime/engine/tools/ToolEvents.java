@@ -162,7 +162,7 @@ public class ToolEvents {
     }
 
     /**
-     * 能力工具展示名：取 {@link CapabilityToolCallback} 在请求语言下的 label，缺省 {@code zh-CN}。
+     * 能力工具展示名：经 {@link CapabilityToolCallback#label} 解析，编码 {@code capability.{name}}，缺文案时回落中文兜底。
      *
      * @param builtin 装饰后的能力回调
      * @return 展示名

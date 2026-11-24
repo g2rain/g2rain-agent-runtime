@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
  * 外部内容标记：把成功结果文本包裹为带工具名的标签，并转义正文中的闭合标记。
  *
  * <pre>{@code
- * String marked = ExternalContent.wrap("sample_tool", "hello");
+ * String marked = ExternalContent.wrap("builtin_sample_lookup", "hello");
  * }</pre>
  *
  * @author alpha

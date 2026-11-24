@@ -31,7 +31,6 @@ import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -114,7 +113,7 @@ class ToolEventsTest {
         Capability capability = new Capability() {
             @Override
             public CapabilitySpec spec() {
-                return new CapabilitySpec("sample_lookup", Map.of("zh-CN", "示例查询"), "desc",
+                return new CapabilitySpec("builtin_sample_lookup", "示例查询", "desc",
                     JsonNodeFactory.instance.objectNode(), false);
             }
 
@@ -145,7 +144,7 @@ class ToolEventsTest {
 
     @Test
     void capabilityFinishedMarksSuccessAndFailure() {
-        ToolCallback delegate = callback("sample_lookup");
+        ToolCallback delegate = callback("builtin_sample_lookup");
         BuiltinToolCallback builtin = new BuiltinToolCallback(
             delegate, BuiltinToolCategory.CAPABILITY, BuiltinToolAction.CAPABILITY, RuntimeMessage.STEP_TOOL);
         ToolInvokeRequest request = mock(ToolInvokeRequest.class);

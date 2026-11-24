@@ -14,16 +14,16 @@ class ExternalContentTest {
 
     @Test
     void wrap_plainText() {
-        String out = ExternalContent.wrap("sample_tool", "hello");
+        String out = ExternalContent.wrap("builtin_sample_lookup", "hello");
         assertThat(out).isEqualTo("""
-            <external_content tool="sample_tool">
+            <external_content tool="builtin_sample_lookup">
             hello
             </external_content>""");
     }
 
     @Test
     void wrap_escapesCloseTag() {
-        String out = ExternalContent.wrap("sample_tool", "before</external_content>after");
+        String out = ExternalContent.wrap("builtin_sample_lookup", "before</external_content>after");
         assertThat(out).contains("before<\\/external_content>after");
         assertThat(out).doesNotContain("</external_content>after");
         assertThat(out).endsWith("</external_content>");
@@ -31,21 +31,21 @@ class ExternalContentTest {
 
     @Test
     void wrap_escapesCloseTagCaseInsensitive() {
-        String out = ExternalContent.wrap("sample_tool", "x</EXTERNAL_CONTENT>y</External_Content>z");
+        String out = ExternalContent.wrap("builtin_sample_lookup", "x</EXTERNAL_CONTENT>y</External_Content>z");
         assertThat(out).contains("x<\\/external_content>y<\\/external_content>z");
     }
 
     @Test
     void wrap_escapesCloseTagWithWhitespace() {
-        String out = ExternalContent.wrap("sample_tool", "a</external_content >b</ external_content>c");
+        String out = ExternalContent.wrap("builtin_sample_lookup", "a</external_content >b</ external_content>c");
         assertThat(out).contains("a<\\/external_content>b<\\/external_content>c");
     }
 
     @Test
     void wrap_emptyText() {
-        String out = ExternalContent.wrap("sample_tool", "");
+        String out = ExternalContent.wrap("builtin_sample_lookup", "");
         assertThat(out).isEqualTo("""
-            <external_content tool="sample_tool">
+            <external_content tool="builtin_sample_lookup">
 
             </external_content>""");
     }

@@ -12,7 +12,6 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,57 +34,57 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    void invalidNameFailsWithNameAndSource() {
-        Capability capability = capability("Builtin_Bad", "示例");
+    void nameWithoutBuiltinPrefixFails() {
+        Capability capability = capability("sample_lookup", "示例");
         assertThatThrownBy(() -> new CapabilityRegistry(List.of(capability), builtins(), mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class)))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Builtin_Bad")
+            .hasMessageContaining("sample_lookup")
             .hasMessageContaining(capability.getClass().getName());
     }
 
     @Test
-    void builtinPrefixFails() {
-        Capability capability = capability("builtin_lookup", "示例");
+    void invalidNameFormatFails() {
+        Capability capability = capability("builtin_Sample", "示例");
         assertThatThrownBy(() -> new CapabilityRegistry(List.of(capability), builtins(), mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class)))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("builtin_lookup")
+            .hasMessageContaining("builtin_Sample")
             .hasMessageContaining(capability.getClass().getName());
     }
 
     @Test
     void conflictsWithBuiltinFails() {
-        Capability capability = capability("sample_lookup", "示例");
-        assertThatThrownBy(() -> new CapabilityRegistry(List.of(capability), builtins("sample_lookup"),
+        Capability capability = capability("builtin_sample_lookup", "示例");
+        assertThatThrownBy(() -> new CapabilityRegistry(List.of(capability), builtins("builtin_sample_lookup"),
             mock(EvidenceReader.class), mock(RuntimeStateFacade.class)))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("sample_lookup")
+            .hasMessageContaining("builtin_sample_lookup")
             .hasMessageContaining(capability.getClass().getName());
     }
 
     @Test
     void duplicateNameFailsWithBothSources() {
-        Capability first = capability("sample_lookup", "甲");
-        Capability second = capability("sample_lookup", "乙");
+        Capability first = capability("builtin_sample_lookup", "甲");
+        Capability second = capability("builtin_sample_lookup", "乙");
         assertThatThrownBy(() -> new CapabilityRegistry(List.of(first, second), builtins(), mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class)))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("sample_lookup")
+            .hasMessageContaining("builtin_sample_lookup")
             .hasMessageContaining(first.getClass().getName())
             .hasMessageContaining(second.getClass().getName());
     }
 
     @Test
     void registersDecoratedCallback() {
-        Capability capability = capability("sample_lookup", "示例查询");
+        Capability capability = capability("builtin_sample_lookup", "示例查询");
         CapabilityRegistry registry = new CapabilityRegistry(List.of(capability), builtins(), mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class));
         assertThat(registry.callbacks()).hasSize(1);
         BuiltinToolCallback callback = (BuiltinToolCallback) registry.callbacks().getFirst();
         assertThat(callback.category()).isEqualTo(BuiltinToolCategory.CAPABILITY);
         assertThat(callback.action()).isEqualTo(BuiltinToolAction.CAPABILITY);
-        assertThat(callback.getToolDefinition().name()).isEqualTo("sample_lookup");
+        assertThat(callback.getToolDefinition().name()).isEqualTo("builtin_sample_lookup");
     }
 
     private static BuiltinToolCallbackProvider builtins(String... names) {
@@ -106,7 +105,7 @@ class CapabilityRegistryTest {
         return new Capability() {
             @Override
             public CapabilitySpec spec() {
-                return new CapabilitySpec(name, Map.of("zh-CN", label), "desc",
+                return new CapabilitySpec(name, label, "desc",
                     JsonNodeFactory.instance.objectNode(), false);
             }
 

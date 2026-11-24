@@ -51,7 +51,7 @@ class NodeToolsetTest {
         BuiltinToolCallbackProvider builtins = mock(BuiltinToolCallbackProvider.class);
         when(builtins.getToolCallbacks()).thenReturn(new ToolCallback[]{builtin});
 
-        ToolCallback capabilityDelegate = callback("sample_lookup");
+        ToolCallback capabilityDelegate = callback("builtin_sample_lookup");
         BuiltinToolCallback capability = new BuiltinToolCallback(
             capabilityDelegate, BuiltinToolCategory.CAPABILITY, BuiltinToolAction.CAPABILITY, RuntimeMessage.STEP_TOOL);
         CapabilityRegistry capabilities = mock(CapabilityRegistry.class);
