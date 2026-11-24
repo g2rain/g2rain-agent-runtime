@@ -39,7 +39,7 @@ class GroupTtlTest {
         TaskGraph graph = new TaskGraph();
         graph.setNodes(List.of(node("n1"), node("n2"), node("n3")));
         ConversationFence fence = new ConversationFence("c1", "u1", "t1", 1L, "trace", 1L);
-        DefaultTurnScope turn = new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
+        DefaultTurnScope turn = TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
             meta, graph, null, new HashMap<>(), null, new HashMap<>(), 60);
         SessionKeys keys = SessionKeys.of(turn);
         Duration ttl = groupTtl.of(meta);

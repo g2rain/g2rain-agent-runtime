@@ -6,6 +6,8 @@ import com.g2rain.agent.runtime.domain.state.dialogue.MessageType;
 import com.g2rain.agent.runtime.dto.ChatMessageDto;
 import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.service.ChatMessageService;
+import com.g2rain.agent.runtime.spi.Attachment;
+import com.g2rain.agent.runtime.spi.AttachmentType;
 import com.g2rain.agent.runtime.vo.ChatMessageVo;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -15,6 +17,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -106,6 +109,42 @@ class ConversationRepositoryTest {
         verify(conversationService).bindActiveTask(CONVERSATION_ID, "t2");
         verify(conversationService, never()).selectList(any());
         verify(conversationService, never()).save(any());
+    }
+
+    @Test
+    void insertMessage_withAttachments_writesJson() {
+        ChatConversationService conversationService = mock(ChatConversationService.class);
+        ChatMessageService chatMessageService = mock(ChatMessageService.class);
+        ConversationRepository repository = new ConversationRepository(conversationService, chatMessageService);
+        DialogueMessage message = new DialogueMessage(DialogueRole.AGENT, "done");
+        message.setMessageId("m1");
+        message.setType(MessageType.AGENT_REPLY);
+        message.setCreatedAt(1L);
+        message.setAttachments(List.of(new Attachment(AttachmentType.REPORT, "示例报告", "# 正文")));
+
+        repository.insertMessage(CONVERSATION_ID, "t1", message, null);
+
+        ArgumentCaptor<ChatMessageDto> messageCaptor = ArgumentCaptor.forClass(ChatMessageDto.class);
+        verify(chatMessageService).save(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().getAttachments()).contains("示例报告");
+        assertThat(messageCaptor.getValue().getAttachments()).contains("REPORT");
+    }
+
+    @Test
+    void insertMessage_withoutAttachments_writesNull() {
+        ChatConversationService conversationService = mock(ChatConversationService.class);
+        ChatMessageService chatMessageService = mock(ChatMessageService.class);
+        ConversationRepository repository = new ConversationRepository(conversationService, chatMessageService);
+        DialogueMessage message = new DialogueMessage(DialogueRole.AGENT, "done");
+        message.setMessageId("m1");
+        message.setType(MessageType.AGENT_REPLY);
+        message.setCreatedAt(1L);
+
+        repository.insertMessage(CONVERSATION_ID, "t1", message, null);
+
+        ArgumentCaptor<ChatMessageDto> messageCaptor = ArgumentCaptor.forClass(ChatMessageDto.class);
+        verify(chatMessageService).save(messageCaptor.capture());
+        assertNull(messageCaptor.getValue().getAttachments());
     }
 
     private static ChatMessageVo message(String messageId, long createdAtMs) {

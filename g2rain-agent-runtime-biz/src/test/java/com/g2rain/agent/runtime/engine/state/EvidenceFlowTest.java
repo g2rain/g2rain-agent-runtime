@@ -210,7 +210,7 @@ class EvidenceFlowTest {
         TaskGraph graph = new TaskGraph();
         graph.setNodes(List.of(graphNode));
         ConversationFence fence = new ConversationFence("c1", "u1", "t1", 1L, "trace", System.currentTimeMillis());
-        DefaultTurnScope turn = new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
+        DefaultTurnScope turn = TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
             meta, graph, null, new HashMap<>(), null, new HashMap<>(), 60);
         DefaultNodeScope node = new DefaultNodeScope(turn, "n1", Map.of(), Map.of(), Map.of(), List.of(), List.of(), 1,
             0);

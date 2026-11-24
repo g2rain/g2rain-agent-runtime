@@ -1,16 +1,17 @@
 package com.g2rain.agent.runtime.vo;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.g2rain.agent.runtime.spi.Attachment;
+import com.g2rain.common.json.AdminCompanyCondition;
+import com.g2rain.common.json.ConditionalJsonIgnore;
+import com.g2rain.common.model.BaseVo;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import com.g2rain.common.model.BaseVo;
-import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
-
-import com.g2rain.common.json.ConditionalJsonIgnore;
-import com.g2rain.common.json.AdminCompanyCondition;
 
 /**
  * 聊天消息表返回VO
@@ -115,6 +116,13 @@ public class ChatMessageVo extends BaseVo {
      */
     @Schema(description = "消息内容")
     private String content;
+
+    /**
+     * 回复附件；仅最终回复可能有值，为空时不下发
+     */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    @Schema(description = "回复附件")
+    private List<Attachment> attachments;
 
     /**
      * 删除标识[0:未删除, 1:已删除]

@@ -17,6 +17,7 @@ import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.DefaultNodeScope;
 import com.g2rain.agent.runtime.engine.state.DefaultTurnScope;
 import com.g2rain.agent.runtime.engine.state.EntityExtractor;
+import com.g2rain.agent.runtime.engine.state.TurnScopes;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spec.SourceType;
 import com.g2rain.agent.runtime.support.PlatformCatalog;
@@ -98,7 +99,7 @@ class NodeFinisherShareTest {
         TaskGraph graph = new TaskGraph();
         graph.setNodes(List.of(node));
         ConversationFence fence = new ConversationFence("c1", "u1", "t1", 1L, "trace", System.currentTimeMillis());
-        DefaultTurnScope turn = new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
+        DefaultTurnScope turn = TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
             meta, graph, null, new HashMap<>(), null, new HashMap<>(), 60);
         Map<String, Sourced<?>> outputs = new HashMap<>();
         outputs.put(key, new Sourced<>(value, new Source(SourceType.EVIDENCE, "e1", "id"), false));

@@ -1,10 +1,13 @@
 package com.g2rain.agent.runtime.domain.state.dialogue;
 
 
+import com.g2rain.agent.runtime.spi.Attachment;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * 交互历史中的一条发言。
@@ -77,6 +80,11 @@ public class DialogueMessage {
      * 本轮选用的模型名；仅用户消息记录，供观测与排查。
      */
     private @Nullable String model;
+
+    /**
+     * 回复附件；仅最终 AGENT_REPLY 可能有值。
+     */
+    private @Nullable List<Attachment> attachments;
 
     /**
      * 用角色和正文创建一条交互历史消息，创建时间为当前毫秒。

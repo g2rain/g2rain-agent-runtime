@@ -9,6 +9,7 @@ import com.g2rain.agent.runtime.dto.ChatConversationDto;
 import com.g2rain.agent.runtime.dto.ChatConversationSelectDto;
 import com.g2rain.agent.runtime.dto.ChatMessageDto;
 import com.g2rain.agent.runtime.dto.ChatMessageSelectDto;
+import com.g2rain.agent.runtime.engine.state.StateCodec;
 import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.service.ChatMessageService;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -147,6 +148,7 @@ public class ConversationRepository {
         MessageType type = Objects.nonNull(message.getType()) ? message.getType() : MessageType.from(message.getRole());
         dto.setMessageType(type.name());
         dto.setContent(message.getText());
+        dto.setAttachments(StateCodec.attachmentsJson(message.getAttachments()));
         dto.setCreatedAtMs(message.getCreatedAt());
         dto.setElapsedMs(message.getElapsedMs());
         if (Strings.isNotBlank(channel)) {
@@ -238,6 +240,7 @@ public class ConversationRepository {
         message.setModel(vo.getModel());
         message.setCreatedAt(Objects.requireNonNullElse(vo.getCreatedAtMs(), 0L));
         message.setElapsedMs(vo.getElapsedMs());
+        message.setAttachments(vo.getAttachments());
         return message;
     }
 }

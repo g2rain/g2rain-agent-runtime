@@ -56,8 +56,8 @@ import java.util.Set;
  * @author alpha
  * @since 2026/10/3
  */
-@Component
 @Slf4j
+@Component
 public class TurnSessionHydrate {
 
     /**
@@ -174,6 +174,8 @@ public class TurnSessionHydrate {
         // 本轮新建会话时记下标题，开局下发一次 TITLE
         String createdTitle = Objects.isNull(row) ? conversations.create(conversationId, user, request.getUserInput()) : null;
         int dialogueMax = properties.getState().getDialogueMax();
+        int attachmentMaxPerTurn = properties.getAttachment().getMaxPerTurn();
+        int attachmentMaxChars = properties.getAttachment().getMaxChars();
         List<DialogueMessage> dialogue = StateCodec.dialogue(
             store.lRange(keys.dialogue(), 0, dialogueMax - 1L));
         if (Collections.isEmpty(dialogue)) {
@@ -229,7 +231,7 @@ public class TurnSessionHydrate {
             }
         }
         DefaultTurnScope turn = new DefaultTurnScope(organId, userId, traceId, fence, dialogue, records, entities, task,
-            graph, checkpoint, shared, prior, sessionShared, dialogueMax);
+            graph, checkpoint, shared, prior, sessionShared, dialogueMax, attachmentMaxPerTurn, attachmentMaxChars);
         turn.markCreated(createdTitle);
         seedSession(turn, keys, entitiesHash, sessionSharedHash);
         // 热组：记下加载时已校验的节点，轮中 key 缺失即视为淘汰；并用 hotGroup 已读数据登记

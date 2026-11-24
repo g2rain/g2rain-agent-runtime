@@ -99,4 +99,10 @@ public class ChatMessageSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "消息内容")
     private String content;
+
+    /**
+     * 回复附件
+     */
+    @Schema(description = "回复附件")
+    private String attachments;
 }

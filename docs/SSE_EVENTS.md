@@ -121,6 +121,7 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 | `errorCode` | String | | 仅 `FAILED` | 失败时的业务错误码，如 `agent_runtime.40201`（模型额度不足） |
 | `traceId` | String | ✓ | ✓ | 本轮追踪号；失败时建议展示末 6 位，便于反馈问题时定位日志 |
 | `haltReason` | String | | 仅 `WAITING` | 停顿原因（检查点 `HaltReason` 名），如 `MISSING_INPUT`、`APPROVAL`；其他状态不出现 |
+| `attachments` | Object[] | | 有附件时 | 回复附件，见 4.4；无附件时不出现 |
 
 ### 4.1 PROGRESS：执行步骤
 
@@ -178,6 +179,56 @@ data: {"type":"RESULT","conversationId":"6e96…","status":"DONE","text":"目前
 - `text` 是数字员工的回复，可能包含换行（`\n`），按纯文本渲染。
 - `text`、`createdAtMs`、`elapsedMs` 与历史消息中的记录一致，刷新后显示相同内容。
 - 等待确认这类多次请求的回合，`elapsedMs` 只计算本次请求，不累加用户操作的时间。
+- 有附件时带 `attachments`，字段与历史消息一致，见 4.4。
+
+### 4.4 回复附件
+
+```json
+{
+  "type": "RESULT",
+  "conversationId": "6e96…",
+  "status": "DONE",
+  "text": "本轮分析已完成，详见附件报告。",
+  "attachments": [
+    {
+      "type": "REPORT",
+      "title": "示例报告",
+      "content": "# 概览\n\n正文……\n\n```chart\n{ \"kind\": \"BAR\", \"title\": \"各分类数量\", \"categories\": [\"A\", \"B\"], \"series\": [ { \"name\": \"数量\", \"values\": [12, 7] } ], \"unit\": \"个\" }\n```"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `type` | String | 附件类型，当前仅 `REPORT` |
+| `title` | String | 标题 |
+| `content` | String | 正文；`REPORT` 为 Markdown，可含图表块 |
+
+#### 附件类型
+
+| 取值 | 说明 |
+|---|---|
+| `REPORT` | Markdown 报告，可含 `chart` 围栏块 |
+
+#### `REPORT` 内容格式
+
+Markdown 文本。图表以围栏代码块表示，语言标记为 `chart`，内容为 JSON：
+
+````markdown
+```chart
+{ "kind": "BAR", "title": "各分类数量", "categories": ["A", "B"],
+  "series": [ { "name": "数量", "values": [12, 7] } ], "unit": "个" }
+```
+````
+
+| 字段 | 说明 |
+|---|---|
+| `kind` | `BAR`、`LINE`、`PIE` |
+| `title` | 图表标题 |
+| `categories` | 横轴类目（饼图为扇区名） |
+| `series` | 系列数组；每项 `name`、`values`（与 `categories` 等长的数字数组，缺值为 `null`）；饼图只取第一项 |
+| `unit` | 可选，数值单位 |
 
 ---
 
@@ -393,6 +444,12 @@ interface TurnStep {
   errorCode?: string;
 }
 
+interface Attachment {
+  type: 'REPORT';
+  title: string;
+  content: string;
+}
+
 interface TurnEvent {
   type: 'PROGRESS' | 'TITLE' | 'RESULT';
   conversationId: string;
@@ -405,6 +462,8 @@ interface TurnEvent {
   createdAtMs?: number;
   elapsedMs?: number;
   errorCode?: string;
+  haltReason?: string;
+  attachments?: Attachment[];
 }
 
 interface TurnRequest {
@@ -520,6 +579,27 @@ GET /chat/message/list?conversationId=<会话ID>
 | 时间 | `createdAtMs` 字段 |
 | 耗时 | `elapsedMs` 字段；仅最终回复有值，旧数据为空 |
 | 执行过程 | `progress` 字段：本轮步骤列表（字段同 4.1，按开始顺序）；仅最终回复有值，旧数据为空 |
+| 附件 | `attachments` 字段（结构同 4.4）；仅最终回复可能有值，无附件时不出现 |
+
+历史消息示例（最终回复带附件）：
+
+```json
+{
+  "messageId": "…",
+  "role": "AGENT",
+  "messageType": "AGENT_REPLY",
+  "content": "本轮分析已完成，详见附件报告。",
+  "createdAtMs": 1730000000000,
+  "elapsedMs": 4200,
+  "attachments": [
+    {
+      "type": "REPORT",
+      "title": "示例报告",
+      "content": "# 概览\n\n正文……"
+    }
+  ]
+}
+```
 
 历史消息中不包含按钮。如果需要在刷新后恢复最后一轮的按钮，前端可以按会话缓存最近一条 `RESULT`；用户也可以直接输入文字继续对话。
 

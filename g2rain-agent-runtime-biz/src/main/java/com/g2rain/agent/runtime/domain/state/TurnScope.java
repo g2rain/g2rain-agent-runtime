@@ -12,6 +12,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
+import com.g2rain.agent.runtime.spi.Attachment;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -145,6 +146,18 @@ public interface TurnScope {
      * @return 本轮执行过程
      */
     TurnProgress progress();
+
+    /**
+     * 为本轮最终回复追加一条附件；超过数量或字符上限时抛 {@link IllegalStateException}。
+     *
+     * @param attachment 附件
+     */
+    void attach(Attachment attachment);
+
+    /**
+     * @return 本轮已添加的附件快照
+     */
+    List<Attachment> attachments();
 
     /**
      * @return 本轮新建会话时的标题；会话已存在为空

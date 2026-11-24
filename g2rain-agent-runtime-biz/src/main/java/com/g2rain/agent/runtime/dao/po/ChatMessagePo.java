@@ -91,6 +91,11 @@ public class ChatMessagePo extends BasePo {
     private String content;
 
     /**
+     * 回复附件
+     */
+    private String attachments;
+
+    /**
      * 删除标识[0:未删除, 1:已删除]
      */
     private Boolean deleteFlag;

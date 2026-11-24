@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.g2rain.agent.runtime.domain.state.TurnStatus;
 import com.g2rain.agent.runtime.domain.state.progress.StepView;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
+import com.g2rain.agent.runtime.spi.Attachment;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -16,7 +17,8 @@ import java.util.List;
  *       客户端按 {@code stepId} 合并为时间线。</li>
  *   <li>{@link TurnEventType#TITLE}：会话标题，{@code text} 为标题；只在标题生成或变化时发。</li>
  *   <li>{@link TurnEventType#RESULT}：本轮结果，带 {@code status}、{@code text}；等待用户时另带
- *       {@code actions} 与 {@code haltReason}，有候选答案时带 {@code suggestions}。每轮恰好一帧且为最后一帧。</li>
+ *       {@code actions} 与 {@code haltReason}，有候选答案时带 {@code suggestions}，有附件时带
+ *       {@code attachments}。每轮恰好一帧且为最后一帧。</li>
  * </ul>
  *
  * @param type           事件类型
@@ -31,6 +33,7 @@ import java.util.List;
  * @param step           执行步骤快照；仅 PROGRESS
  * @param traceId        本轮追踪号；用于 SSE 路由，并下发给客户端在失败时展示
  * @param haltReason     停顿原因（检查点 HaltReason 名）；仅 RESULT 且 WAITING
+ * @param attachments    回复附件；仅 RESULT，无附件时不出现
  * @author alpha
  * @since 2026/8/27
  */
@@ -38,5 +41,5 @@ import java.util.List;
 public record TurnEvent(TurnEventType type, String conversationId, @Nullable String text, @Nullable TurnStatus status,
                         List<ResumeAction> actions, List<String> suggestions, @Nullable Long createdAtMs,
                         @Nullable Integer elapsedMs, @Nullable String errorCode, @Nullable StepView step,
-                        String traceId, @Nullable String haltReason) {
+                        String traceId, @Nullable String haltReason, @Nullable List<Attachment> attachments) {
 }

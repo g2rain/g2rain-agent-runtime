@@ -25,6 +25,7 @@
         <result column="created_at_ms" property="createdAtMs" jdbcType="BIGINT"/>
         <result column="elapsed_ms" property="elapsedMs" jdbcType="INTEGER"/>
         <result column="content" property="content" jdbcType="LONGVARCHAR"/>
+        <result column="attachments" property="attachments" jdbcType="LONGVARCHAR"/>
         <!-- deleteFlag字段（如果存在） -->
         <result column="delete_flag" property="deleteFlag" jdbcType="TINYINT"/>
         <!-- version字段（如果存在） -->
@@ -108,6 +109,10 @@
                         content
                         <include refid="directionClause"/>
                     </when>
+                    <when test="item.column == 'attachments'">
+                        attachments
+                        <include refid="directionClause"/>
+                    </when>
                 </choose>
             </foreach>
         </trim>
@@ -121,7 +126,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content, attachments,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -132,7 +137,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{model, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{elapsedMs, jdbcType=INTEGER}, #{content, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{messageId, jdbcType=VARCHAR}, #{channel, jdbcType=VARCHAR}, #{model, jdbcType=VARCHAR}, #{role, jdbcType=VARCHAR}, #{messageType, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{createdAtMs, jdbcType=BIGINT}, #{elapsedMs, jdbcType=INTEGER}, #{content, jdbcType=LONGVARCHAR}, #{attachments, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -191,6 +196,9 @@
             <if test="content != null">
                 content = #{content, jdbcType=LONGVARCHAR},
             </if>
+            <if test="attachments != null">
+                attachments = #{attachments, jdbcType=LONGVARCHAR},
+            </if>
             <!-- version字段更新（如果存在，版本号自增） -->
             version = version + 1
         </set>
@@ -205,7 +213,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content, attachments,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -224,7 +232,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content, attachments,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -306,6 +314,9 @@
             <if test="content != null">
                 AND content = #{content, jdbcType=LONGVARCHAR}
             </if>
+            <if test="attachments != null">
+                AND attachments = #{attachments, jdbcType=LONGVARCHAR}
+            </if>
             <!-- 过滤已删除的记录 -->
             AND (delete_flag = 0 OR delete_flag IS NULL)
         </where>
@@ -325,7 +336,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content,
+        organ_id, conversation_id, task_id, node_id, round, message_id, channel, model, role, message_type, trace_id, created_at_ms, elapsed_ms, content, attachments,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -338,7 +349,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.model, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.elapsedMs, jdbcType=INTEGER}, #{item.content, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.messageId, jdbcType=VARCHAR}, #{item.channel, jdbcType=VARCHAR}, #{item.model, jdbcType=VARCHAR}, #{item.role, jdbcType=VARCHAR}, #{item.messageType, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.createdAtMs, jdbcType=BIGINT}, #{item.elapsedMs, jdbcType=INTEGER}, #{item.content, jdbcType=LONGVARCHAR}, #{item.attachments, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -402,6 +413,9 @@
             </if>
             <if test="content != null">
                 content = #{content, jdbcType=LONGVARCHAR},
+            </if>
+            <if test="attachments != null">
+                attachments = #{attachments, jdbcType=LONGVARCHAR},
             </if>
             <!-- version字段更新（乐观锁版本号自增） -->
             version = version + 1

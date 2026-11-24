@@ -355,7 +355,7 @@ class TurnSessionHydrateTest {
         TaskGraph newGraph = graph(NODE_A);
         ConversationFence fence = new ConversationFence(CONV, Long.toString(USER), TASK, 1L, TRACE,
             System.currentTimeMillis());
-        DefaultTurnScope turn = new DefaultTurnScope(Long.toString(ORGAN), Long.toString(USER), TRACE, fence,
+        DefaultTurnScope turn = TurnScopes.create(Long.toString(ORGAN), Long.toString(USER), TRACE, fence,
             List.of(), List.of(), Map.of(), meta, newGraph, null, Map.of(), null, Map.of(), 60);
 
         DefaultNodeScope node = hydrate.openSpace(turn, keys, NODE_A);

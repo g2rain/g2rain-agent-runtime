@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.domain.state.dialogue.DialogueMessage;
 import com.g2rain.agent.runtime.domain.state.progress.StepView;
 import com.g2rain.agent.runtime.domain.state.task.ResumeAction;
 import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
+import com.g2rain.agent.runtime.spi.Attachment;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -35,7 +36,7 @@ public final class TurnEvents {
      */
     public static TurnEvent progress(TurnScope turn, StepView step) {
         return new TurnEvent(TurnEventType.PROGRESS, turn.conversation().conversationId(), null, null,
-            List.of(), List.of(), null, null, null, step, turn.traceId(), null);
+            List.of(), List.of(), null, null, null, step, turn.traceId(), null, null);
     }
 
     /**
@@ -47,7 +48,7 @@ public final class TurnEvents {
      */
     public static TurnEvent title(TurnScope turn, String title) {
         return new TurnEvent(TurnEventType.TITLE, turn.conversation().conversationId(), title, null,
-            List.of(), List.of(), null, null, null, null, turn.traceId(), null);
+            List.of(), List.of(), null, null, null, null, turn.traceId(), null, null);
     }
 
     /**
@@ -67,12 +68,13 @@ public final class TurnEvents {
         TurnStatus outward = Objects.isNull(status) ? TurnStatus.FAILED : status;
         List<ResumeAction> allowed = outward == TurnStatus.WAITING ? copy(actions) : List.of();
         DialogueMessage reply = turn.reply().orElse(null);
+        List<Attachment> attachments = resultAttachments(reply);
         return new TurnEvent(TurnEventType.RESULT, turn.conversation().conversationId(), text, outward,
             allowed, copy(suggestions),
             Objects.isNull(reply) ? null : reply.getCreatedAt(),
             Objects.isNull(reply) ? null : reply.getElapsedMs(),
             outward == TurnStatus.FAILED ? errorCode : null,
-            null, turn.traceId(), haltReason(turn, outward));
+            null, turn.traceId(), haltReason(turn, outward), attachments);
     }
 
     /**
@@ -85,7 +87,24 @@ public final class TurnEvents {
      */
     public static TurnEvent failed(String traceId, String conversationId, String text) {
         return new TurnEvent(TurnEventType.RESULT, conversationId, text, TurnStatus.FAILED, List.of(), List.of(),
-            null, null, null, null, traceId, null);
+            null, null, null, null, traceId, null, null);
+    }
+
+    /**
+     * 最终回复上的附件；无回复或无附件时为空（不下发字段）。
+     *
+     * @param reply 最终回复；可空
+     * @return 附件列表；无可下发内容时为 {@code null}
+     */
+    private static @Nullable List<Attachment> resultAttachments(@Nullable DialogueMessage reply) {
+        if (Objects.isNull(reply)) {
+            return null;
+        }
+        List<Attachment> attachments = reply.getAttachments();
+        if (Objects.isNull(attachments) || attachments.isEmpty()) {
+            return null;
+        }
+        return List.copyOf(attachments);
     }
 
     /**

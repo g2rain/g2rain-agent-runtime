@@ -97,7 +97,7 @@ class DefaultRuntimeStateFacadeTest {
         meta.setConversationId("c1");
         meta.setStatus(TaskStatus.RUNNING);
         ConversationFence fence = new ConversationFence("c1", "u1", "t1", 1L, "trace", System.currentTimeMillis());
-        return new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(), meta,
+        return TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(), meta,
             new TaskGraph(), null, new HashMap<>(), null, new HashMap<>(), 60);
     }
 }

@@ -68,6 +68,11 @@ public class RuntimeProperties {
     private final Tracing trace = new Tracing();
 
     /**
+     * 回复附件上限。
+     */
+    private final AttachmentLimits attachment = new AttachmentLimits();
+
+    /**
      * 模型调用：端点与超时、重试。
      */
     @Getter
@@ -371,6 +376,24 @@ public class RuntimeProperties {
         private Set<String> exposed = new LinkedHashSet<>(Set.of(
             "userId", "memberId", "name", "organId", "organName", "organType", "deptPath"
         ));
+    }
+
+    /**
+     * 回复附件：本轮数量与单附件字符上限。
+     */
+    @Getter
+    @Setter
+    public static class AttachmentLimits {
+
+        /**
+         * 本轮最多附件条数
+         */
+        private int maxPerTurn = 5;
+
+        /**
+         * 单个附件 content 最大字符数
+         */
+        private int maxChars = 500000;
     }
 
     /**

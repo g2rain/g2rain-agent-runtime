@@ -352,7 +352,7 @@ class TurnFlushPlanChangeTest {
         meta.setConversationId(CONV);
         meta.setStatus(status);
         ConversationFence fence = new ConversationFence(CONV, USER, TASK, 3L, TRACE, System.currentTimeMillis());
-        return new DefaultTurnScope(ORGAN, USER, TRACE, fence, List.of(), List.of(), new HashMap<>(), meta, graph,
+        return TurnScopes.create(ORGAN, USER, TRACE, fence, List.of(), List.of(), new HashMap<>(), meta, graph,
             null, new HashMap<>(), null, new HashMap<>(), 60);
     }
 

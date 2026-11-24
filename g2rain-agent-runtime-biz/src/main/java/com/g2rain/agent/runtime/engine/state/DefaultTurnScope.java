@@ -22,6 +22,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.domain.state.task.TaskStatus;
+import com.g2rain.agent.runtime.spi.Attachment;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.utils.Strings;
 import org.jspecify.annotations.Nullable;
@@ -184,31 +185,49 @@ public final class DefaultTurnScope implements TurnScope {
     private final TurnProgress progress = new TurnProgress();
 
     /**
+     * 本轮回复附件（与其他可变状态一样用普通列表；本轮单线程推进）。
+     */
+    private final List<Attachment> attachments = new ArrayList<>();
+
+    /**
+     * 本轮附件条数上限。
+     */
+    private final int attachmentMaxPerTurn;
+
+    /**
+     * 单个附件 content 字符上限。
+     */
+    private final int attachmentMaxChars;
+
+    /**
      * 本轮新建会话时的标题；会话已存在为空。
      */
     private @Nullable String createdTitle;
 
     /**
-     * @param organId       机构 id
-     * @param userId        用户 id
-     * @param traceId       本轮 traceId
-     * @param fence         会话栅栏（含本轮 version）
-     * @param dialogue      已加载的交互历史
-     * @param records       已加载的任务记录
-     * @param entities      已加载的实体
-     * @param task          活跃任务
-     * @param graph         任务图；无任务时传空图
-     * @param checkpoint    断点
-     * @param shared        任务共享值
-     * @param prior         任务前情；可空
-     * @param sessionShared 会话共享值
-     * @param dialogueMax   交互历史保留条数
+     * @param organId              机构 id
+     * @param userId               用户 id
+     * @param traceId              本轮 traceId
+     * @param fence                会话栅栏（含本轮 version）
+     * @param dialogue             已加载的交互历史
+     * @param records              已加载的任务记录
+     * @param entities             已加载的实体
+     * @param task                 活跃任务
+     * @param graph                任务图；无任务时传空图
+     * @param checkpoint           断点
+     * @param shared               任务共享值
+     * @param prior                任务前情；可空
+     * @param sessionShared        会话共享值
+     * @param dialogueMax          交互历史保留条数
+     * @param attachmentMaxPerTurn 本轮附件条数上限
+     * @param attachmentMaxChars   单个附件 content 字符上限
      */
     public DefaultTurnScope(String organId, String userId, String traceId, ConversationFence fence,
                             List<DialogueMessage> dialogue, List<TaskRecord> records,
                             Map<String, EntityEntry> entities, @Nullable TaskMetadata task, TaskGraph graph,
                             @Nullable TaskCheckpoint checkpoint, Map<String, Sourced<?>> shared, @Nullable Prior prior,
-                            Map<String, Sourced<?>> sessionShared, int dialogueMax) {
+                            Map<String, Sourced<?>> sessionShared, int dialogueMax, int attachmentMaxPerTurn,
+                            int attachmentMaxChars) {
         this.organId = organId;
         this.userId = userId;
         this.traceId = traceId;
@@ -222,6 +241,8 @@ public final class DefaultTurnScope implements TurnScope {
         this.shared = new LinkedHashMap<>(shared);
         this.prior = prior;
         this.sessionShared = new LinkedHashMap<>(sessionShared);
+        this.attachmentMaxPerTurn = attachmentMaxPerTurn;
+        this.attachmentMaxChars = attachmentMaxChars;
     }
 
     /**
@@ -432,6 +453,9 @@ public final class DefaultTurnScope implements TurnScope {
             if (Strings.isBlank(message.getModel())) {
                 message.setModel(modelUsed);
             }
+            if (!attachments.isEmpty()) {
+                message.setAttachments(List.copyOf(attachments));
+            }
             reply = message;
         }
         dialogue.append(message);
@@ -452,6 +476,26 @@ public final class DefaultTurnScope implements TurnScope {
     @Override
     public TurnProgress progress() {
         return progress;
+    }
+
+    @Override
+    public void attach(Attachment attachment) {
+        Objects.requireNonNull(attachment);
+        if (attachments.size() >= attachmentMaxPerTurn) {
+            throw new IllegalStateException(
+                "attachment max-per-turn exceeded: limit=" + attachmentMaxPerTurn);
+        }
+        String content = attachment.content();
+        if (content.length() > attachmentMaxChars) {
+            throw new IllegalStateException(
+                "attachment max-chars exceeded: limit=" + attachmentMaxChars);
+        }
+        attachments.add(attachment);
+    }
+
+    @Override
+    public List<Attachment> attachments() {
+        return List.copyOf(attachments);
     }
 
     @Override

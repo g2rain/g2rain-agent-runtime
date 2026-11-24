@@ -125,4 +125,10 @@ public class ChatMessageDto extends BaseDto {
     @Size(max = 16777215)
     @Schema(description = "消息内容（新增必填）", maxLength = 16777215)
     private String content;
+
+    /**
+     * 回复附件
+     */
+    @Schema(description = "回复附件")
+    private String attachments;
 }

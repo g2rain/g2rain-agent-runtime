@@ -126,6 +126,6 @@ public final class ToolCapabilityContext implements CapabilityContext {
 
     @Override
     public void attach(Attachment attachment) {
-        throw new UnsupportedOperationException("attach is not implemented yet");
+        execution.scope().turn().attach(attachment);
     }
 }

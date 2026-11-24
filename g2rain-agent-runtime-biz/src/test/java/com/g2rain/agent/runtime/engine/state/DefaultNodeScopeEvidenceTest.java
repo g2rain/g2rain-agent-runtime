@@ -44,7 +44,7 @@ class DefaultNodeScopeEvidenceTest {
 
     private static DefaultNodeScope scope() {
         ConversationFence fence = new ConversationFence("c1", "u1", null, 0L, "trace", System.currentTimeMillis());
-        DefaultTurnScope turn = new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
+        DefaultTurnScope turn = TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
             null, new TaskGraph(), null, new HashMap<>(), null, new HashMap<>(), 60);
         return new DefaultNodeScope(turn, "n1", Map.of(), Map.of(), Map.of(), new ArrayList<>(), new ArrayList<>(),
             0, 0L);

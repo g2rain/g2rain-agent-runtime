@@ -135,7 +135,7 @@ class DefaultRuntimeStateFacadeHistoryTest {
 
     private static DefaultNodeScope nodeWith(List<EvidenceHead> evidence) {
         ConversationFence fence = new ConversationFence("c1", "u1", TASK, 0L, "trace", System.currentTimeMillis());
-        DefaultTurnScope turn = new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
+        DefaultTurnScope turn = TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(),
             null, new TaskGraph(), null, new HashMap<>(), null, new HashMap<>(), 60);
         TaskMetadata meta = new TaskMetadata();
         meta.setTaskId(TASK);

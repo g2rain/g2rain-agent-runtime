@@ -200,7 +200,7 @@ class RuntimeStatePersistenceTest {
         }
         ConversationFence fence = new ConversationFence(CONV, "u1", withTask ? TASK : null, 1L, "trace",
             System.currentTimeMillis());
-        return new DefaultTurnScope("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(), meta, graph,
+        return TurnScopes.create("1", "u1", "trace", fence, List.of(), List.of(), new HashMap<>(), meta, graph,
             null, new HashMap<>(), null, new HashMap<>(), 60);
     }
 }

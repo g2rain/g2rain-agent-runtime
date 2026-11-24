@@ -14,6 +14,7 @@ import com.g2rain.agent.runtime.domain.state.task.TaskCheckpoint;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
 import com.g2rain.agent.runtime.domain.state.task.TaskRecord;
 import com.g2rain.agent.runtime.spec.SideEffect;
+import com.g2rain.agent.runtime.spi.Attachment;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
@@ -82,9 +83,48 @@ public final class StateCodec {
     };
 
     /**
+     * 回复附件列表反序列化类型。
+     */
+    private static final TypeReference<List<Attachment>> ATTACHMENTS = new TypeReference<>() {
+
+    };
+
+    /**
      * 静态编解码工具，禁止实例化。
      */
     private StateCodec() {
+    }
+
+    /**
+     * 附件列表 → 库列 JSON；空列表返回 {@code null}（不写空数组）。
+     *
+     * @param attachments 附件；可空
+     * @return JSON 文本；无可写内容时为 {@code null}
+     */
+    public static @Nullable String attachmentsJson(@Nullable List<Attachment> attachments) {
+        if (Objects.isNull(attachments) || attachments.isEmpty()) {
+            return null;
+        }
+        return JSON.obj2str(attachments);
+    }
+
+    /**
+     * 库列 JSON → 附件列表；空白或空数组返回 {@code null}。
+     *
+     * @param raw JSON 文本；可空
+     * @return 附件列表；无可读内容时为 {@code null}
+     */
+    public static @Nullable List<Attachment> attachments(@Nullable String raw) {
+        if (Strings.isBlank(raw)) {
+            return null;
+        }
+
+        List<Attachment> list = JSON.str2obj(raw, ATTACHMENTS);
+        if (list.isEmpty()) {
+            return null;
+        }
+
+        return List.copyOf(list);
     }
 
     /**

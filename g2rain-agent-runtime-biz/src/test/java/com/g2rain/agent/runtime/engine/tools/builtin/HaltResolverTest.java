@@ -9,6 +9,7 @@ import com.g2rain.agent.runtime.domain.state.task.EvidenceStatus;
 import com.g2rain.agent.runtime.domain.state.task.FailureKind;
 import com.g2rain.agent.runtime.domain.state.task.HaltReason;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
+import com.g2rain.agent.runtime.engine.state.TurnScopes;
 import com.g2rain.agent.runtime.engine.tools.ToolRejectedException;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
 import com.g2rain.agent.runtime.spec.ArgSpec;
@@ -150,7 +151,7 @@ class HaltResolverTest {
 
     private static com.g2rain.agent.runtime.engine.state.DefaultNodeScope liveScope() {
         var fence = new com.g2rain.agent.runtime.domain.state.ConversationFence("c1", "u1", null, 0L, "t", 1L);
-        var turn = new com.g2rain.agent.runtime.engine.state.DefaultTurnScope("1", "u1", "t", fence, List.of(),
+        var turn = TurnScopes.create("1", "u1", "t", fence, List.of(),
             List.of(), new HashMap<>(), null, new com.g2rain.agent.runtime.domain.graph.TaskGraph(), null,
             new HashMap<>(), null, new HashMap<>(), 60);
         return new com.g2rain.agent.runtime.engine.state.DefaultNodeScope(turn, "n1", Map.of(), Map.of(), Map.of(),
