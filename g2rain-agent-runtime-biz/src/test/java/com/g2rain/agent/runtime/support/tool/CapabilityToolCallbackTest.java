@@ -29,7 +29,7 @@ class CapabilityToolCallbackTest {
 
     @Test
     void successReturnsContent() {
-        Capability capability = capability(call -> CapabilityResult.success("{\"ok\":true}"));
+        Capability capability = capability(false, call -> CapabilityResult.success("{\"ok\":true}"));
         CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class));
 
@@ -38,8 +38,42 @@ class CapabilityToolCallbackTest {
     }
 
     @Test
+    void externalSuccess_isWrapped() {
+        Capability capability = capability(true, call -> CapabilityResult.success("payload"));
+        CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
+            mock(RuntimeStateFacade.class));
+
+        String result = callback.call("{}", toolContext());
+        assertThat(result).isEqualTo(ExternalContent.wrap("sample_tool", "payload"));
+    }
+
+    @Test
+    void externalFailure_isNotWrapped() {
+        Capability capability = capability(true, call -> CapabilityResult.failure("条件不满足", "换个条件再试"));
+        CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
+            mock(RuntimeStateFacade.class));
+
+        assertThatThrownBy(() -> callback.call("{}", toolContext()))
+            .isInstanceOf(CapabilityFailure.class)
+            .satisfies(ex -> {
+                CapabilityFailure failure = (CapabilityFailure) ex;
+                assertThat(failure.reason()).isEqualTo("条件不满足");
+                assertThat(failure.reason()).doesNotContain(ExternalContent.TAG);
+            });
+    }
+
+    @Test
+    void nonExternalSuccess_isNotWrapped() {
+        Capability capability = capability(false, call -> CapabilityResult.success("plain"));
+        CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
+            mock(RuntimeStateFacade.class));
+
+        assertThat(callback.call("{}", toolContext())).isEqualTo("plain");
+    }
+
+    @Test
     void failureThrowsCapabilityFailure() {
-        Capability capability = capability(call -> CapabilityResult.failure("条件不满足", "换个条件再试"));
+        Capability capability = capability(false, call -> CapabilityResult.failure("条件不满足", "换个条件再试"));
         CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class));
 
@@ -54,7 +88,7 @@ class CapabilityToolCallbackTest {
 
     @Test
     void unexpectedExceptionThrowsCapabilityFailure() {
-        Capability capability = capability(call -> {
+        Capability capability = capability(false, call -> {
             throw new IllegalStateException("boom");
         });
         CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
@@ -71,7 +105,7 @@ class CapabilityToolCallbackTest {
 
     @Test
     void invalidJsonThrowsCapabilityFailure() {
-        Capability capability = capability(call -> CapabilityResult.success("{}"));
+        Capability capability = capability(false, call -> CapabilityResult.success("{}"));
         CapabilityToolCallback callback = new CapabilityToolCallback(capability, mock(EvidenceReader.class),
             mock(RuntimeStateFacade.class));
 
@@ -89,12 +123,13 @@ class CapabilityToolCallbackTest {
         return ToolExecutionContexts.toSpring(execution);
     }
 
-    private static Capability capability(java.util.function.Function<CapabilityCall, CapabilityResult> handler) {
+    private static Capability capability(boolean external,
+                                         java.util.function.Function<CapabilityCall, CapabilityResult> handler) {
         return new Capability() {
             @Override
             public CapabilitySpec spec() {
-                return new CapabilitySpec("sample_lookup", Map.of("zh-CN", "示例查询"), "desc",
-                    JsonNodeFactory.instance.objectNode(), false);
+                return new CapabilitySpec("sample_tool", Map.of("zh-CN", "示例工具"), "desc",
+                    JsonNodeFactory.instance.objectNode(), external);
             }
 
             @Override

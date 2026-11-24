@@ -158,6 +158,10 @@ public final class CapabilityToolCallback implements ToolCallback {
             String content = Objects.toString(result.content(), "");
             ok = true;
             chars = content.length();
+            if (capability.spec().external()) {
+                return ExternalContent.wrap(definition.name(), content);
+            }
+
             return content;
         } finally {
             Trace.at(TraceStage.TOOL, "capability")
