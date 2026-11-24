@@ -123,11 +123,7 @@ public enum RuntimeMessage {
      * @return 文案
      */
     public String text(String name, String value) {
-        if (Strings.isBlank(name)) {
-            return text();
-        }
-
-        return text().replace("{" + name + "}", Strings.defaultIfBlank(value, ""));
+        return fill(text(), name, value);
     }
 
     /**
@@ -137,7 +133,18 @@ public enum RuntimeMessage {
      * @return 文案
      */
     public String text(String... named) {
-        String out = text();
+        return fill(text(), named);
+    }
+
+    /**
+     * 在模板中替换具名占位符 {@code {name}}；{@code named} 为名、值交替，奇数末项忽略。
+     *
+     * @param template 文案模板
+     * @param named    占位名与替换值交替排列
+     * @return 替换后的文案
+     */
+    public static String fill(String template, String... named) {
+        String out = template;
         if (named.length < 2) {
             return out;
         }

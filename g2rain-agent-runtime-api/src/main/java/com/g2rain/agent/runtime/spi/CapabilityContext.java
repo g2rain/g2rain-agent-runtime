@@ -51,6 +51,19 @@ public interface CapabilityContext {
     String locale();
 
     /**
+     * 按请求语言取用户可见文案；取不到时用 {@code fallback}。
+     *
+     * <p>{@code named} 为名、值交替的具名参数，替换模板中的 {@code {name}}；
+     * 参数个数为奇数时忽略最后一个。编码应以 {@code capability.{工具名}.} 开头。</p>
+     *
+     * @param code     文案编码
+     * @param fallback 缺文案时的中文兜底
+     * @param named    名、值交替的具名参数
+     * @return 替换后的文案
+     */
+    String text(String code, String fallback, String... named);
+
+    /**
      * 本节点与上游节点已成功的业务调用，按发生顺序。
      *
      * @return 证据摘要；没有时为空列表

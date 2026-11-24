@@ -3,6 +3,8 @@ package com.g2rain.agent.runtime.support.tool;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
+import com.g2rain.agent.runtime.i18n.RuntimeMessage;
+import com.g2rain.agent.runtime.i18n.RuntimeMessageRegistry;
 import com.g2rain.agent.runtime.spi.Attachment;
 import com.g2rain.agent.runtime.spi.CapabilityContext;
 import com.g2rain.agent.runtime.spi.EvidenceView;
@@ -88,6 +90,12 @@ public final class ToolCapabilityContext implements CapabilityContext {
     @Override
     public String locale() {
         return RequestLocale.tag();
+    }
+
+    @Override
+    public String text(String code, String fallback, String... named) {
+        String template = RuntimeMessageRegistry.resolve(code, RequestLocale.tag(), fallback);
+        return RuntimeMessage.fill(template, named);
     }
 
     @Override

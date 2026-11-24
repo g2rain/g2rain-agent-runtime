@@ -596,3 +596,4 @@ VALUES
 
 - **命名**：与内置工具相同，必须以 `builtin_` 开头，后接小写字母、数字、下划线，总长不超过 64。示例工具名：`builtin_sample_lookup`。
 - **展示名**：多语言文案放在 Infra 的 `UI_MESSAGE`（标签 `AGENT_RUNTIME`），编码为 `capability.{工具名}`（如 `capability.builtin_sample_lookup`）；插件只提供中文兜底。
+- **用户可见文案**：插件生成的固定说明经 `CapabilityContext.text` 按请求语言取；文案放在 Infra 的 `UI_MESSAGE` / `AGENT_RUNTIME`（示例编码 `capability.builtin_sample_lookup.note`）。
