@@ -75,6 +75,7 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         String skillKey = request.getSkillKey();
+        Long skillRevisionId = request.getSkillRevisionId();
         String taskId = turn.conversation().activeTaskId();
         ResumeAction requested = request.getAction();
         // 带了确认/拒绝/取消，但现场没有可恢复断点：直接拒回，避免空跑协议
@@ -84,12 +85,12 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         if (Strings.isBlank(taskId) || turn.task().isEmpty()) {
-            return acceptOpening(agentId, skillKey);
+            return acceptOpening(agentId, skillKey, skillRevisionId);
         }
 
         TaskMetadata metadata = turn.task().orElseThrow();
         if (!isSuspended(metadata, turn)) {
-            return acceptOpening(agentId, skillKey);
+            return acceptOpening(agentId, skillKey, skillRevisionId);
         }
 
         TaskCheckpoint checkpoint = turn.checkpoint().orElse(null);
@@ -102,12 +103,13 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         // 请求 Agent 与挂起任务绑定不一致：换人而不是在旧 Agent 上续跑
         if (Objects.nonNull(agentId) && Objects.nonNull(boundAgentId) && !Objects.equals(agentId, boundAgentId)) {
             validateForcedSkill(agentId, skillKey);
+            validateSkillRevision(agentId, skillRevisionId);
             return EntryResult.switchAgent(agentId, focusNodeId, checkpoint);
         }
 
         // 审批过期：不强制续跑，交给后续意图分类重新确认
         if (approvalExpired(metadata, checkpoint)) {
-            return acceptOpening(agentId, skillKey);
+            return acceptOpening(agentId, skillKey, skillRevisionId);
         }
 
         if (Objects.isNull(request.getAction())) {
@@ -115,13 +117,13 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
             ResumeAction implied = resolveAction(null, checkpoint);
             if (Objects.nonNull(implied)) {
                 return answersFollowUp(implied, checkpoint, request.getUserInput())
-                    ? acceptOpening(agentId, skillKey)
+                    ? acceptOpening(agentId, skillKey, skillRevisionId)
                     : EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, implied);
             }
 
             // 审批与回查没有安全默认动作：有文字交给意图判断，无文字要求显式选择
             if (Strings.isNotBlank(request.getUserInput())) {
-                return acceptOpening(agentId, skillKey);
+                return acceptOpening(agentId, skillKey, skillRevisionId);
             }
 
             return EntryResult.reject(new RejectedReply(conversationId, taskId, RuntimeMessage.ACTION_MISSING.text()));
@@ -138,21 +140,23 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         if (answersFollowUp(action, checkpoint, request.getUserInput())) {
-            return acceptOpening(agentId, skillKey);
+            return acceptOpening(agentId, skillKey, skillRevisionId);
         }
 
         return EntryResult.continueSuspended(agentId, focusNodeId, checkpoint, action);
     }
 
     /**
-     * 可能开新任务的受理：先校验指定技能，再返回受理结论。
+     * 可能开新任务的受理：先校验指定技能与修订，再返回受理结论。
      *
-     * @param agentId  显式 Agent id；可空
-     * @param skillKey 指定技能键；可空
+     * @param agentId         显式 Agent id；可空
+     * @param skillKey        指定技能键；可空
+     * @param skillRevisionId 指定技能修订；可空
      * @return 受理结论
      */
-    private EntryResult acceptOpening(@Nullable Long agentId, @Nullable String skillKey) {
+    private EntryResult acceptOpening(@Nullable Long agentId, @Nullable String skillKey, @Nullable Long skillRevisionId) {
         validateForcedSkill(agentId, skillKey);
+        validateSkillRevision(agentId, skillRevisionId);
         return EntryResult.accept(agentId);
     }
 
@@ -284,6 +288,24 @@ public final class DefaultTurnEntryGuard implements TurnEntryGuard {
         }
 
         throw new BusinessException(RuntimeErrorCode.SKILL_NOT_OF_AGENT, key);
+    }
+
+    /**
+     * 校验指定技能修订：须同时给出 Agent。
+     *
+     * <p>未给出修订时跳过。只在可能开新任务的受理路径调用；续跑挂起任务时不调用。</p>
+     *
+     * @param agentId         显式 Agent id；可空
+     * @param skillRevisionId 指定技能修订；可空
+     */
+    private void validateSkillRevision(@Nullable Long agentId, @Nullable Long skillRevisionId) {
+        if (Objects.isNull(skillRevisionId)) {
+            return;
+        }
+
+        if (Objects.isNull(agentId)) {
+            throw new BusinessException(SystemErrorCode.PARAM_REQUIRED, "agentId");
+        }
     }
 
     /**

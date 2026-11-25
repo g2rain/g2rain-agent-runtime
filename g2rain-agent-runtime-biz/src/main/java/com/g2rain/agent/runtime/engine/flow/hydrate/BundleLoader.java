@@ -18,10 +18,11 @@ public interface BundleLoader {
     /**
      * 加载指定 Agent 的技能列表。
      *
-     * @param agentId Agent 主键
-     * @param pins    技能键 → 已锁定的动作语义版本标记；新任务为空 map
+     * @param agentId         Agent 主键
+     * @param pins            技能键 → 已锁定的动作语义版本标记；新任务为空 map
+     * @param skillRevisionId 开任务时锁定的技能修订；可空，原样传给 Studio
      * @return 技能列表；无 Bundle 或无可用技能时为 {@code null}
      */
     @Nullable
-    List<Skill> load(long agentId, Map<String, String> pins);
+    List<Skill> load(long agentId, Map<String, String> pins, @Nullable Long skillRevisionId);
 }

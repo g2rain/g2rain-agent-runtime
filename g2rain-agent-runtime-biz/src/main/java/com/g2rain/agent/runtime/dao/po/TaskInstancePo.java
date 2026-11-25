@@ -102,6 +102,11 @@ public class TaskInstancePo extends BasePo {
     private String specPins;
 
     /**
+     * 开任务时指定的技能修订
+     */
+    private Long skillRevisionId;
+
+    /**
      * 任务级共享值
      */
     private String shared;

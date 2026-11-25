@@ -109,11 +109,12 @@ public class AgentProfiles {
     /**
      * 加载能力包；远程失败抛依赖不可用，成功但无 skills 返回 null。
      *
-     * @param agentId Agent ID
+     * @param agentId         Agent ID
+     * @param skillRevisionId 可选；开任务时锁定的技能修订，原样传给 Studio
      * @return 能力包；成功但无技能为 {@code null}
      */
-    public @Nullable AgentBundleVo loadCapabilityBundle(Long agentId) {
-        var result = profileClient.selectCapabilityBundle(agentId);
+    public @Nullable AgentBundleVo loadCapabilityBundle(Long agentId, @Nullable Long skillRevisionId) {
+        var result = profileClient.selectCapabilityBundle(agentId, skillRevisionId);
         // 远程失败：与“确实没有技能”区分，向上抛依赖不可用
         if (Objects.isNull(result) || !result.isSuccess()) {
             log.warn("[AgentProfiles] loadCapabilityBundle failed agentId={} success={}",

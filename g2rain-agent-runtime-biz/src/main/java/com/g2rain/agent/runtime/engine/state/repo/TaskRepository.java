@@ -110,6 +110,7 @@ public class TaskRepository {
             metadata.setTraceId(vo.getTraceId());
             metadata.setSourceMessageId(vo.getSourceMessageId());
             metadata.setSpecPins(parseSpecPins(vo.getSpecPins()));
+            metadata.setSkillRevisionId(vo.getSkillRevisionId());
             return metadata;
         } catch (Exception e) {
             log.warn("[TaskRepository] loadMetadata failed taskId={}", taskId, e);
@@ -352,6 +353,7 @@ public class TaskRepository {
         // 空 map 写 null，与列默认一致
         dto.setSpecPins(Collections.isEmpty(metadata.getSpecPins())
             ? null : RepoSupport.toJson(metadata.getSpecPins()));
+        dto.setSkillRevisionId(metadata.getSkillRevisionId());
         if (Objects.nonNull(metadata.getSuspendedAt())) {
             dto.setSuspendedTime(RuntimeUtils.timeOf(metadata.getSuspendedAt()));
         }

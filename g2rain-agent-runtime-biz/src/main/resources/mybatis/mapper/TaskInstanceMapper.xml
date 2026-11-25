@@ -27,6 +27,7 @@
         <result column="trace_id" property="traceId" jdbcType="VARCHAR"/>
         <result column="state_version" property="stateVersion" jdbcType="BIGINT"/>
         <result column="spec_pins" property="specPins" jdbcType="LONGVARCHAR"/>
+        <result column="skill_revision_id" property="skillRevisionId" jdbcType="BIGINT"/>
         <result column="shared" property="shared" jdbcType="LONGVARCHAR"/>
         <result column="prior" property="prior" jdbcType="LONGVARCHAR"/>
         <result column="task_record" property="taskRecord" jdbcType="LONGVARCHAR"/>
@@ -121,6 +122,10 @@
                         spec_pins
                         <include refid="directionClause"/>
                     </when>
+                    <when test="item.column == 'skillRevisionId'">
+                        skill_revision_id
+                        <include refid="directionClause"/>
+                    </when>
                     <when test="item.column == 'shared'">
                         shared
                         <include refid="directionClause"/>
@@ -146,7 +151,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, shared, prior, task_record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, skill_revision_id, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -157,7 +162,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{request, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{specPins, jdbcType=LONGVARCHAR}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{taskRecord, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{agentId, jdbcType=BIGINT}, #{goalSummary, jdbcType=VARCHAR}, #{request, jdbcType=VARCHAR}, #{sourceMessageId, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{currentNodeId, jdbcType=VARCHAR}, #{finalMessage, jdbcType=VARCHAR}, #{startedTime, jdbcType=TIMESTAMP}, #{suspendedTime, jdbcType=TIMESTAMP}, #{finishedTime, jdbcType=TIMESTAMP}, #{traceId, jdbcType=VARCHAR}, #{stateVersion, jdbcType=BIGINT}, #{specPins, jdbcType=LONGVARCHAR}, #{skillRevisionId, jdbcType=BIGINT}, #{shared, jdbcType=LONGVARCHAR}, #{prior, jdbcType=LONGVARCHAR}, #{taskRecord, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -222,6 +227,9 @@
             <if test="specPins != null">
                 spec_pins = #{specPins, jdbcType=LONGVARCHAR},
             </if>
+            <if test="skillRevisionId != null">
+                skill_revision_id = #{skillRevisionId, jdbcType=BIGINT},
+            </if>
             <if test="shared != null">
                 shared = #{shared, jdbcType=LONGVARCHAR},
             </if>
@@ -245,7 +253,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, shared, prior, task_record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, skill_revision_id, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -264,7 +272,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, shared, prior, task_record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, skill_revision_id, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -506,7 +514,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, shared, prior, task_record,
+        organ_id, conversation_id, task_id, agent_id, goal_summary, request, source_message_id, status, current_node_id, final_message, started_time, suspended_time, finished_time, trace_id, state_version, spec_pins, skill_revision_id, shared, prior, task_record,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -519,7 +527,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.request, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.specPins, jdbcType=LONGVARCHAR}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.taskRecord, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.agentId, jdbcType=BIGINT}, #{item.goalSummary, jdbcType=VARCHAR}, #{item.request, jdbcType=VARCHAR}, #{item.sourceMessageId, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.currentNodeId, jdbcType=VARCHAR}, #{item.finalMessage, jdbcType=VARCHAR}, #{item.startedTime, jdbcType=TIMESTAMP}, #{item.suspendedTime, jdbcType=TIMESTAMP}, #{item.finishedTime, jdbcType=TIMESTAMP}, #{item.traceId, jdbcType=VARCHAR}, #{item.stateVersion, jdbcType=BIGINT}, #{item.specPins, jdbcType=LONGVARCHAR}, #{item.skillRevisionId, jdbcType=BIGINT}, #{item.shared, jdbcType=LONGVARCHAR}, #{item.prior, jdbcType=LONGVARCHAR}, #{item.taskRecord, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -590,6 +598,9 @@
             <if test="specPins != null">
                 spec_pins = #{specPins, jdbcType=LONGVARCHAR},
             </if>
+            <if test="skillRevisionId != null">
+                skill_revision_id = #{skillRevisionId, jdbcType=BIGINT},
+            </if>
             <if test="shared != null">
                 shared = #{shared, jdbcType=LONGVARCHAR},
             </if>
@@ -623,6 +634,7 @@
             prior = #{prior, jdbcType=LONGVARCHAR},
             task_record = #{taskRecord, jdbcType=LONGVARCHAR},
             spec_pins = #{specPins, jdbcType=LONGVARCHAR},
+            skill_revision_id = #{skillRevisionId, jdbcType=BIGINT},
             update_time = CURRENT_TIMESTAMP,
             version = version + 1
         WHERE task_id = #{taskId, jdbcType=VARCHAR}

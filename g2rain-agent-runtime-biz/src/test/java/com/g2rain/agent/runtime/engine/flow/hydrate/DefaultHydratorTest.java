@@ -17,6 +17,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,14 +37,14 @@ class DefaultHydratorTest {
     @Test
     void hydrate_newTask_shouldPassEmptyPinsAndRecordReturnedPins() {
         BundleLoader bundleLoader = mock(BundleLoader.class);
-        when(bundleLoader.load(eq(AGENT_ID), eq(Map.of())))
+        when(bundleLoader.load(eq(AGENT_ID), eq(Map.of()), isNull()))
             .thenReturn(List.of(skill("pin-a")));
         TaskMetadata task = new TaskMetadata();
         TurnContext context = contextWith(task);
 
         new DefaultHydrator(bundleLoader).hydrate(context);
 
-        verify(bundleLoader).load(AGENT_ID, Map.of());
+        verify(bundleLoader).load(AGENT_ID, Map.of(), null);
         assertEquals(Map.of(SKILL_KEY, "pin-a"), task.getSpecPins());
     }
 
@@ -51,7 +52,7 @@ class DefaultHydratorTest {
     void hydrate_subsequentRound_shouldPassLockedPinsAndNotOverwrite() {
         BundleLoader bundleLoader = mock(BundleLoader.class);
         Map<String, String> locked = new LinkedHashMap<>(Map.of(SKILL_KEY, "pin-a"));
-        when(bundleLoader.load(eq(AGENT_ID), eq(Map.copyOf(locked))))
+        when(bundleLoader.load(eq(AGENT_ID), eq(Map.copyOf(locked)), isNull()))
             .thenReturn(List.of(skill("pin-b")));
         TaskMetadata task = new TaskMetadata();
         task.setSpecPins(locked);
@@ -59,8 +60,22 @@ class DefaultHydratorTest {
 
         new DefaultHydrator(bundleLoader).hydrate(context);
 
-        verify(bundleLoader).load(AGENT_ID, Map.of(SKILL_KEY, "pin-a"));
+        verify(bundleLoader).load(AGENT_ID, Map.of(SKILL_KEY, "pin-a"), null);
         assertEquals("pin-a", task.getSpecPins().get(SKILL_KEY));
+    }
+
+    @Test
+    void hydrate_withSkillRevisionId_passesToLoader() {
+        BundleLoader bundleLoader = mock(BundleLoader.class);
+        when(bundleLoader.load(eq(AGENT_ID), eq(Map.of()), eq(9001L)))
+            .thenReturn(List.of(skill("pin-a")));
+        TaskMetadata task = new TaskMetadata();
+        task.setSkillRevisionId(9001L);
+        TurnContext context = contextWith(task);
+
+        new DefaultHydrator(bundleLoader).hydrate(context);
+
+        verify(bundleLoader).load(AGENT_ID, Map.of(), 9001L);
     }
 
     private static TurnContext contextWith(TaskMetadata task) {

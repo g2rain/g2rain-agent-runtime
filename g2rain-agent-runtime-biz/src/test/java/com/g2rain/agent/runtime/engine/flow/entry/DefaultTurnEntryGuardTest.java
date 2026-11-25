@@ -91,6 +91,58 @@ class DefaultTurnEntryGuardTest {
     }
 
     @Test
+    void skillRevisionIdWithoutAgentId_isRejected() {
+        TurnRequest request = new TurnRequest();
+        request.setChannel("web");
+        request.setSkillRevisionId(9001L);
+        request.setUserInput("删分类");
+
+        TurnScope turn = mock(TurnScope.class);
+        when(turn.conversation()).thenReturn(new ConversationFence("conv-1", null, null, 1L, null, 0L));
+        when(turn.task()).thenReturn(Optional.empty());
+        when(turn.checkpoint()).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> guard.guard(new TurnContext(request, turn)))
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).getErrorCode())
+            .isEqualTo(SystemErrorCode.PARAM_REQUIRED.code());
+    }
+
+    @Test
+    void continueSuspended_withSkillRevisionId_isIgnored() {
+        Long agentId = 9L;
+        AgentCatalogItemVo profile = new AgentCatalogItemVo();
+        profile.setStatus(ResourceStatus.ACTIVE.name());
+        when(agentProfiles.resolveProfile(agentId)).thenReturn(profile);
+
+        TurnRequest request = new TurnRequest();
+        request.setChannel("web");
+        request.setAgentId(agentId);
+        request.setSkillRevisionId(9001L);
+        request.setAction(ResumeAction.CONFIRM);
+
+        TaskMetadata metadata = new TaskMetadata();
+        metadata.setTaskId("task-1");
+        metadata.setAgentId(agentId);
+        metadata.setStatus(TaskStatus.SUSPENDED);
+        metadata.setCurrentNodeId("n1");
+
+        TaskCheckpoint checkpoint = new TaskCheckpoint();
+        checkpoint.setType(CheckpointType.APPROVAL);
+        checkpoint.setAllowedActions(CheckpointType.APPROVAL.defaultActions());
+
+        TurnScope turn = mock(TurnScope.class);
+        when(turn.conversation()).thenReturn(new ConversationFence("conv-1", null, "task-1", 1L, null, 0L));
+        when(turn.task()).thenReturn(Optional.of(metadata));
+        when(turn.checkpoint()).thenReturn(Optional.of(checkpoint));
+
+        EntryResult result = guard.guard(new TurnContext(request, turn));
+
+        assertThat(result.forceContinue()).isTrue();
+        assertThat(result.failedReply()).isNull();
+    }
+
+    @Test
     void skillNotOfAgent_isRejected() {
         Long agentId = 9L;
         AgentCatalogItemVo profile = new AgentCatalogItemVo();

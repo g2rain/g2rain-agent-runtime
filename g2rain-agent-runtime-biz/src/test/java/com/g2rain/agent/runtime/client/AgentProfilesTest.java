@@ -38,9 +38,9 @@ class AgentProfilesTest {
         @SuppressWarnings("unchecked")
         Result<AgentBundleVo> failed = mock(Result.class);
         when(failed.isSuccess()).thenReturn(false);
-        when(profileClient.selectCapabilityBundle(1L)).thenReturn(failed);
+        when(profileClient.selectCapabilityBundle(1L, null)).thenReturn(failed);
 
-        assertThatThrownBy(() -> profiles.loadCapabilityBundle(1L))
+        assertThatThrownBy(() -> profiles.loadCapabilityBundle(1L, null))
             .isInstanceOf(BusinessException.class)
             .extracting(ex -> ((BusinessException) ex).getErrorCode())
             .isEqualTo(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE.code());
@@ -51,8 +51,19 @@ class AgentProfilesTest {
     void h2_loadCapabilityBundle_emptySkills_returnsNull() {
         AgentBundleVo bundle = new AgentBundleVo();
         bundle.setSkills(List.of());
-        when(profileClient.selectCapabilityBundle(1L)).thenReturn(Result.success(bundle));
+        when(profileClient.selectCapabilityBundle(1L, null)).thenReturn(Result.success(bundle));
 
-        assertThat(profiles.loadCapabilityBundle(1L)).isNull();
+        assertThat(profiles.loadCapabilityBundle(1L, null)).isNull();
+    }
+
+    @Test
+    void loadCapabilityBundle_passesSkillRevisionId() {
+        AgentBundleVo bundle = new AgentBundleVo();
+        AgentBundleVo.SkillBriefVo skill = new AgentBundleVo.SkillBriefVo();
+        skill.setSkillKey("cms.a");
+        bundle.setSkills(List.of(skill));
+        when(profileClient.selectCapabilityBundle(1L, 9001L)).thenReturn(Result.success(bundle));
+
+        assertThat(profiles.loadCapabilityBundle(1L, 9001L)).isSameAs(bundle);
     }
 }

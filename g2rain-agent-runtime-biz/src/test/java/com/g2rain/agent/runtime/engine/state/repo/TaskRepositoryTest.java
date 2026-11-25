@@ -75,6 +75,20 @@ class TaskRepositoryTest {
     }
 
     @Test
+    void loadMetadata_shouldRoundTripSkillRevisionId() {
+        TaskInstanceVo vo = new TaskInstanceVo();
+        vo.setTaskId(TASK_ID);
+        vo.setConversationId(CONVERSATION_ID);
+        vo.setStatus(TaskStatus.RUNNING.name());
+        vo.setSkillRevisionId(9001L);
+        when(taskInstanceService.selectList(any())).thenReturn(List.of(vo));
+
+        TaskMetadata metadata = repository.loadMetadata(TASK_ID);
+
+        assertEquals(9001L, metadata.getSkillRevisionId());
+    }
+
+    @Test
     void save_emptySpecPins_shouldPersistNull() {
         when(taskInstanceService.selectList(any())).thenReturn(List.of());
         TaskMetadata metadata = metadata();
@@ -139,6 +153,26 @@ class TaskRepositoryTest {
         ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
         verify(taskInstanceService).advanceStateVersion(captor.capture());
         assertEquals("{\"cms.article\":\"pin-1\"}", captor.getValue().getSpecPins());
+    }
+
+    @Test
+    void save_casWithSkillRevisionId_passesDto() {
+        TaskInstanceVo existing = new TaskInstanceVo();
+        existing.setId(9L);
+        existing.setTaskId(TASK_ID);
+        existing.setConversationId(CONVERSATION_ID);
+        existing.setStatus(TaskStatus.RUNNING.name());
+        existing.setStateVersion(0L);
+        when(taskInstanceService.selectList(any())).thenReturn(List.of(existing));
+        when(taskInstanceService.advanceStateVersion(any())).thenReturn(1);
+        TaskMetadata metadata = metadata();
+        metadata.setSkillRevisionId(9001L);
+
+        repository.save(metadata, Map.of(), null, 3L, null);
+
+        ArgumentCaptor<TaskInstanceDto> captor = ArgumentCaptor.forClass(TaskInstanceDto.class);
+        verify(taskInstanceService).advanceStateVersion(captor.capture());
+        assertEquals(9001L, captor.getValue().getSkillRevisionId());
     }
 
     /** U1：库中没有任务 → 插入 stateVersion=0。 */

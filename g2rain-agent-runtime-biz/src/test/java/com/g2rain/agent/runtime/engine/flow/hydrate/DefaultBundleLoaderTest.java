@@ -65,10 +65,19 @@ class DefaultBundleLoaderTest {
     }
 
     @Test
-    void load_contractSource_shouldKeepContractToolsAndNullPin() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractOwnSource()));
+    void load_passesSkillRevisionIdToProfiles() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, 9001L)).thenReturn(bundle(contractOwnSource()));
 
-        List<Skill> skills = loader.load(AGENT_ID, Map.of());
+        loader.load(AGENT_ID, Map.of(), 9001L);
+
+        verify(agentProfiles).loadCapabilityBundle(AGENT_ID, 9001L);
+    }
+
+    @Test
+    void load_contractSource_shouldKeepContractToolsAndNullPin() {
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractOwnSource()));
+
+        List<Skill> skills = loader.load(AGENT_ID, Map.of(), null);
 
         assertNotNull(skills);
         Skill skill = skills.getFirst();
@@ -81,10 +90,10 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_withSourceAndImpl_shouldReplaceToolsAndSetPin() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractWithSource()));
         when(specSource.load(any(SpecQuery.class))).thenReturn(new SpecSet(Map.of(TOOL_NAME, replacementTool()), "pin-1"));
 
-        List<Skill> skills = loader.load(AGENT_ID, Map.of());
+        List<Skill> skills = loader.load(AGENT_ID, Map.of(), null);
 
         assertNotNull(skills);
         Skill skill = skills.getFirst();
@@ -98,20 +107,20 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_withUnknownSourceType_shouldDropSkill() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle("""
             {"version":"1.0","source":{"type":"OTHER"},"tools":{}}
             """));
 
-        assertNull(loader.load(AGENT_ID, Map.of()));
+        assertNull(loader.load(AGENT_ID, Map.of(), null));
     }
 
     @Test
     void load_withoutSourceType_shouldDropSkill() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle("""
             {"version":"1.0","tools":{"%s":{}}}
             """.formatted(TOOL_NAME)));
 
-        assertNull(loader.load(AGENT_ID, Map.of()));
+        assertNull(loader.load(AGENT_ID, Map.of(), null));
     }
 
     @Test
@@ -132,22 +141,22 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_whenSourceThrows_shouldDropSkillWithoutFallback() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractWithSource()));
         when(specSource.load(any(SpecQuery.class))).thenThrow(new IllegalStateException("boom"));
 
-        assertNull(loader.load(AGENT_ID, Map.of()));
+        assertNull(loader.load(AGENT_ID, Map.of(), null));
     }
 
     /** H9：某个技能的 SpecSource 抛 SpecUnavailableException → DEPENDENCY_UNAVAILABLE，其他技能也不返回。 */
     @Test
     void h9_load_specUnavailable_throwsDependencyUnavailable() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundleTwoSkills(
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundleTwoSkills(
             SKILL_KEY, contractWithSource(),
             "cms.other", contractOwnSource()));
         when(specSource.load(any(SpecQuery.class)))
             .thenThrow(new SpecUnavailableException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "ONTOLOGY"));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of(), null));
         assertEquals(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE.code(), ex.getErrorCode());
         assertEquals(SpecSourceType.ONTOLOGY.name(), ex.getIndexArgs()[0]);
     }
@@ -155,12 +164,12 @@ class DefaultBundleLoaderTest {
     /** H10：某个技能的 SpecSource 抛普通 RuntimeException → 丢弃该技能，其余正常返回。 */
     @Test
     void h10_load_sourceRuntimeException_dropsSkillKeepsOthers() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundleTwoSkills(
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundleTwoSkills(
             SKILL_KEY, contractWithSource(),
             "cms.other", contractOwnSource()));
         when(specSource.load(any(SpecQuery.class))).thenThrow(new IllegalStateException("boom"));
 
-        List<Skill> skills = loader.load(AGENT_ID, Map.of());
+        List<Skill> skills = loader.load(AGENT_ID, Map.of(), null);
 
         assertNotNull(skills);
         assertEquals(1, skills.size());
@@ -169,10 +178,10 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_shouldPassPinnedVersionIntoQuery() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithSource()));
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractWithSource()));
         when(specSource.load(any(SpecQuery.class))).thenReturn(new SpecSet(Map.of(TOOL_NAME, new ToolSpec()), "pin-1"));
 
-        loader.load(AGENT_ID, Map.of(SKILL_KEY, "locked-pin"));
+        loader.load(AGENT_ID, Map.of(SKILL_KEY, "locked-pin"), null);
 
         ArgumentCaptor<SpecQuery> captor = ArgumentCaptor.forClass(SpecQuery.class);
         verify(specSource).load(captor.capture());
@@ -183,11 +192,11 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_missingContractVersion_throwsInvalid() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle("""
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle("""
             {"source":{"type":"CONTRACT"},"tools":{}}
             """));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of(), null));
         assertEquals(RuntimeErrorCode.CONTRACT_VERSION_INVALID.code(), ex.getErrorCode());
         assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
         assertEquals(ContractVersion.CURRENT, ex.getIndexArgs()[1]);
@@ -195,9 +204,9 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_outdatedContractVersion_throwsOutdated() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithVersion("0.9")));
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractWithVersion("0.9")));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of(), null));
         assertEquals(RuntimeErrorCode.CONTRACT_VERSION_OUTDATED.code(), ex.getErrorCode());
         assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
         assertEquals("0.9", ex.getIndexArgs()[1]);
@@ -206,9 +215,9 @@ class DefaultBundleLoaderTest {
 
     @Test
     void load_aheadContractVersion_throwsAhead() {
-        when(agentProfiles.loadCapabilityBundle(AGENT_ID)).thenReturn(bundle(contractWithVersion("2.0")));
+        when(agentProfiles.loadCapabilityBundle(AGENT_ID, null)).thenReturn(bundle(contractWithVersion("2.0")));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of()));
+        BusinessException ex = assertThrows(BusinessException.class, () -> loader.load(AGENT_ID, Map.of(), null));
         assertEquals(RuntimeErrorCode.CONTRACT_VERSION_AHEAD.code(), ex.getErrorCode());
         assertEquals(SKILL_KEY, ex.getIndexArgs()[0]);
         assertEquals("2.0", ex.getIndexArgs()[1]);

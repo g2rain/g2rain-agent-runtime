@@ -55,6 +55,13 @@ public final class TurnRequest {
     private String skillKey;
 
     /**
+     * 指定某个技能按某条修订运行，用于验证尚未发布的修订；须同时给 {@link #agentId}，仅开新任务时生效。
+     */
+    @Nullable
+    @Schema(description = "指定某个技能按某条修订运行，用于验证尚未发布的修订；须同时给 agentId，仅开新任务时生效", example = "9001")
+    private Long skillRevisionId;
+
+    /**
      * 本轮选用的模型名；为空时由模型服务按默认路由。
      */
     @Nullable

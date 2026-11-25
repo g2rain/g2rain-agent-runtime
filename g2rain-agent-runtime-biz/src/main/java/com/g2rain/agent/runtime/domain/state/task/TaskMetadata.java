@@ -109,4 +109,9 @@ public class TaskMetadata {
      * 开任务时锁定的动作语义版本标记：技能键 → pin；后续轮次原样传入装载。
      */
     private Map<String, String> specPins = new LinkedHashMap<>();
+
+    /**
+     * 开任务时指定的技能修订；后续轮次装载原样传入 Studio。
+     */
+    private @Nullable Long skillRevisionId;
 }

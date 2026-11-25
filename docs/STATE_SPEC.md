@@ -181,7 +181,7 @@ renew 与每次 flush 都对整组统一设置 TTL：元数据为 `TTL − senti
 |---|---|---|---|
 | `chat_conversation` | 会话：`conversation_id`、`user_id`、`title`、`active_task_id`、`session_shared`、`state_version`、`last_message_time` | 首轮建行；轮末按 `state_version` CAS 更新；写消息时只刷新 `last_message_time`；写调用前只修正 `active_task_id` | Redis `state` 缺失时回灌栅栏、活动任务和会话共享 |
 | `chat_message` | 对话消息：`message_id`、`role`、`message_type`、`content`、`task_id`、`node_id`、`round`、`trace_id`、`created_at_ms` | 用户消息在 S1 写；其他消息在轮末写 | Redis `dialogue` 为空时回灌；历史消息接口读取 |
-| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`request`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`（任务开启时刻）、`suspended_time`、`finished_time`、`trace_id`（开启任务那一轮）、`source_message_id`（触发开启的用户消息，入库后回填该消息的 `task_id`） | 轮末写；已存在时按 `state_version` CAS 更新（同步 `spec_pins`）；写调用前补写任务壳（`state_version = 0`） | 任务组 key 缺失时回灌；`record` 用于回灌 records |
+| `task_instance` | 任务：`task_id`、`agent_id`、`goal_summary`、`request`、`status`、`current_node_id`、`final_message`、`shared`、`prior`、`record`、`state_version`、`started_time`（任务开启时刻）、`suspended_time`、`finished_time`、`trace_id`（开启任务那一轮）、`source_message_id`（触发开启的用户消息，入库后回填该消息的 `task_id`）、`skill_revision_id`（开任务时指定的技能修订） | 轮末写；已存在时按 `state_version` CAS 更新（同步 `spec_pins`、`skill_revision_id`）；写调用前补写任务壳（`state_version = 0`） | 任务组 key 缺失时回灌；`record` 用于回灌 records |
 | `task_graph_node` | 节点：`node_id`、`title`、`objective`、`skill_key`、`target`（完成目标）、`target_claimed`、`delegate_depth`、`status`、`result`（节点结论）、`state`（完整节点空间 JSON，含输入与产出）、`error_code`、`error_message`、`started_time`（首次运行）、`finished_time`（进入终态） | 轮末写 | 任务图、节点空间回灌 |
 | `task_graph_edge` | 边：`from_node_id`、`to_node_id`、`edge_type` | 轮末追加新边 | 任务图回灌 |
 | `task_checkpoint` | 断点：`checkpoint_id`、`node_id`、`type`、`question`、`expected_fields`、`allowed_actions`、`suggestions`、`pending_action` | 轮末写；断点被消费时逻辑删除（`delete_flag=1`） | 断点回灌 |
@@ -299,6 +299,7 @@ renew 与每次 flush 都对整组统一设置 TTL：元数据为 `TTL − senti
 | `finalMessage` | String? | 终态文案 |
 | `suspendedAt` | Long? | 挂起时间 |
 | `specPins` | Map（技能键 → pin） | 开任务时锁定的动作语义版本标记；后续轮次装载原样传入，已有键不覆盖；落库列 `task_instance.spec_pins`，空 map 存 `null` |
+| `skillRevisionId` | Long? | 开任务时指定的技能修订；后续轮次装载原样传入 Studio；落库列 `task_instance.skill_revision_id` |
 
 | TaskStatus | 含义 | 是否终态 |
 |---|---|---|

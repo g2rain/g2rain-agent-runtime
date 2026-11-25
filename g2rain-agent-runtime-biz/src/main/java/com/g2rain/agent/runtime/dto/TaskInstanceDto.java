@@ -137,6 +137,12 @@ public class TaskInstanceDto extends BaseDto {
     private String specPins;
 
     /**
+     * 开任务时指定的技能修订
+     */
+    @Schema(description = "开任务时指定的技能修订")
+    private Long skillRevisionId;
+
+    /**
      * 任务级共享值
      */
     @Size(max = 1073741824)

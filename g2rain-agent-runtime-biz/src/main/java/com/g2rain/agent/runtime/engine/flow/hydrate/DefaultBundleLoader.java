@@ -70,13 +70,14 @@ public class DefaultBundleLoader implements BundleLoader {
     /**
      * 加载 Agent 技能列表；无 Bundle 或无可用技能时为 {@code null}。
      *
-     * @param agentId Agent 主键
-     * @param pins    技能键 → 已锁定的版本标记
+     * @param agentId         Agent 主键
+     * @param pins            技能键 → 已锁定的版本标记
+     * @param skillRevisionId 开任务时锁定的技能修订；可空
      * @return 技能列表；不可用时为 {@code null}
      */
     @Override
-    public @Nullable List<Skill> load(long agentId, Map<String, String> pins) {
-        AgentBundleVo bundle = agentProfiles.loadCapabilityBundle(agentId);
+    public @Nullable List<Skill> load(long agentId, Map<String, String> pins, @Nullable Long skillRevisionId) {
+        AgentBundleVo bundle = agentProfiles.loadCapabilityBundle(agentId, skillRevisionId);
         if (Objects.isNull(bundle)) {
             return null;
         }

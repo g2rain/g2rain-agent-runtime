@@ -70,9 +70,10 @@ public class DefaultHydrator implements Hydrator {
 
         TaskMetadata task = context.getTurn().task().orElse(null);
         Map<String, String> pins = pinsOf(task);
+        Long skillRevisionId = Objects.isNull(task) ? null : task.getSkillRevisionId();
         List<Skill> skills;
         try {
-            skills = bundleLoader.load(agent.getAgentId(), pins);
+            skills = bundleLoader.load(agent.getAgentId(), pins, skillRevisionId);
         } catch (BusinessException ex) {
             // 只吞掉技能服务不可用；其它业务异常照常抛出
             if (!Objects.equals(ex.getErrorCode(), RuntimeErrorCode.DEPENDENCY_UNAVAILABLE.code())) {

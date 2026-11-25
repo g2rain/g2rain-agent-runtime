@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,7 +56,7 @@ class DefaultHydratorSkillLoadTest {
     /** H3：图有 A、B，只装到 A → 本轮失败，任务不动。 */
     @Test
     void h3_hydrate_missingSkill_failsTurnKeepsTask() {
-        when(bundleLoader.load(anyLong(), anyMap())).thenReturn(List.of(skill("A")));
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class))).thenReturn(List.of(skill("A")));
         TaskMetadata task = task(TaskStatus.SUSPENDED);
         TaskCheckpoint checkpoint = checkpoint();
         TurnScope turn = turnWith(task, graph("A", "B"), checkpoint);
@@ -76,7 +77,7 @@ class DefaultHydratorSkillLoadTest {
     /** H4：图中技能全部装载成功 → 不失败。 */
     @Test
     void h4_hydrate_allSkillsPresent_ok() {
-        when(bundleLoader.load(anyLong(), anyMap())).thenReturn(List.of(skill("A"), skill("B")));
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class))).thenReturn(List.of(skill("A"), skill("B")));
         TurnContext ctx = context(turnWith(task(TaskStatus.RUNNING), graph("A", "B"), null));
 
         hydrator.hydrate(ctx);
@@ -88,7 +89,7 @@ class DefaultHydratorSkillLoadTest {
     /** H5：本轮新建任务（图为空），装载缺技能 → 不失败。 */
     @Test
     void h5_hydrate_emptyGraph_missingSkills_ok() {
-        when(bundleLoader.load(anyLong(), anyMap())).thenReturn(List.of(skill("A")));
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class))).thenReturn(List.of(skill("A")));
         TurnContext ctx = context(turnWith(task(TaskStatus.RUNNING), new TaskGraph(), null));
 
         hydrator.hydrate(ctx);
@@ -99,7 +100,7 @@ class DefaultHydratorSkillLoadTest {
     /** H6：bundleLoader 抛 DEPENDENCY_UNAVAILABLE → 本轮失败，任务不变。 */
     @Test
     void h6_hydrate_dependencyUnavailable_failsTurn() {
-        when(bundleLoader.load(anyLong(), anyMap()))
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class)))
             .thenThrow(new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "agent-studio"));
         TaskMetadata task = task(TaskStatus.RUNNING);
         TurnScope turn = turnWith(task, graph("A"), null);
@@ -117,7 +118,7 @@ class DefaultHydratorSkillLoadTest {
     /** H7：bundleLoader 抛其他异常 → 照常抛出。 */
     @Test
     void h7_hydrate_otherBusinessException_propagates() {
-        when(bundleLoader.load(anyLong(), anyMap()))
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class)))
             .thenThrow(new BusinessException(RuntimeErrorCode.SKILL_NOT_FOUND, "x"));
         TurnContext ctx = context(turnWith(task(TaskStatus.RUNNING), graph("A"), null));
 
@@ -131,7 +132,7 @@ class DefaultHydratorSkillLoadTest {
     /** H8：节点 skillKey 为空 → 跳过，不算缺失。 */
     @Test
     void h8_hydrate_blankSkillKey_skipped() {
-        when(bundleLoader.load(anyLong(), anyMap())).thenReturn(List.of(skill("A")));
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class))).thenReturn(List.of(skill("A")));
         TaskGraph graph = new TaskGraph();
         TaskNode blank = new TaskNode();
         blank.setNodeId("n0");
@@ -150,7 +151,7 @@ class DefaultHydratorSkillLoadTest {
     /** H11：新建任务（图为空），bundleLoader 因来源不可用抛 DEPENDENCY_UNAVAILABLE → 本轮失败。 */
     @Test
     void h11_hydrate_emptyGraph_dependencyUnavailable_failsTurn() {
-        when(bundleLoader.load(anyLong(), anyMap()))
+        when(bundleLoader.load(anyLong(), anyMap(), nullable(Long.class)))
             .thenThrow(new BusinessException(RuntimeErrorCode.DEPENDENCY_UNAVAILABLE, "ONTOLOGY"));
         TaskMetadata task = task(TaskStatus.RUNNING);
         TurnScope turn = turnWith(task, new TaskGraph(), null);

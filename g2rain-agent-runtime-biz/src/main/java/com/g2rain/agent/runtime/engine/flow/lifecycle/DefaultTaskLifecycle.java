@@ -124,6 +124,7 @@ public final class DefaultTaskLifecycle implements TaskLifecycle {
             metadata.setGoalSummary(RuntimeUtils.clip(goalSummary.trim(), GOAL_SUMMARY_MAX));
         }
         metadata.setRequest(Strings.blankToNull(Strings.trim(ctx.getRequest().getUserInput())));
+        metadata.setSkillRevisionId(ctx.getRequest().getSkillRevisionId());
 
         // 开局：生成前情并切换为新任务，之后日志带新任务 ID
         String previousTaskId = turn.task().map(TaskMetadata::getTaskId).orElse(null);
