@@ -94,4 +94,13 @@ public final class RuntimeMessageRegistry {
         return Objects.isNull(message) ? fallback : message;
     }
 
+    /**
+     * 将 BCP-47 或下划线分隔的 Java locale 规范为 BCP-47 标签，作为缓存内层键。
+     *
+     * @param locale 原始 locale
+     * @return 规范化后的 BCP-47 标签
+     */
+    private static String normalize(String locale) {
+        return Locale.forLanguageTag(locale.trim().replace('_', '-')).toLanguageTag();
+    }
 }
