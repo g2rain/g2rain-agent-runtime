@@ -28,12 +28,12 @@ import com.g2rain.agent.runtime.engine.store.KeyTtl;
 import com.g2rain.agent.runtime.engine.store.RenewResult;
 import com.g2rain.agent.runtime.engine.store.StateStore;
 import com.g2rain.agent.runtime.enums.RuntimeErrorCode;
+import com.g2rain.agent.runtime.support.ConversationOwner;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.agent.runtime.vo.ChatConversationVo;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
-import com.g2rain.common.web.PrincipalContextHolder;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
@@ -130,8 +130,9 @@ public class TurnSessionHydrate {
      * @return 本轮视图
      */
     public DefaultTurnScope load(TurnRequest request) {
-        Long organ = PrincipalContextHolder.getOrganId();
-        Long user = PrincipalContextHolder.getUserId();
+        ConversationOwner owner = ConversationOwner.current();
+        Long organ = owner.organId();
+        Long user = owner.userId();
         if (Objects.isNull(organ) || Objects.isNull(user)) {
             throw new BusinessException(RuntimeErrorCode.STATE_UNAVAILABLE);
         }
@@ -168,7 +169,7 @@ public class TurnSessionHydrate {
             fence = new ConversationFence(conversationId, userId, fence.activeTaskId(), fence.version(),
                 fence.lastTraceId(), fence.updatedAt());
         }
-        if (!Objects.equals(fence.userId(), userId)) {
+        if (!owner.owns(fence.userId())) {
             throw new BusinessException(RuntimeErrorCode.CONVERSATION_FORBIDDEN);
         }
         // 本轮新建会话时记下标题，开局下发一次 TITLE

@@ -23,6 +23,7 @@ import com.g2rain.agent.runtime.service.ChatConversationService;
 import com.g2rain.agent.runtime.service.ChatMessageService;
 import com.g2rain.agent.runtime.service.ChatProgressService;
 import com.g2rain.agent.runtime.service.ConversationService;
+import com.g2rain.agent.runtime.support.ConversationOwner;
 import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RedisKeys;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
@@ -270,13 +271,14 @@ public class ConversationServiceImpl implements ConversationService {
      * 当前主体的会话查询条件；主体不完整时拒绝。
      */
     private static ChatConversationSelectDto ownerSelect() {
-        Long organId = PrincipalContextHolder.getOrganId();
-        Long userId = PrincipalContextHolder.getUserId();
+        ConversationOwner owner = ConversationOwner.current();
+        Long organId = owner.organId();
+        Long userId = owner.userId();
         Asserts.isTrue(Objects.nonNull(organId) && Objects.nonNull(userId), SystemErrorCode.UNAUTHENTICATED);
 
         ChatConversationSelectDto select = new ChatConversationSelectDto();
         select.setOrganId(organId);
-        select.setUserId(userId);
+        select.setUserIds(owner.userIds());
         return select;
     }
 

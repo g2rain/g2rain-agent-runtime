@@ -72,6 +72,14 @@
         </dependency>
         <dependency>
             <groupId>com.g2rain</groupId>
+            <artifactId>g2rain-starter-cache-sync</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.g2rain</groupId>
+            <artifactId>g2rain-starter-stream-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.g2rain</groupId>
             <artifactId>g2rain-starter-mybatis-extensions</artifactId>
         </dependency>
         <dependency>

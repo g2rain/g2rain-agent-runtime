@@ -80,17 +80,17 @@ public class RuntimeProperties {
     public static class Model {
 
         /**
-         * 模型服务端点（lb:// 或 http(s)）
+         * 模型服务端点（lb:// 或 http(s)）；修改后需重启服务
          */
         private String endpoint = "lb://g2rain-model-nexus";
 
         /**
-         * 连接超时（毫秒）
+         * 连接超时（毫秒）；修改后需重启服务
          */
         private int connectTimeoutMs = 3000;
 
         /**
-         * 读超时（毫秒）；0=不限
+         * 读超时（毫秒）；0=不限；修改后需重启服务
          */
         private int readTimeoutMs = 0;
 
@@ -108,22 +108,22 @@ public class RuntimeProperties {
     public static class Mcp {
 
         /**
-         * MCP Registry 端点
+         * MCP Registry 端点；修改后需重启服务
          */
         private String endpoint = "lb://g2rain-mcp-registry";
 
         /**
-         * MCP HTTP 路径
+         * MCP HTTP 路径；修改后需重启服务
          */
         private String path = "/mcp";
 
         /**
-         * 连接超时（毫秒）
+         * 连接超时（毫秒）；修改后需重启服务
          */
         private int connectTimeoutMs = 3000;
 
         /**
-         * 读超时（毫秒）：等工具返回的兜底上限，防止业务接口挂起时整轮卡住；超时按工具超时处理（写操作结果不确定，转回查）
+         * 读超时（毫秒）：等工具返回的兜底上限，防止业务接口挂起时整轮卡住；超时按工具超时处理（写操作结果不确定，转回查）；修改后需重启服务
          */
         private int readTimeoutMs = 300000;
 

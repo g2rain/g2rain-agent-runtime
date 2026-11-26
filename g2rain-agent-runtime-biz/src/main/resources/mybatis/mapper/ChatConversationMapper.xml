@@ -232,6 +232,12 @@
             <if test="userId != null">
                 AND user_id = #{userId, jdbcType=BIGINT}
             </if>
+            <if test="userIds != null and userIds.size() > 0">
+                AND user_id IN
+                <foreach collection="userIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=BIGINT}
+                </foreach>
+            </if>
             <if test="title != null">
                 AND title = #{title, jdbcType=VARCHAR}
             </if>
@@ -454,6 +460,12 @@
             </if>
             <if test="userId != null">
                 AND user_id = #{userId, jdbcType=BIGINT}
+            </if>
+            <if test="userIds != null and userIds.size() > 0">
+                AND user_id IN
+                <foreach collection="userIds" item="item" open="(" separator="," close=")">
+                    #{item, jdbcType=BIGINT}
+                </foreach>
             </if>
             <if test="title != null">
                 AND title = #{title, jdbcType=VARCHAR}

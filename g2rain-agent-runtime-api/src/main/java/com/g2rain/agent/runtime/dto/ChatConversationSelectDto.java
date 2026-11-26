@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 聊天会话表查询入参DTO
@@ -40,6 +41,12 @@ public class ChatConversationSelectDto extends BaseSelectListDto {
      */
     @Schema(description = "用户标识")
     private Long userId;
+
+    /**
+     * 会话属主标识集合
+     */
+    @Schema(description = "会话属主标识集合")
+    private List<Long> userIds;
 
     /**
      * 会话标题

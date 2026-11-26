@@ -201,7 +201,7 @@ renew 与每次 flush 都对整组统一设置 TTL：元数据为 `TTL − senti
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `conversationId` | String | 会话 ID（不写入 Redis Hash） |
-| `userId` | String | 会话所属用户；与当前请求用户不一致时拒绝访问 |
+| `userId` | String | 会话所属用户；当前请求的 `userId` 或 `visitorId` 与其一致时允许访问，归属值保持不变 |
 | `activeTaskId` | String? | 当前活动任务；无任务时为空 |
 | `version` | long | 栅栏版本 |
 | `lastTraceId` | String? | 正在处理的轮次；正常收尾后清空 |
@@ -508,7 +508,7 @@ renew 与每次 flush 都对整组统一设置 TTL：元数据为 `TTL − senti
 | 步骤 | 动作 | 读写 |
 |---|---|---|
 | 2.1 | 读会话 `state`；Redis 中没有时，从 `chat_conversation` 回灌 `userId`、`activeTaskId`、`state_version` | Redis `state`、MySQL `chat_conversation` |
-| 2.2 | 会话用户与当前用户不一致 → `CONVERSATION_FORBIDDEN` | — |
+| 2.2 | 会话属主既不属于当前 `userId` 也不属于 `visitorId` → `CONVERSATION_FORBIDDEN` | — |
 | 2.3 | MySQL 中没有该会话 → 新建会话行 | MySQL `chat_conversation` |
 | 2.4 | 读会话层：对话、记录、会话共享（Redis 优先，缺失回灌 MySQL）；实体（只读 Redis） | Redis、MySQL |
 | 2.5 | 有活动任务时，按哨兵 + 完整性校验装载任务组：热组只读 Redis；冷组整组以 MySQL 为准并打开全部节点（见 2.1）。装载到的任务已是终态 → 清空 `activeTaskId`，按无活动任务处理 | Redis、MySQL |

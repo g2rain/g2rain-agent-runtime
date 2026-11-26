@@ -68,10 +68,21 @@ class ConversationServiceImplChatTest {
         ArgumentCaptor<ChatConversationSelectDto> captor = ArgumentCaptor.forClass(ChatConversationSelectDto.class);
         verify(chatConversationService).selectSummaryList(captor.capture());
         assertEquals(10001L, captor.getValue().getOrganId());
-        assertEquals(77L, captor.getValue().getUserId());
+        assertEquals(List.of(77L), captor.getValue().getUserIds());
+        assertNull(captor.getValue().getUserId());
         SortItem sort = captor.getValue().getSafeSorts().getFirst();
         assertEquals("lastMessageTime", sort.getColumn());
         assertEquals("DESC", sort.getDirection());
+    }
+
+    @Test
+    void listConversations_includesVisitorAndEmployeeOwners() {
+        runAs(77L, 88L, () -> service.listConversations());
+
+        ArgumentCaptor<ChatConversationSelectDto> captor = ArgumentCaptor.forClass(ChatConversationSelectDto.class);
+        verify(chatConversationService).selectSummaryList(captor.capture());
+        assertEquals(10001L, captor.getValue().getOrganId());
+        assertEquals(List.of(77L, 88L), captor.getValue().getUserIds());
     }
 
     @Test
@@ -113,10 +124,28 @@ class ConversationServiceImplChatTest {
     }
 
     @Test
+    void send_withVisitorOwnedConversationPassesOwnerCheck() {
+        when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(new ChatConversationVo()));
+        TurnRequest request = new TurnRequest();
+        request.setChannel("web");
+        request.setConversationId("c-visitor");
+
+        runAs(77L, 88L, () -> service.send(request));
+
+        ArgumentCaptor<ChatConversationSelectDto> captor = ArgumentCaptor.forClass(ChatConversationSelectDto.class);
+        verify(chatConversationService).selectSummaryList(captor.capture());
+        assertEquals(List.of(77L, 88L), captor.getValue().getUserIds());
+    }
+
+    @Test
     void listMessages_ofOwnConversation_shouldQueryByConversation() {
         when(chatConversationService.selectSummaryList(any())).thenReturn(List.of(new ChatConversationVo()));
 
-        runAs(77L, () -> service.listMessages("c-own"));
+        runAs(77L, 88L, () -> service.listMessages("c-own"));
+
+        ArgumentCaptor<ChatConversationSelectDto> ownerCaptor = ArgumentCaptor.forClass(ChatConversationSelectDto.class);
+        verify(chatConversationService).selectSummaryList(ownerCaptor.capture());
+        assertEquals(List.of(77L, 88L), ownerCaptor.getValue().getUserIds());
 
         ArgumentCaptor<ChatMessageSelectDto> captor = ArgumentCaptor.forClass(ChatMessageSelectDto.class);
         verify(chatMessageService).selectList(captor.capture());
@@ -170,8 +199,11 @@ class ConversationServiceImplChatTest {
         when(distributedLock.waitLockWithWatchdog(anyString(), anyBoolean(), any()))
             .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(2).get());
 
-        runAs(77L, () -> service.deleteConversation("c-own"));
+        runAs(77L, 88L, () -> service.deleteConversation("c-own"));
 
+        ArgumentCaptor<ChatConversationSelectDto> ownerCaptor = ArgumentCaptor.forClass(ChatConversationSelectDto.class);
+        verify(chatConversationService).selectSummaryList(ownerCaptor.capture());
+        assertEquals(List.of(77L, 88L), ownerCaptor.getValue().getUserIds());
         verify(chatConversationService).delete(9L);
         verify(runtimeStateFacade).discard("10001", "c-own");
     }
@@ -185,10 +217,15 @@ class ConversationServiceImplChatTest {
     }
 
     private static void runAs(Long userId, Runnable action) {
+        runAs(userId, null, action);
+    }
+
+    private static void runAs(Long userId, Long visitorId, Runnable action) {
         PrincipalContext context = PrincipalContext.of();
         context.setApplicationId(1001L);
         context.setOrganId(10001L);
         context.setUserId(userId);
+        context.setVisitorId(visitorId);
         PrincipalContextHolder.runWith(context, action);
     }
 }

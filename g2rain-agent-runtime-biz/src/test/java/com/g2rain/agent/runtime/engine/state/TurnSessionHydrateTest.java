@@ -49,6 +49,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -68,6 +69,8 @@ class TurnSessionHydrateTest {
     private static final long ORGAN = 10001L;
 
     private static final long USER = 20002L;
+
+    private static final long VISITOR = 30003L;
 
     private static final String CONV = "conv-1";
 
@@ -384,6 +387,46 @@ class TurnSessionHydrateTest {
             .isEqualTo(RuntimeErrorCode.STATE_UNAVAILABLE.code());
     }
 
+    @Test
+    void employeeCanContinueVisitorConversationWithoutChangingOwner() {
+        ChatConversationVo row = new ChatConversationVo();
+        row.setUserId(VISITOR);
+        row.setStateVersion(0L);
+        when(conversations.find(CONV)).thenReturn(row);
+
+        DefaultTurnScope turn = load(VISITOR);
+        flushPlan.apply(turn);
+
+        String storedOwnerId = JSON.str2obj(store.hGetAll(keys.state()).get("userId"), String.class);
+        assertThat(turn.conversation().userId()).isEqualTo(Long.toString(VISITOR));
+        assertThat(storedOwnerId).isEqualTo(Long.toString(VISITOR));
+        assertThat(row.getUserId()).isEqualTo(VISITOR);
+        verify(conversations, never()).create(eq(CONV), eq(USER), isNull());
+    }
+
+    @Test
+    void employeeWithoutVisitorIdCannotContinueVisitorConversation() {
+        ChatConversationVo row = new ChatConversationVo();
+        row.setUserId(VISITOR);
+        row.setStateVersion(0L);
+        when(conversations.find(CONV)).thenReturn(row);
+
+        assertThatThrownBy(this::load)
+            .isInstanceOf(BusinessException.class)
+            .extracting(ex -> ((BusinessException) ex).getErrorCode())
+            .isEqualTo(RuntimeErrorCode.CONVERSATION_FORBIDDEN.code());
+    }
+
+    @Test
+    void newConversationKeepsEmployeeAsOwnerEvenWithVisitorContext() {
+        when(conversations.find(CONV)).thenReturn(null);
+
+        DefaultTurnScope turn = load(VISITOR);
+
+        assertThat(turn.conversation().userId()).isEqualTo(Long.toString(USER));
+        verify(conversations).create(eq(CONV), eq(USER), isNull());
+    }
+
     /** L13：热组加载不读节点空间/证据；元数据、图、共享各只 hGetAll 一次。 */
     @Test
     void l13_hotLoad_noNodeHGetAll_taskHashesOnce() {
@@ -403,12 +446,17 @@ class TurnSessionHydrateTest {
     }
 
     private DefaultTurnScope load() {
+        return load(null);
+    }
+
+    private DefaultTurnScope load(Long visitorId) {
         TurnRequest request = new TurnRequest();
         request.setChannel("web");
         request.setConversationId(CONV);
         PrincipalContext context = PrincipalContext.of();
         context.setOrganId(ORGAN);
         context.setUserId(USER);
+        context.setVisitorId(visitorId);
         context.setTraceId(TRACE);
         AtomicReference<DefaultTurnScope> ref = new AtomicReference<>();
         PrincipalContextHolder.runWith(context, () -> ref.set(hydrate.load(request)));

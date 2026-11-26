@@ -2,6 +2,13 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  cloud:
+    stream:
+      default-binder: redis
+      input-bindings: input
+      bindings:
+        input:
+          destination: g2rain-syncer
   threads:
     virtual:
       enabled: true

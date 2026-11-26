@@ -655,7 +655,7 @@ if (Objects.isNull(request.getAction())) {
 
 ### 5.9 RuntimeMessage
 
-`RuntimeMessage` 位于 `biz` 的 `i18n` 包，保存 message code 与中文兜底文案。`RuntimeMessages` 在应用启动时从 Infra 加载 `UI_MESSAGE` / `AGENT_RUNTIME` 文案；处理请求时由 `RequestLocale` 提供当前请求语言，`RuntimeMessageRegistry` 优先匹配完整 locale，再按语言回退。具名占位符在本地替换。
+`RuntimeMessage` 位于 `biz` 的 `i18n` 包，保存 message code 与中文兜底文案。`RuntimeMessageStorage` 从 Infra 加载初始 `UI_MESSAGE` / `AGENT_RUNTIME` 文案，并通过同步事件实时更新缓存；处理请求时由 `RequestLocale` 提供当前请求语言，`RuntimeMessageRegistry` 优先匹配完整 locale，再按语言回退。具名占位符在本地替换。
 
 ```java
 ROUTE_UNCERTAIN("route.uncertain", "还有一项操作等待您确认，请确认是否继续执行。"),

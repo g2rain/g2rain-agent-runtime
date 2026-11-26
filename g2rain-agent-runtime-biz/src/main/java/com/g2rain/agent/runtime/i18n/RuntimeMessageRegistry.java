@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Agent Runtime 国际化文案的进程内注册表。
  *
- * <p>文案在应用启动时从 Infra 加载。查询时优先匹配完整的 BCP-47 locale
+ * <p>文案由消息存储器从 Infra 加载并随同步事件实时更新。查询时优先匹配完整的 BCP-47 locale
  * （例如 {@code en-US}），再按语言编码匹配（例如 {@code en}）；都未命中时返回调用方提供的枚举兜底文案。</p>
  *
  * <p>注册表由进程内所有请求共享，并发安全，支持 SSE 请求在多个虚拟线程中同时查询。</p>
@@ -44,7 +44,38 @@ public final class RuntimeMessageRegistry {
             return;
         }
 
-        MESSAGES.computeIfAbsent(code, ignored -> new ConcurrentHashMap<>()).put(normalize(locale), text);
+        MESSAGES.computeIfAbsent(code, _ -> new ConcurrentHashMap<>()).put(normalize(locale), text);
+    }
+
+    /**
+     * 删除指定语言的文案；该消息编码下不再有文案时同时移除外层缓存。
+     *
+     * @param code   消息编码
+     * @param locale BCP-47 locale
+     */
+    public static void remove(String code, String locale) {
+        MESSAGES.computeIfPresent(code, (_, translations) -> {
+            translations.remove(normalize(locale));
+            return translations.isEmpty() ? null : translations;
+        });
+    }
+
+    /**
+     * 查询指定语言的文案，优先匹配完整 locale，再按语言编码回退。
+     *
+     * @param code   消息编码
+     * @param locale BCP-47 locale
+     * @return 匹配的文案；没有匹配项时返回 {@code null}
+     */
+    public static @Nullable String get(String code, String locale) {
+        Map<String, String> translations = MESSAGES.get(code);
+        if (Objects.isNull(translations)) {
+            return null;
+        }
+
+        Locale parsed = Locale.forLanguageTag(normalize(locale));
+        String text = translations.get(parsed.toLanguageTag());
+        return Objects.isNull(text) ? translations.get(parsed.getLanguage()) : text;
     }
 
     /**
@@ -56,30 +87,11 @@ public final class RuntimeMessageRegistry {
      * @return 匹配的文案模板，或 {@code fallback}
      */
     public static String resolve(String code, @Nullable String locale, String fallback) {
-        Map<String, String> translations = MESSAGES.get(code);
-        if (Objects.isNull(translations)) {
-            return fallback;
-        }
-
-        Locale parsed = Objects.isNull(locale) || locale.isBlank()
-            ? Locale.getDefault()
-            : Locale.forLanguageTag(locale.trim().replace('_', '-'));
-        String full = parsed.toLanguageTag();
-        String text = translations.get(full);
-        if (Objects.isNull(text)) {
-            text = translations.get(parsed.getLanguage());
-        }
-
-        return Objects.isNull(text) ? fallback : text;
+        String normalizedLocale = Objects.isNull(locale) || locale.isBlank()
+            ? Locale.getDefault().toLanguageTag()
+            : locale.trim().replace('_', '-');
+        String message = get(code, normalizedLocale);
+        return Objects.isNull(message) ? fallback : message;
     }
 
-    /**
-     * 将 locale 统一为 BCP-47 格式，供缓存键使用。
-     *
-     * @param locale 待规范化的 locale 字符串
-     * @return 规范化后的 BCP-47 locale
-     */
-    private static String normalize(String locale) {
-        return Locale.forLanguageTag(locale.trim().replace('_', '-')).toLanguageTag();
-    }
 }
