@@ -10,10 +10,11 @@ import tools.jackson.databind.JsonNode;
  * @param description 给模型的说明
  * @param inputSchema 入参的 JSON Schema
  * @param external    结果是否为外部内容
+ * @param kind        工具种类；决定执行步骤的展示图标
  * @author alpha
  * @since 2026/11/24
  */
 public record CapabilitySpec(String name, String label, String description, JsonNode inputSchema,
-                             boolean external) {
+                             boolean external, ToolKind kind) {
 
 }

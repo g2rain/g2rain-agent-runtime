@@ -72,12 +72,14 @@
                     </to>
                     <container>
                         <mainClass>com.g2rain.agent.runtime.Application</mainClass>
+                        <!-- 由 src/main/jib/app/start.sh 启动：在 Jib classpath 后追加 /app/plugins 下各插件子目录 -->
+                        <entrypoint>
+                            <arg>sh</arg>
+                            <arg>/app/start.sh</arg>
+                        </entrypoint>
                         <ports>
                             <port>8080</port>
                         </ports>
-                        <extraClasspath>
-                            <path>/app/plugins/*</path>
-                        </extraClasspath>
                         <labels>
                             <org.opencontainers.image.source>https://github.com/g2rain/g2rain-agent-runtime</org.opencontainers.image.source>
                             <org.opencontainers.image.licenses>Apache-2.0</org.opencontainers.image.licenses>

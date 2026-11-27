@@ -2,7 +2,6 @@ package com.g2rain.agent.runtime.engine.tools;
 
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
 import com.g2rain.agent.runtime.domain.state.NodeScope;
-import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
 import com.g2rain.agent.runtime.domain.tool.ToolInvokeRequest;
@@ -13,6 +12,7 @@ import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.spi.CapabilityCall;
 import com.g2rain.agent.runtime.spi.CapabilityResult;
 import com.g2rain.agent.runtime.spi.CapabilitySpec;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import com.g2rain.agent.runtime.engine.state.RuntimeStateFacade;
 import com.g2rain.agent.runtime.engine.tools.guard.EvidenceReader;
 import com.g2rain.agent.runtime.support.tool.BuiltinToolAction;
@@ -59,7 +59,7 @@ class ToolEventsTest {
     @BeforeEach
     void setUp() {
         toolEvents = new ToolEvents(stepEvents);
-        lenient().when(stepEvents.start(any(), anyString(), any(), any())).thenReturn("step-1");
+        lenient().when(stepEvents.startTool(anyString(), any(), any(), any())).thenReturn("step-1");
     }
 
     @Test
@@ -104,7 +104,7 @@ class ToolEventsTest {
         String stepId = toolEvents.started(request);
         assertNotNull(stepId);
         ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
-        verify(stepEvents).start(eq(StepStage.TOOL), title.capture(), eq("n1"), eq(2));
+        verify(stepEvents).startTool(title.capture(), eq(ToolKind.CONTROL), eq("n1"), eq(2));
         assertEquals(RuntimeMessage.STEP_DELEGATE.text("skill", "分类管理"), title.getValue());
     }
 
@@ -114,7 +114,7 @@ class ToolEventsTest {
             @Override
             public CapabilitySpec spec() {
                 return new CapabilitySpec("builtin_sample_lookup", "示例查询", "desc",
-                    JsonNodeFactory.instance.objectNode(), false);
+                    JsonNodeFactory.instance.objectNode(), false, ToolKind.ANALYZE);
             }
 
             @Override
@@ -138,8 +138,8 @@ class ToolEventsTest {
         when(request.context()).thenReturn(context);
 
         assertNotNull(toolEvents.started(request));
-        verify(stepEvents).start(eq(StepStage.TOOL), eq(RuntimeMessage.STEP_TOOL.text("name", "示例查询")), eq("n1"),
-            eq(1));
+        verify(stepEvents).startTool(eq(RuntimeMessage.STEP_TOOL.text("name", "示例查询")), eq(ToolKind.ANALYZE),
+            eq("n1"), eq(1));
     }
 
     @Test
@@ -178,7 +178,7 @@ class ToolEventsTest {
         when(request.context()).thenReturn(context);
 
         assertNotNull(toolEvents.started(request));
-        verify(stepEvents).start(eq(StepStage.TOOL), eq(step.text()), eq("n1"), eq(1));
+        verify(stepEvents).startTool(eq(step.text()), eq(ToolKind.CONTROL), eq("n1"), eq(1));
     }
 
     /**

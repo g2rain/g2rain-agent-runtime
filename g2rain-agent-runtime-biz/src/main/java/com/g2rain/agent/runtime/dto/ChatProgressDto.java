@@ -129,6 +129,13 @@ public class ChatProgressDto extends BaseDto {
     private String errorCode;
 
     /**
+     * 工具种类
+     */
+    @Size(max = 16)
+    @Schema(description = "工具种类", maxLength = 16)
+    private String toolKind;
+
+    /**
      * 开始时间 epoch ms
      */
     @NotNull(groups = CreateGroup.class)

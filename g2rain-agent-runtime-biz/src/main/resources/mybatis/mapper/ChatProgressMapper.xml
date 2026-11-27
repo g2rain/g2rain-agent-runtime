@@ -25,6 +25,7 @@
         <result column="node_id" property="nodeId" jdbcType="VARCHAR"/>
         <result column="round" property="round" jdbcType="INTEGER"/>
         <result column="error_code" property="errorCode" jdbcType="VARCHAR"/>
+        <result column="tool_kind" property="toolKind" jdbcType="VARCHAR"/>
         <result column="started_at_ms" property="startedAtMs" jdbcType="BIGINT"/>
         <result column="elapsed_ms" property="elapsedMs" jdbcType="INTEGER"/>
         <result column="extra" property="extra" jdbcType="LONGVARCHAR"/>
@@ -115,6 +116,10 @@
                         error_code
                         <include refid="directionClause"/>
                     </when>
+                    <when test="item.column == 'toolKind'">
+                        tool_kind
+                        <include refid="directionClause"/>
+                    </when>
                     <when test="item.column == 'startedAtMs'">
                         started_at_ms
                         <include refid="directionClause"/>
@@ -140,7 +145,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, started_at_ms, elapsed_ms, extra,
+        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, tool_kind, started_at_ms, elapsed_ms, extra,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -151,7 +156,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{stepId, jdbcType=VARCHAR}, #{parentStepId, jdbcType=VARCHAR}, #{seq, jdbcType=INTEGER}, #{stage, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{detail, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{errorCode, jdbcType=VARCHAR}, #{startedAtMs, jdbcType=BIGINT}, #{elapsedMs, jdbcType=INTEGER}, #{extra, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{conversationId, jdbcType=VARCHAR}, #{traceId, jdbcType=VARCHAR}, #{taskId, jdbcType=VARCHAR}, #{stepId, jdbcType=VARCHAR}, #{parentStepId, jdbcType=VARCHAR}, #{seq, jdbcType=INTEGER}, #{stage, jdbcType=VARCHAR}, #{status, jdbcType=VARCHAR}, #{title, jdbcType=VARCHAR}, #{detail, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{round, jdbcType=INTEGER}, #{errorCode, jdbcType=VARCHAR}, #{toolKind, jdbcType=VARCHAR}, #{startedAtMs, jdbcType=BIGINT}, #{elapsedMs, jdbcType=INTEGER}, #{extra, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -210,6 +215,9 @@
             <if test="errorCode != null">
                 error_code = #{errorCode, jdbcType=VARCHAR},
             </if>
+            <if test="toolKind != null">
+                tool_kind = #{toolKind, jdbcType=VARCHAR},
+            </if>
             <if test="startedAtMs != null">
                 started_at_ms = #{startedAtMs, jdbcType=BIGINT},
             </if>
@@ -233,7 +241,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, started_at_ms, elapsed_ms, extra,
+        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, tool_kind, started_at_ms, elapsed_ms, extra,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -252,7 +260,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, started_at_ms, elapsed_ms, extra,
+        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, tool_kind, started_at_ms, elapsed_ms, extra,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -337,6 +345,9 @@
             <if test="errorCode != null">
                 AND error_code = #{errorCode, jdbcType=VARCHAR}
             </if>
+            <if test="toolKind != null">
+                AND tool_kind = #{toolKind, jdbcType=VARCHAR}
+            </if>
             <if test="startedAtMs != null">
                 AND started_at_ms = #{startedAtMs, jdbcType=BIGINT}
             </if>
@@ -365,7 +376,7 @@
         <!-- 基础字段 -->
         create_time, update_time,
         <!-- 业务字段 -->
-        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, started_at_ms, elapsed_ms, extra,
+        organ_id, conversation_id, trace_id, task_id, step_id, parent_step_id, seq, stage, status, title, detail, node_id, round, error_code, tool_kind, started_at_ms, elapsed_ms, extra,
         <!-- deleteFlag字段（如果存在） -->
         delete_flag,
         <!-- version字段（如果存在） -->
@@ -378,7 +389,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.stepId, jdbcType=VARCHAR}, #{item.parentStepId, jdbcType=VARCHAR}, #{item.seq, jdbcType=INTEGER}, #{item.stage, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.detail, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.errorCode, jdbcType=VARCHAR}, #{item.startedAtMs, jdbcType=BIGINT}, #{item.elapsedMs, jdbcType=INTEGER}, #{item.extra, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.conversationId, jdbcType=VARCHAR}, #{item.traceId, jdbcType=VARCHAR}, #{item.taskId, jdbcType=VARCHAR}, #{item.stepId, jdbcType=VARCHAR}, #{item.parentStepId, jdbcType=VARCHAR}, #{item.seq, jdbcType=INTEGER}, #{item.stage, jdbcType=VARCHAR}, #{item.status, jdbcType=VARCHAR}, #{item.title, jdbcType=VARCHAR}, #{item.detail, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.round, jdbcType=INTEGER}, #{item.errorCode, jdbcType=VARCHAR}, #{item.toolKind, jdbcType=VARCHAR}, #{item.startedAtMs, jdbcType=BIGINT}, #{item.elapsedMs, jdbcType=INTEGER}, #{item.extra, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -442,6 +453,9 @@
             </if>
             <if test="errorCode != null">
                 error_code = #{errorCode, jdbcType=VARCHAR},
+            </if>
+            <if test="toolKind != null">
+                tool_kind = #{toolKind, jdbcType=VARCHAR},
             </if>
             <if test="startedAtMs != null">
                 started_at_ms = #{startedAtMs, jdbcType=BIGINT},

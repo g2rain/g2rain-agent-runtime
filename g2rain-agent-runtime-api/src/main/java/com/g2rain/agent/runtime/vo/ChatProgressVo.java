@@ -109,6 +109,12 @@ public class ChatProgressVo extends BaseVo {
     private String errorCode;
 
     /**
+     * 工具种类
+     */
+    @Schema(description = "工具种类")
+    private String toolKind;
+
+    /**
      * 开始时间 epoch ms
      */
     @Schema(description = "开始时间 epoch ms")

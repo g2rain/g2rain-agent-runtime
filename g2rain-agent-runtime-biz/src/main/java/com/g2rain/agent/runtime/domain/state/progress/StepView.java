@@ -1,6 +1,7 @@
 package com.g2rain.agent.runtime.domain.state.progress;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -9,6 +10,7 @@ import org.jspecify.annotations.Nullable;
  * @param stepId       步骤标识
  * @param parentStepId 上级步骤；顶层为空
  * @param stage        环节
+ * @param toolKind     工具种类；仅 TOOL 环节有值
  * @param status       状态
  * @param title        标题
  * @param detail       补充说明；可空
@@ -18,7 +20,8 @@ import org.jspecify.annotations.Nullable;
  * @param errorCode    失败错误码；仅 FAILED
  */
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
-public record StepView(String stepId, @Nullable String parentStepId, StepStage stage, StepStatus status,
+public record StepView(String stepId, @Nullable String parentStepId, StepStage stage, @Nullable ToolKind toolKind,
+                       StepStatus status,
                        String title, @Nullable String detail, @Nullable String nodeId, @Nullable Integer round,
                        @Nullable Integer elapsedMs, @Nullable String errorCode) {
 }

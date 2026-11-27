@@ -2,7 +2,6 @@ package com.g2rain.agent.runtime.engine.tools;
 
 
 import com.g2rain.agent.runtime.domain.hydrate.Skill;
-import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.tool.Observation;
 import com.g2rain.agent.runtime.domain.tool.Outcome;
 import com.g2rain.agent.runtime.domain.tool.ToolExecutionContext;
@@ -11,6 +10,7 @@ import com.g2rain.agent.runtime.event.StepEvents;
 import com.g2rain.agent.runtime.i18n.RuntimeMessage;
 import com.g2rain.agent.runtime.spec.ToolSpec;
 import com.g2rain.agent.runtime.spi.Notice;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import com.g2rain.agent.runtime.support.RequestLocale;
 import com.g2rain.agent.runtime.support.ToolCallbacks;
 import com.g2rain.agent.runtime.support.mcp.McpToolCallback;
@@ -73,13 +73,14 @@ public class ToolEvents {
      */
     public @Nullable String started(ToolInvokeRequest request) {
         if (request.toolCallback() instanceof BuiltinToolCallback builtin) {
-            return stepEvents.start(StepStage.TOOL, builtinTitleOf(builtin, request), request.context().getNodeId(),
-                request.context().scope().rounds());
+            return stepEvents.startTool(builtinTitleOf(builtin, request), builtin.toolKind(),
+                request.context().getNodeId(), request.context().scope().rounds());
         }
 
         String label = labelOf(request.contract(), request.toolCallback());
         String title = Objects.isNull(label) ? RuntimeMessage.STEP_TOOL_DEFAULT.text() : RuntimeMessage.STEP_TOOL.text("name", label);
-        return stepEvents.start(StepStage.TOOL, title, request.context().getNodeId(), request.context().scope().rounds());
+        return stepEvents.startTool(title, ToolKind.BUSINESS, request.context().getNodeId(),
+            request.context().scope().rounds());
     }
 
     /**

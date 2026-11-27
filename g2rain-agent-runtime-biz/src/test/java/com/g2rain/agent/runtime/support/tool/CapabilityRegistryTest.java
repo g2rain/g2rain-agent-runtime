@@ -6,6 +6,7 @@ import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.spi.CapabilityCall;
 import com.g2rain.agent.runtime.spi.CapabilityResult;
 import com.g2rain.agent.runtime.spi.CapabilitySpec;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -106,7 +107,7 @@ class CapabilityRegistryTest {
             @Override
             public CapabilitySpec spec() {
                 return new CapabilitySpec(name, label, "desc",
-                    JsonNodeFactory.instance.objectNode(), false);
+                    JsonNodeFactory.instance.objectNode(), false, ToolKind.SEARCH);
             }
 
             @Override

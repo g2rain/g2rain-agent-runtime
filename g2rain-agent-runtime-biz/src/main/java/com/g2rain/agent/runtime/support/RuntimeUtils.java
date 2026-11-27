@@ -9,6 +9,7 @@ import com.g2rain.common.web.PrincipalContextHolder;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -64,6 +65,26 @@ public final class RuntimeUtils {
      * JSON 编解码；入参摘要排序走 {@link JsonCodec#sort(byte[])}。
      */
     private static final JsonCodec JSON = JsonCodecFactory.instance();
+
+    /**
+     * JSON Schema 关键字：对象属性表。
+     */
+    private static final String SCHEMA_PROPERTIES = "properties";
+
+    /**
+     * JSON Schema 关键字：类型。
+     */
+    private static final String SCHEMA_TYPE = "type";
+
+    /**
+     * JSON Schema 类型值：数组。
+     */
+    private static final String SCHEMA_TYPE_ARRAY = "array";
+
+    /**
+     * JSON 数组文本的起始字符。
+     */
+    private static final String JSON_ARRAY_OPEN = "[";
 
     /**
      * 匹配 Markdown 代码块：可选语言标记 json，捕获块内正文。
@@ -266,6 +287,61 @@ public final class RuntimeUtils {
      */
     public static JsonNode argsNode(@Nullable String arguments) {
         return Strings.isBlank(arguments) ? JsonNodeFactory.instance.objectNode() : JSON.str2node(arguments);
+    }
+
+    /**
+     * 把「Schema 定义为数组、模型却传成 JSON 数组字符串」的顶层入参还原为数组。
+     *
+     * <p>只处理顶层属性，且仅在值为字符串、去空白后以 {@code [} 开头并能解析成 JSON 数组时替换；
+     * 其余情况（Schema 或入参非法、无需转换）一律原样返回，交给下游按原逻辑报错。</p>
+     *
+     * <pre>{@code
+     * // schema: {"properties":{"suggestions":{"type":"array","items":{"type":"string"}}}}
+     * // 入参:   {"suggestions":"\n[\"新建分类\",\"发布文章\"]\n"}
+     * // 结果:   {"suggestions":["新建分类","发布文章"]}
+     * String args = RuntimeUtils.normalizeArrayArgs(toolInput, definition.inputSchema());
+     * }</pre>
+     *
+     * @param toolInput   模型给出的工具入参 JSON
+     * @param inputSchema 工具入参 JSON Schema
+     * @return 归一化后的入参；未发生替换时返回原字符串
+     */
+    public static String normalizeArrayArgs(String toolInput, @Nullable String inputSchema) {
+        if (Strings.isBlank(toolInput) || Strings.isBlank(inputSchema)) {
+            return toolInput;
+        }
+
+        try {
+            JsonNode properties = JSON.str2node(inputSchema).path(SCHEMA_PROPERTIES);
+            if (!(JSON.str2node(toolInput) instanceof ObjectNode args) || !properties.isObject()) {
+                return toolInput;
+            }
+
+            boolean changed = false;
+            for (Map.Entry<String, JsonNode> property : properties.properties()) {
+                JsonNode value = args.get(property.getKey());
+                JsonNode type = property.getValue().path(SCHEMA_TYPE);
+                if (!type.isString() || !SCHEMA_TYPE_ARRAY.equals(type.asString())
+                    || Objects.isNull(value) || !value.isString()) {
+                    continue;
+                }
+
+                String text = value.asString().strip();
+                if (!text.startsWith(JSON_ARRAY_OPEN)) {
+                    continue;
+                }
+
+                JsonNode parsed = JSON.str2node(text);
+                if (Objects.nonNull(parsed) && parsed.isArray()) {
+                    args.set(property.getKey(), parsed);
+                    changed = true;
+                }
+            }
+
+            return changed ? args.toString() : toolInput;
+        } catch (RuntimeException e) {
+            return toolInput;
+        }
     }
 
     /**

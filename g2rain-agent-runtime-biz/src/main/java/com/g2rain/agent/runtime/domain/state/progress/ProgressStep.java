@@ -1,5 +1,6 @@
 package com.g2rain.agent.runtime.domain.state.progress;
 
+import com.g2rain.agent.runtime.spi.ToolKind;
 import lombok.Getter;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
@@ -32,6 +33,11 @@ public class ProgressStep {
      * 环节。
      */
     private StepStage stage;
+
+    /**
+     * 工具种类；仅 TOOL 环节有值。
+     */
+    private @Nullable ToolKind toolKind;
 
     /**
      * 状态。
@@ -87,6 +93,6 @@ public class ProgressStep {
      * @return 下发给客户端的快照
      */
     public StepView view() {
-        return new StepView(stepId, parentStepId, stage, status, title, detail, nodeId, round, elapsedMs, errorCode);
+        return new StepView(stepId, parentStepId, stage, toolKind, status, title, detail, nodeId, round, elapsedMs, errorCode);
     }
 }

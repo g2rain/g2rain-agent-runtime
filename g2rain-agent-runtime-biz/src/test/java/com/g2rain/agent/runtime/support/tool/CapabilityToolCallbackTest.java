@@ -10,6 +10,7 @@ import com.g2rain.agent.runtime.spi.Capability;
 import com.g2rain.agent.runtime.spi.CapabilityCall;
 import com.g2rain.agent.runtime.spi.CapabilityResult;
 import com.g2rain.agent.runtime.spi.CapabilitySpec;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -153,7 +154,7 @@ class CapabilityToolCallbackTest {
             @Override
             public CapabilitySpec spec() {
                 return new CapabilitySpec(name, label, "desc",
-                    JsonNodeFactory.instance.objectNode(), external);
+                    JsonNodeFactory.instance.objectNode(), external, ToolKind.SEARCH);
             }
 
             @Override

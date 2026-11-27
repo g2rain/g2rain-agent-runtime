@@ -1,5 +1,6 @@
 package com.g2rain.agent.runtime.domain.state.progress;
 
+import com.g2rain.agent.runtime.spi.ToolKind;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import org.jspecify.annotations.Nullable;
 
@@ -38,14 +39,15 @@ public class TurnProgress {
     /**
      * 开启一个步骤。
      *
-     * @param stage  环节
-     * @param title  标题
-     * @param taskId 所属任务；可空
-     * @param nodeId 所属节点；可空
-     * @param round  ReAct 轮次；可空，为空时沿用上级步骤的轮次
+     * @param stage    环节
+     * @param toolKind 工具种类；仅 TOOL 环节有值
+     * @param title    标题
+     * @param taskId   所属任务；可空
+     * @param nodeId   所属节点；可空
+     * @param round    ReAct 轮次；可空，为空时沿用上级步骤的轮次
      * @return 新步骤与因此自动完成的同环节步骤（先旧后新）
      */
-    public List<ProgressStep> start(StepStage stage, String title, @Nullable String taskId,
+    public List<ProgressStep> start(StepStage stage, @Nullable ToolKind toolKind, String title, @Nullable String taskId,
                                     @Nullable String nodeId, @Nullable Integer round) {
         List<ProgressStep> changed = new ArrayList<>();
         open.stream().filter(step -> step.getStage() == stage).findFirst().ifPresent(previous ->
@@ -58,6 +60,7 @@ public class TurnProgress {
         step.setParentStepId(Objects.isNull(parent) ? null : parent.getStepId());
         step.setSeq(steps.size() + 1);
         step.setStage(stage);
+        step.setToolKind(toolKind);
         step.setTitle(title);
         step.setTaskId(taskId);
         step.setNodeId(nodeId);

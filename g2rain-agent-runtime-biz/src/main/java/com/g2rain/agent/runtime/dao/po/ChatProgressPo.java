@@ -91,6 +91,11 @@ public class ChatProgressPo extends BasePo {
     private String errorCode;
 
     /**
+     * 工具种类
+     */
+    private String toolKind;
+
+    /**
      * 开始时间 epoch ms
      */
     private Long startedAtMs;

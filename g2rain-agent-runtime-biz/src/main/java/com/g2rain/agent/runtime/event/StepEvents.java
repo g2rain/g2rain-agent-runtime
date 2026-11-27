@@ -5,6 +5,7 @@ import com.g2rain.agent.runtime.domain.state.progress.ProgressStep;
 import com.g2rain.agent.runtime.domain.state.progress.StepStage;
 import com.g2rain.agent.runtime.domain.state.progress.StepStatus;
 import com.g2rain.agent.runtime.domain.state.task.TaskMetadata;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import com.g2rain.agent.runtime.support.FailureCategory;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import lombok.RequiredArgsConstructor;
@@ -57,12 +58,41 @@ public class StepEvents {
      * @return 步骤标识；未绑定本轮时为空
      */
     public @Nullable String start(StepStage stage, String title, @Nullable String nodeId, @Nullable Integer round) {
+        return start(stage, null, title, nodeId, round);
+    }
+
+    /**
+     * 开启一个工具步骤，带上工具种类供客户端选图标。
+     *
+     * @param title  标题
+     * @param kind   工具种类；内置工具未标种类时为空
+     * @param nodeId 所属节点；可空
+     * @param round  ReAct 轮次；可空
+     * @return 步骤标识；未绑定本轮时为空
+     */
+    public @Nullable String startTool(String title, @Nullable ToolKind kind, @Nullable String nodeId,
+                                      @Nullable Integer round) {
+        return start(StepStage.TOOL, kind, title, nodeId, round);
+    }
+
+    /**
+     * 开启一个步骤并推送。
+     *
+     * @param stage    环节
+     * @param toolKind 工具种类；仅 TOOL 环节有值
+     * @param title    标题
+     * @param nodeId   所属节点；可空
+     * @param round    ReAct 轮次；可空
+     * @return 步骤标识；未绑定本轮时为空
+     */
+    private @Nullable String start(StepStage stage, @Nullable ToolKind toolKind, String title,
+                                   @Nullable String nodeId, @Nullable Integer round) {
         if (!TURN.isBound()) {
             return null;
         }
         TurnScope turn = TURN.get();
         String taskId = turn.task().map(TaskMetadata::getTaskId).orElse(null);
-        List<ProgressStep> changed = turn.progress().start(stage, title, taskId, nodeId, round);
+        List<ProgressStep> changed = turn.progress().start(stage, toolKind, title, taskId, nodeId, round);
         publish(turn, changed);
         return changed.getLast().getStepId();
     }

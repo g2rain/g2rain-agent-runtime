@@ -3,6 +3,7 @@ package com.g2rain.agent.runtime.engine.state.repo;
 import com.g2rain.agent.runtime.domain.state.progress.ProgressStep;
 import com.g2rain.agent.runtime.dto.ChatProgressDto;
 import com.g2rain.agent.runtime.service.ChatProgressService;
+import com.g2rain.agent.runtime.spi.ToolKind;
 import com.g2rain.agent.runtime.support.RuntimeUtils;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.web.PrincipalContextHolder;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 执行过程步骤仓储（{@code chat_progress}）。
@@ -56,6 +58,8 @@ public class ProgressRepository {
             dto.setParentStepId(step.getParentStepId());
             dto.setSeq(step.getSeq());
             dto.setStage(step.getStage().name());
+            ToolKind toolKind = step.getToolKind();
+            dto.setToolKind(Objects.isNull(toolKind) ? null : toolKind.name());
             dto.setStatus(step.getStatus().name());
             dto.setTitle(RuntimeUtils.clip(step.getTitle(), TITLE_MAX));
             dto.setDetail(RuntimeUtils.clip(step.getDetail(), DETAIL_MAX));
