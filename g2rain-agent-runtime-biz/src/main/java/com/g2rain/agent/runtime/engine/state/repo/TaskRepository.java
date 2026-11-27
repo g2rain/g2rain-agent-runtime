@@ -65,6 +65,11 @@ public class TaskRepository {
     private static final int TASK_FINAL_MESSAGE_MAX = 2000;
 
     /**
+     * {@code task_instance.goal_summary} 上限。
+     */
+    private static final int TASK_GOAL_SUMMARY_MAX = 2000;
+
+    /**
      * 任务实例表服务。
      */
     private final TaskInstanceService taskInstanceService;
@@ -341,7 +346,7 @@ public class TaskRepository {
         dto.setConversationId(metadata.getConversationId());
         dto.setTaskId(metadata.getTaskId());
         dto.setAgentId(metadata.getAgentId());
-        dto.setGoalSummary(metadata.getGoalSummary());
+        dto.setGoalSummary(RuntimeUtils.clip(metadata.getGoalSummary(), TASK_GOAL_SUMMARY_MAX));
         dto.setRequest(metadata.getRequest());
         dto.setStatus(Objects.requireNonNull(metadata.getStatus()).name());
         dto.setCurrentNodeId(metadata.getCurrentNodeId());

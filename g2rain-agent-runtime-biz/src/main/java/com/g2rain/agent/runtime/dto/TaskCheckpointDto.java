@@ -74,8 +74,8 @@ public class TaskCheckpointDto extends BaseDto {
     /**
      * 追问/确认文案
      */
-    @Size(max = 2000)
-    @Schema(description = "追问/确认文案", maxLength = 2000)
+    @Size(max = 65535)
+    @Schema(description = "追问/确认文案", maxLength = 65535)
     private String question;
 
     /**

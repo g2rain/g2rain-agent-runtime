@@ -50,6 +50,21 @@ public class GraphRepository {
     private static final int NODE_RESULT_MAX = 2000;
 
     /**
+     * 节点标题的长度上限（列宽 256）。
+     */
+    private static final int NODE_TITLE_MAX = 256;
+
+    /**
+     * 节点目标的长度上限（列宽 2000）。
+     */
+    private static final int NODE_OBJECTIVE_MAX = 2000;
+
+    /**
+     * 节点失败说明的长度上限（列宽 1000）。
+     */
+    private static final int NODE_ERROR_MESSAGE_MAX = 1000;
+
+    /**
      * 边去重键中起点与终点之间的分隔符，避免不同 id 拼接后撞键。
      */
     private static final String EDGE_KEY_SEPARATOR = "|";
@@ -201,8 +216,8 @@ public class GraphRepository {
             // 已有行只覆盖可变字段，保留主键与创建信息；新节点整行转换
             if (Objects.nonNull(old)) {
                 dto = TaskGraphNodeConverter.INSTANCE.vo2dto(old);
-                dto.setTitle(node.getTitle());
-                dto.setObjective(node.getObjective());
+                dto.setTitle(RuntimeUtils.clip(node.getTitle(), NODE_TITLE_MAX));
+                dto.setObjective(RuntimeUtils.clip(node.getObjective(), NODE_OBJECTIVE_MAX));
                 dto.setSkillKey(node.getSkillKey());
                 dto.setTarget(node.getTarget());
                 dto.setTargetClaimed(node.isTargetClaimed());
@@ -211,7 +226,7 @@ public class GraphRepository {
                 dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
                 dto.setDelegateDepth(node.getDelegateDepth());
                 dto.setErrorCode(node.getErrorCode());
-                dto.setErrorMessage(node.getErrorMessage());
+                dto.setErrorMessage(RuntimeUtils.clip(node.getErrorMessage(), NODE_ERROR_MESSAGE_MAX));
             } else {
                 dto = newNodeDto(taskId, node);
             }
@@ -241,7 +256,10 @@ public class GraphRepository {
         dto.setTaskId(taskId);
         dto.setTargetClaimed(node.isTargetClaimed());
         dto.setProviderInserted(node.isProviderInserted());
+        dto.setTitle(RuntimeUtils.clip(node.getTitle(), NODE_TITLE_MAX));
+        dto.setObjective(RuntimeUtils.clip(node.getObjective(), NODE_OBJECTIVE_MAX));
         dto.setResult(RuntimeUtils.clip(node.getResult(), NODE_RESULT_MAX));
+        dto.setErrorMessage(RuntimeUtils.clip(node.getErrorMessage(), NODE_ERROR_MESSAGE_MAX));
         return dto;
     }
 

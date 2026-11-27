@@ -17,7 +17,7 @@
         <result column="checkpoint_id" property="checkpointId" jdbcType="VARCHAR"/>
         <result column="type" property="type" jdbcType="VARCHAR"/>
         <result column="halt_reason" property="haltReason" jdbcType="VARCHAR"/>
-        <result column="question" property="question" jdbcType="VARCHAR"/>
+        <result column="question" property="question" jdbcType="LONGVARCHAR"/>
         <result column="expected_fields" property="expectedFields" jdbcType="LONGVARCHAR"/>
         <result column="allowed_actions" property="allowedActions" jdbcType="LONGVARCHAR"/>
         <result column="suggestions" property="suggestions" jdbcType="LONGVARCHAR"/>
@@ -121,7 +121,7 @@
         <!-- 基础字段值 -->
         #{createTime, jdbcType=TIMESTAMP}, #{updateTime, jdbcType=TIMESTAMP},
         <!-- 业务字段值 -->
-        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{type, jdbcType=VARCHAR}, #{haltReason, jdbcType=VARCHAR}, #{question, jdbcType=VARCHAR}, #{expectedFields, jdbcType=LONGVARCHAR}, #{allowedActions, jdbcType=LONGVARCHAR}, #{suggestions, jdbcType=LONGVARCHAR}, #{pendingAction, jdbcType=LONGVARCHAR},
+        #{organId, jdbcType=BIGINT}, #{taskId, jdbcType=VARCHAR}, #{nodeId, jdbcType=VARCHAR}, #{checkpointId, jdbcType=VARCHAR}, #{type, jdbcType=VARCHAR}, #{haltReason, jdbcType=VARCHAR}, #{question, jdbcType=LONGVARCHAR}, #{expectedFields, jdbcType=LONGVARCHAR}, #{allowedActions, jdbcType=LONGVARCHAR}, #{suggestions, jdbcType=LONGVARCHAR}, #{pendingAction, jdbcType=LONGVARCHAR},
         <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
         0,
         <!-- version字段值（如果存在，设置默认值为0） -->
@@ -157,7 +157,7 @@
                 halt_reason = #{haltReason, jdbcType=VARCHAR},
             </if>
             <if test="question != null">
-                question = #{question, jdbcType=VARCHAR},
+                question = #{question, jdbcType=LONGVARCHAR},
             </if>
             <if test="expectedFields != null">
                 expected_fields = #{expectedFields, jdbcType=LONGVARCHAR},
@@ -266,7 +266,7 @@
                 AND halt_reason = #{haltReason, jdbcType=VARCHAR}
             </if>
             <if test="question != null">
-                AND question = #{question, jdbcType=VARCHAR}
+                AND question = #{question, jdbcType=LONGVARCHAR}
             </if>
             <if test="expectedFields != null">
                 AND expected_fields = #{expectedFields, jdbcType=LONGVARCHAR}
@@ -312,7 +312,7 @@
             <!-- 基础字段值 -->
             #{item.createTime, jdbcType=TIMESTAMP}, #{item.updateTime, jdbcType=TIMESTAMP},
             <!-- 业务字段值 -->
-            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.type, jdbcType=VARCHAR}, #{item.haltReason, jdbcType=VARCHAR}, #{item.question, jdbcType=VARCHAR}, #{item.expectedFields, jdbcType=LONGVARCHAR}, #{item.allowedActions, jdbcType=LONGVARCHAR}, #{item.suggestions, jdbcType=LONGVARCHAR}, #{item.pendingAction, jdbcType=LONGVARCHAR},
+            #{item.organId, jdbcType=BIGINT}, #{item.taskId, jdbcType=VARCHAR}, #{item.nodeId, jdbcType=VARCHAR}, #{item.checkpointId, jdbcType=VARCHAR}, #{item.type, jdbcType=VARCHAR}, #{item.haltReason, jdbcType=VARCHAR}, #{item.question, jdbcType=LONGVARCHAR}, #{item.expectedFields, jdbcType=LONGVARCHAR}, #{item.allowedActions, jdbcType=LONGVARCHAR}, #{item.suggestions, jdbcType=LONGVARCHAR}, #{item.pendingAction, jdbcType=LONGVARCHAR},
             <!-- deleteFlag字段值（如果存在，设置默认值为0） -->
             0,
             <!-- version字段值（如果存在，设置默认值为0） -->
@@ -354,7 +354,7 @@
                 halt_reason = #{haltReason, jdbcType=VARCHAR},
             </if>
             <if test="question != null">
-                question = #{question, jdbcType=VARCHAR},
+                question = #{question, jdbcType=LONGVARCHAR},
             </if>
             <if test="expectedFields != null">
                 expected_fields = #{expectedFields, jdbcType=LONGVARCHAR},
