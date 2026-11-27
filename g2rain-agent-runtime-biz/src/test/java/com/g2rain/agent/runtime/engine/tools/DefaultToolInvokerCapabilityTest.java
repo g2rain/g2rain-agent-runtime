@@ -35,11 +35,35 @@ class DefaultToolInvokerCapabilityTest {
 
     @Test
     void capabilityFailureBecomesFailedObservation() {
+        Observation observation = invoke(new CapabilityFailure("条件不满足", "换个条件再试"));
+
+        assertThat(observation.outcome()).isEqualTo(Outcome.FAILED);
+        assertThat(observation.errorCode()).isEqualTo(RuntimeErrorCode.TOOL_ERROR);
+        assertThat(observation.message()).isEqualTo("条件不满足。下一步：换个条件再试");
+    }
+
+    @Test
+    void unavailableCapabilityBecomesUnavailableObservation() {
+        Observation observation = invoke(new CapabilityFailure("网页返回状态 403", "换一个来源", true));
+
+        assertThat(observation.outcome()).isEqualTo(Outcome.UNAVAILABLE);
+        assertThat(observation.outcome().stalls()).isFalse();
+        assertThat(observation.errorCode()).isEqualTo(RuntimeErrorCode.TOOL_ERROR);
+        assertThat(observation.message()).isEqualTo("网页返回状态 403。下一步：换一个来源");
+    }
+
+    /**
+     * 让能力回调抛出给定失败，返回调用观测。
+     *
+     * @param failure 能力失败
+     * @return 观测
+     */
+    private static Observation invoke(CapabilityFailure failure) {
         ToolDefinition definition = mock(ToolDefinition.class);
         when(definition.name()).thenReturn("builtin_sample_lookup");
         ToolCallback delegate = mock(ToolCallback.class);
         when(delegate.getToolDefinition()).thenReturn(definition);
-        when(delegate.call(any(), any())).thenThrow(new CapabilityFailure("条件不满足", "换个条件再试"));
+        when(delegate.call(any(), any())).thenThrow(failure);
         BuiltinToolCallback callback = new BuiltinToolCallback(
             delegate, BuiltinToolCategory.CAPABILITY, BuiltinToolAction.CAPABILITY, RuntimeMessage.STEP_TOOL);
 
@@ -62,10 +86,6 @@ class DefaultToolInvokerCapabilityTest {
         DefaultToolInvoker invoker = new DefaultToolInvoker(List.of(), toolEvents, new RuntimeProperties(),
             mock(BlockRepository.class));
 
-        Observation observation = invoker.invoke(new ToolInvokeRequest(context, callback, "{}"));
-
-        assertThat(observation.outcome()).isEqualTo(Outcome.FAILED);
-        assertThat(observation.errorCode()).isEqualTo(RuntimeErrorCode.TOOL_ERROR);
-        assertThat(observation.message()).isEqualTo("条件不满足。下一步：换个条件再试");
+        return invoker.invoke(new ToolInvokeRequest(context, callback, "{}"));
     }
 }

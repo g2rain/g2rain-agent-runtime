@@ -130,6 +130,18 @@ public record Observation(Outcome outcome, String text, @Nullable String next, @
     }
 
     /**
+     * 调用正当，但外部资源暂不可用。
+     *
+     * @param errorCode 错误码
+     * @param reason    不可用原因
+     * @param next      模型下一步
+     * @return 资源不可用观测
+     */
+    public static Observation unavailable(RuntimeErrorCode errorCode, String reason, String next) {
+        return new Observation(Outcome.UNAVAILABLE, reason, next, null, errorCode, null);
+    }
+
+    /**
      * 替换下一步，其余不变；用于外层按调用情形给出更具体的下一步。
      *
      * <p>例：已批准写操作执行失败时，把通用的"修正后再调用"换成"向用户说明并询问如何处理"。</p>

@@ -21,15 +21,32 @@ public final class CapabilityFailure extends RuntimeException {
     private final String next;
 
     /**
+     * 是否因外部资源暂不可用而失败。
+     */
+    private final boolean unavailable;
+
+    /**
      * 创建能力失败。
      *
      * @param reason 失败原因
      * @param next   下一步建议
      */
     public CapabilityFailure(String reason, String next) {
+        this(reason, next, false);
+    }
+
+    /**
+     * 创建能力失败，并标明是否因外部资源暂不可用。
+     *
+     * @param reason      失败原因
+     * @param next        下一步建议
+     * @param unavailable 是否因外部资源暂不可用
+     */
+    public CapabilityFailure(String reason, String next, boolean unavailable) {
         super(reason);
         this.reason = reason;
         this.next = next;
+        this.unavailable = unavailable;
     }
 
     /**
@@ -43,6 +60,7 @@ public final class CapabilityFailure extends RuntimeException {
         super(reason, cause);
         this.reason = reason;
         this.next = next;
+        this.unavailable = false;
     }
 
     /**
@@ -57,5 +75,12 @@ public final class CapabilityFailure extends RuntimeException {
      */
     public String next() {
         return next;
+    }
+
+    /**
+     * @return 是否因外部资源暂不可用而失败
+     */
+    public boolean unavailable() {
+        return unavailable;
     }
 }

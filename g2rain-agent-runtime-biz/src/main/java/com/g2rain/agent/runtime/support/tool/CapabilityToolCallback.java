@@ -142,7 +142,7 @@ public final class CapabilityToolCallback implements ToolCallback {
                 String next = Strings.isBlank(result.next())
                     ? ModelHint.NEXT_CAPABILITY_FALLBACK.text()
                     : result.next();
-                throw new CapabilityFailure(result.content(), next);
+                throw new CapabilityFailure(result.content(), next, result.unavailable());
             }
 
             String content = Objects.toString(result.content(), "");

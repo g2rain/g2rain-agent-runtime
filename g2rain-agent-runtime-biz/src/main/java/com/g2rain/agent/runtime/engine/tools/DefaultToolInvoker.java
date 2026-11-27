@@ -264,7 +264,7 @@ public class DefaultToolInvoker implements ToolInvoker {
             .kv("blockedBy", Objects.isNull(blocker) ? null : ClassUtils.getUserClass(blocker).getSimpleName())
             .kv("durationMs", (System.nanoTime() - startNanos) / 1_000_000L)
             .kv("args", argsBrief(request));
-        if (obs.outcome() == Outcome.FAILED) {
+        if (obs.outcome() == Outcome.FAILED || obs.outcome() == Outcome.UNAVAILABLE) {
             event.warn();
             return;
         }
@@ -458,9 +458,11 @@ public class DefaultToolInvoker implements ToolInvoker {
      * @return 执行失败或拒绝观测
      */
     private Observation observationOf(ToolInvokeRequest request, RuntimeException ex) {
-        // 能力工具失败：原因与下一步原样进入失败观测
+        // 能力工具失败：原因与下一步原样进入观测；外部资源不可用不计无进展
         if (ex instanceof CapabilityFailure failure) {
-            return Observation.failed(RuntimeErrorCode.TOOL_ERROR, failure.reason(), failure.next());
+            return failure.unavailable()
+                ? Observation.unavailable(RuntimeErrorCode.TOOL_ERROR, failure.reason(), failure.next())
+                : Observation.failed(RuntimeErrorCode.TOOL_ERROR, failure.reason(), failure.next());
         }
 
         Throwable cause = ex;
